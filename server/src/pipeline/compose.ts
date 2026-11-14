@@ -1,0 +1,91 @@
+import { z } from 'zod';
+import type { AlertCopy, RiskEvent } from '../types.js';
+import type { StructuredLLM } from '../llm.js';
+import { CATEGORY_LABEL_DE, recommendedAction } from './guidance.js';
+
+export const TITLE_MAX = 50;
+export const BODY_MAX = 100;
+
+const CopySchema = z.object({
+  title: z.string().describe(`Max ${TITLE_MAX} characters. What and where.`),
+  body: z.string().describe(`Max ${BODY_MAX} characters. The key fact people need. No advice — that is added separately.`),
+});
+
+const SYSTEM = `You write lock-screen safety alerts in German for the Hey-Okay app.
+Hard rules:
+- Use ONLY facts in FACTS. Every number, time, date, temperature and place must appear in FACTS.
+- Title ≤ ${TITLE_MAX} characters: what and where. Body ≤ ${BODY_MAX} characters: the single most useful fact.
+- Plain, calm language. No exclamation marks, no speculation, no causes not stated.
+- Never describe an area or neighbourhood as dangerous. Report the event only.
+- No personal details about any person involved.`;
+
+/** Write and verify alert copy for an event. Falls back to a template built from source text. */
+export async function compose(event: RiskEvent, llm: StructuredLLM): Promise<AlertCopy & { isTemplate: boolean }> {
+  const action = recommendedAction(event.category, event.severity);
+  if (llm.enabled) {
+    let feedback = '';
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const out = await llm.generate(
+        SYSTEM,
+        `Category: ${event.category}\nSeverity (1-5): ${event.severity}\nArea: ${event.areaName}\n\nFACTS:\n${event.facts.slice(0, 6000)}${feedback}`,
+        CopySchema,
+      );
+      if (!out) break;
+      const problems = verify(out, event.facts);
+      if (problems.length === 0) return { title: out.title.trim(), body: out.body.trim(), action, isTemplate: false };
+      feedback = `\n\nYour previous attempt was rejected: ${problems.join('; ')}. Fix these.`;
+    }
+  }
+  return { ...template(event), action, isTemplate: true };
+}
+
+/** Deterministic copy from verbatim source text — always grounded. */
+export function template(event: RiskEvent): { title: string; body: string } {
+  const src = event.sources[0];
+  const area = event.areaName.split(',')[0].trim();
+  const title = truncate(`${CATEGORY_LABEL_DE[event.category]}${area ? `: ${area}` : ''}`, TITLE_MAX);
+  const body = truncate(src?.title || event.title, BODY_MAX);
+  return { title, body };
+}
+
+const ALARM_STEMS = ['lebensgefahr', 'evakuier', 'explosion', 'tote', 'getötet', 'verletzt', 'schüsse', 'geschossen', 'bombe', 'amok', 'terror', 'geiselnahme', 'brand', 'feuer'];
+const AREA_STIGMA = /\b(gefährlich\w*|unsicher\w*|kriminell\w*)\s+(viertel|kiez|gegend|stadtteil|bezirk|ecke)\b|\b(problemviertel|brennpunkt)\b/i;
+
+/**
+ * The fact verifier. Returns a list of problems; empty = safe to send.
+ * - length limits (Apple/Google lock-screen limits)
+ * - every number/time/date in the copy must appear in the source facts
+ * - alarm words must be grounded in the facts (no invented escalation)
+ * - no area stigma wording
+ */
+export function verify(copy: { title: string; body: string }, facts: string): string[] {
+  const problems: string[] = [];
+  if (copy.title.length > TITLE_MAX) problems.push(`title is ${copy.title.length} chars (max ${TITLE_MAX})`);
+  if (copy.body.length > BODY_MAX) problems.push(`body is ${copy.body.length} chars (max ${BODY_MAX})`);
+  if (!copy.title.trim() || !copy.body.trim()) problems.push('empty title or body');
+
+  const text = `${copy.title} ${copy.body}`;
+  const factNumbers = new Set(numbers(facts));
+  for (const n of numbers(text)) if (!factNumbers.has(n)) problems.push(`"${n}" is not in the source`);
+
+  const lowerFacts = facts.toLowerCase();
+  const lowerText = text.toLowerCase();
+  for (const stem of ALARM_STEMS) {
+    if (lowerText.includes(stem) && !lowerFacts.includes(stem)) problems.push(`"${stem}…" is not in the source`);
+  }
+  if (AREA_STIGMA.test(text)) problems.push('describes an area as dangerous');
+  return [...new Set(problems)];
+}
+
+/** Normalised numeric tokens: 18:30 → "18:30", 3,5 → "3.5", 34 °C → "34". */
+export function numbers(s: string): string[] {
+  return [...s.matchAll(/\d+(?:[.,:]\d+)*/g)].map((m) => m[0].replace(',', '.').replace(/^0+(?=\d)/, ''));
+}
+
+export function truncate(s: string, max: number): string {
+  const clean = s.replace(/\s+/g, ' ').trim();
+  if (clean.length <= max) return clean;
+  const cut = clean.slice(0, max - 1);
+  const at = cut.lastIndexOf(' ');
+  return `${(at > max * 0.6 ? cut.slice(0, at) : cut).replace(/[\s,.;:–-]+$/, '')}…`;
+}

@@ -1,0 +1,16 @@
+{
+  "identifier": "2.49.0.0.276.0.DWD.PVW.1731580000000.abc123",
+  "sent": "2026-11-14T09:00:00+01:00",
+  "msgType": "Alert",
+  "info": [{
+    "language": "DE",
+    "category": ["Met"],
+    "event": "ORKANARTIGE BÖEN",
+    "severity": "Severe",
+    "headline": "Amtliche UNWETTERWARNUNG vor ORKANARTIGEN BÖEN",
+    "description": "Es treten oberhalb 800 m orkanartige Böen mit Geschwindigkeiten um 110 km/h aus westlicher Richtung auf. In exponierten Lagen muss mit Orkanböen bis 130 km/h gerechnet werden.",
+    "instruction": "ACHTUNG! Hinweis auf mögliche Gefahren: Es können zum Beispiel Bäume entwurzelt und Dächer beschädigt werden. Achten Sie besonders auf herabstürzende Äste, Dachziegel oder Gegenstände.",
+    "expires": "2026-11-14T22:00:00+01:00",
+    "area": [{ "areaDesc": "Berlin - Friedrichshain-Kreuzberg" }]
+  }]
+}

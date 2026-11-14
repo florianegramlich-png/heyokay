@@ -1,0 +1,184 @@
+import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
+import cors from '@fastify/cors';
+import { z } from 'zod';
+import type { Store } from './db.js';
+import type { Pipeline } from './pipeline/run.js';
+import { CATEGORIES, DEFAULT_PREFS, type User } from './types.js';
+import { DESK_HTML } from './desk.js';
+
+const PrefsSchema = z.object({
+  categories: z.array(z.enum(CATEGORIES)),
+  quietHours: z.object({ start: z.string().regex(/^\d{2}:\d{2}$/), end: z.string().regex(/^\d{2}:\d{2}$/) }).nullable(),
+  dailyLimit: z.number().int().min(1).max(20),
+  timezone: z.string(),
+  language: z.enum(['de', 'en']),
+}).partial();
+
+const Coord = { lat: z.number().min(-90).max(90), lon: z.number().min(-180).max(180) };
+
+export interface ApiDeps {
+  store: Store;
+  pipeline: Pipeline;
+  adminToken: string;
+  runIngest: () => Promise<unknown>;
+}
+
+export function buildApi({ store, pipeline, adminToken, runIngest }: ApiDeps) {
+  const app = Fastify({ logger: false });
+  app.register(cors, { origin: true });
+
+  app.setErrorHandler((err, _req, reply) => {
+    if (err instanceof z.ZodError) return reply.code(400).send({ error: 'invalid_request', details: err.issues });
+    console.error(err);
+    return reply.code(500).send({ error: 'internal' });
+  });
+
+  const authed = (req: FastifyRequest, reply: FastifyReply): User | null => {
+    const token = (req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
+    const user = token ? store.userByToken(token) : null;
+    if (!user) reply.code(401).send({ error: 'unauthorized' });
+    return user;
+  };
+  const admin = (req: FastifyRequest, reply: FastifyReply) => {
+    const t = (req.headers['x-admin-token'] as string) ?? (req.query as any)?.token;
+    if (t !== adminToken) { reply.code(401).send({ error: 'unauthorized' }); return false; }
+    return true;
+  };
+
+  app.get('/health', async () => ({ ok: true }));
+
+  // ── device / user ────────────────────────────────────────────────────────
+  app.post('/v1/devices', async (req) => {
+    const body = z.object({ pushToken: z.string().nullable().optional(), prefs: PrefsSchema.optional() }).parse(req.body ?? {});
+    const { user, token } = store.createUser(body.pushToken ?? null, body.prefs);
+    return { userId: user.id, token, prefs: user.prefs };
+  });
+
+  app.get('/v1/me', async (req, reply) => {
+    const u = authed(req, reply); if (!u) return;
+    return { userId: u.id, prefs: u.prefs, places: store.places(u.id), hasLocation: u.lat != null };
+  });
+
+  app.put('/v1/me/prefs', async (req, reply) => {
+    const u = authed(req, reply); if (!u) return;
+    const prefs = { ...DEFAULT_PREFS, ...u.prefs, ...PrefsSchema.parse(req.body) };
+    store.updatePrefs(u.id, prefs);
+    return { prefs };
+  });
+
+  app.put('/v1/me/push-token', async (req, reply) => {
+    const u = authed(req, reply); if (!u) return;
+    store.updatePushToken(u.id, z.object({ pushToken: z.string().nullable() }).parse(req.body).pushToken);
+    return { ok: true };
+  });
+
+  /** Latest location only. Overwrites the previous point — no history is kept. */
+  app.post('/v1/me/location', async (req, reply) => {
+    const u = authed(req, reply); if (!u) return;
+    const { lat, lon, firstSync } = z.object({ ...Coord, firstSync: z.boolean().optional() }).parse(req.body);
+    store.updateLocation(u.id, lat, lon);
+    const alerts = await pipeline.refreshUser(store.getUser(u.id)!, firstSync ?? false);
+    return { ok: true, newAlerts: alerts };
+  });
+
+  app.get('/v1/me/places', async (req, reply) => {
+    const u = authed(req, reply); if (!u) return;
+    return { places: store.places(u.id) };
+  });
+
+  app.post('/v1/me/places', async (req, reply) => {
+    const u = authed(req, reply); if (!u) return;
+    const b = z.object({ label: z.string().min(1).max(40), ...Coord, radiusM: z.number().min(100).max(5000).default(500) }).parse(req.body);
+    if (store.places(u.id).length >= 10) return reply.code(400).send({ error: 'too_many_places' });
+    const place = store.addPlace(u.id, b.label, b.lat, b.lon, b.radiusM);
+    await pipeline.refreshUser(u, true);
+    return { place };
+  });
+
+  app.delete('/v1/me/places/:id', async (req, reply) => {
+    const u = authed(req, reply); if (!u) return;
+    store.deletePlace(u.id, (req.params as any).id);
+    return { ok: true };
+  });
+
+  /** GDPR Art. 17 — delete account and all data. */
+  app.delete('/v1/me', async (req, reply) => {
+    const u = authed(req, reply); if (!u) return;
+    store.deleteUser(u.id);
+    return { ok: true };
+  });
+
+  // ── alerts ───────────────────────────────────────────────────────────────
+  app.get('/v1/me/alerts', async (req, reply) => {
+    const u = authed(req, reply); if (!u) return;
+    const limit = Math.min(Number((req.query as any)?.limit ?? 50), 200);
+    return { alerts: store.alertsForUser(u.id, limit) };
+  });
+
+  app.get('/v1/alerts/:id', async (req, reply) => {
+    const u = authed(req, reply); if (!u) return;
+    const alert = store.getAlert(u.id, (req.params as any).id);
+    if (!alert) return reply.code(404).send({ error: 'not_found' });
+    const event = store.getEvent(alert.eventId);
+    return { alert, sources: event?.sources ?? [], summary: event?.summary ?? '', endsAt: event?.endsAt ?? null };
+  });
+
+  app.post('/v1/alerts/:id/feedback', async (req, reply) => {
+    const u = authed(req, reply); if (!u) return;
+    const { value } = z.object({ value: z.enum(['relevant', 'not_relevant']) }).parse(req.body);
+    if (!store.setFeedback(u.id, (req.params as any).id, value)) return reply.code(404).send({ error: 'not_found' });
+    return { ok: true };
+  });
+
+  // ── Alert Desk / admin ───────────────────────────────────────────────────
+  app.get('/admin', async (_req, reply) => reply.type('text/html').send(DESK_HTML));
+
+  app.get('/admin/api/pending', async (req, reply) => {
+    if (!admin(req, reply)) return;
+    return { events: store.eventsByStatus('pending_review') };
+  });
+
+  app.get('/admin/api/active', async (req, reply) => {
+    if (!admin(req, reply)) return;
+    return { events: store.activeEvents(new Date()) };
+  });
+
+  app.post('/admin/api/events/:id/approve', async (req, reply) => {
+    if (!admin(req, reply)) return;
+    const edits = z.object({ title: z.string().max(50).optional(), body: z.string().max(100).optional(), severity: z.number().int().min(1).max(5).optional() })
+      .parse(req.body ?? {});
+    const res = await pipeline.approve((req.params as any).id, edits as any);
+    if (!res) return reply.code(404).send({ error: 'not_found' });
+    return res;
+  });
+
+  app.post('/admin/api/events/:id/reject', async (req, reply) => {
+    if (!admin(req, reply)) return;
+    return { ok: pipeline.reject((req.params as any).id) };
+  });
+
+  /** Concierge pilot: send a hand-curated alert. */
+  app.post('/admin/api/manual-alert', async (req, reply) => {
+    if (!admin(req, reply)) return;
+    const b = z.object({
+      category: z.enum(CATEGORIES), severity: z.number().int().min(1).max(5),
+      title: z.string().min(3).max(50), body: z.string().min(3).max(100),
+      sourceName: z.string().min(2), sourceUrl: z.string().url().optional(),
+      ...Coord, radiusM: z.number().min(100).max(50000), areaName: z.string().min(2), endsAt: z.string().optional(),
+    }).parse(req.body);
+    return pipeline.manualAlert(b as any);
+  });
+
+  app.post('/admin/api/ingest', async (req, reply) => {
+    if (!admin(req, reply)) return;
+    return runIngest();
+  });
+
+  app.get('/admin/api/metrics', async (req, reply) => {
+    if (!admin(req, reply)) return;
+    const days = Number((req.query as any)?.days ?? 7);
+    return store.metrics(new Date(Date.now() - days * 86_400_000).toISOString());
+  });
+
+  return app;
+}

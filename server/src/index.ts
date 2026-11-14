@@ -1,0 +1,51 @@
+import { loadConfig } from './config.js';
+import { Store } from './db.js';
+import { AnthropicLLM } from './llm.js';
+import { NominatimGeocoder, GazetteerGeocoder } from './geocode.js';
+import { ExpoPushSender } from './push.js';
+import { Pipeline } from './pipeline/run.js';
+import { fetchNinaChannel } from './sources/nina.js';
+import { fetchFeed } from './sources/rss.js';
+import { buildApi } from './api.js';
+
+const config = loadConfig();
+const store = new Store(config.dbPath);
+const llm = new AnthropicLLM(config.anthropicApiKey, config.model);
+const geocoder = config.geocoderUrl ? new NominatimGeocoder(config.geocoderUrl, config.geocoderUserAgent) : new GazetteerGeocoder();
+const pipeline = new Pipeline({ store, llm, geocoder, push: new ExpoPushSender(config.expoPushUrl), config });
+
+const seen = (source: string) => (externalId: string) =>
+  !store.db.prepare('SELECT 1 FROM source_items WHERE source = ? AND external_id = ?').get(source, externalId);
+
+let running = false;
+async function runIngest() {
+  if (running) return { skipped: 'already running' };
+  running = true;
+  const report: Record<string, unknown> = {};
+  try {
+    for (const channel of config.ninaChannels) {
+      try {
+        report[`nina:${channel}`] = await pipeline.ingest(await fetchNinaChannel(channel, seen('nina')));
+      } catch (err) { report[`nina:${channel}`] = { error: (err as Error).message }; }
+    }
+    for (const feed of config.rssFeeds) {
+      try {
+        report[`rss:${feed.sourceName}`] = await pipeline.ingest(await fetchFeed(feed), feed.defaultArea);
+      } catch (err) { report[`rss:${feed.sourceName}`] = { error: (err as Error).message }; }
+    }
+  } finally {
+    running = false;
+  }
+  return report;
+}
+
+const app = buildApi({ store, pipeline, adminToken: config.adminToken, runIngest });
+await app.listen({ port: config.port, host: '0.0.0.0' });
+console.log(`Hey-Okay server on :${config.port} · AI ${llm.enabled ? `on (${config.model})` : 'off — rules + templates'} · Alert Desk at /admin`);
+if (config.adminToken === 'change-me') console.warn('⚠ Set ADMIN_TOKEN before exposing this server.');
+
+if (config.pollIntervalSec > 0) {
+  const tick = () => runIngest().then((r) => console.log('[ingest]', JSON.stringify(r))).catch((e) => console.error('[ingest]', e));
+  tick();
+  setInterval(tick, config.pollIntervalSec * 1000);
+}
