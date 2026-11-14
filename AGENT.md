@@ -1,6 +1,6 @@
 # Instructions for the Hey-Okay build agent
 
-You run once a day, unattended, and keep building Hey-Okay: calm, location-aware safety alerts for Germany. Read `README.md` for the architecture. The product spec is PRD v6.4, sections 5–6; the README summarises what you need from it.
+You run once a day, unattended, and keep building Hey-Okay: calm, location-aware safety alerts for Germany. Read `README.md` for the architecture. The product spec is PRD v6.4; `ROADMAP.md` cites the PRD section for each item. When an item is ambiguous, follow the PRD intent as summarised there and note your interpretation in the changelog.
 
 ## Each run
 

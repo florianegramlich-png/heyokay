@@ -1,32 +1,98 @@
 # Hey-Okay roadmap
 
-The build agent takes the **first unchecked item** in "Up next", builds it, and ticks it off here in the same commit.
-Flori edits this file to steer: reorder, add or delete items. Items under "Needs a human" are never picked by the agent.
+Source of truth: **PRD v6.4** (section numbers in brackets). Phase 1 = launch in Germany, Month 4. Phase 2 = Months 7–9. Phase 3 = Months 10–12.
+
+The build agent takes the **first unchecked item** in "Up next", builds it, and ticks it off in the same commit. If an item is too big for one run, it splits it into smaller items here and does the first. Flori steers by reordering, adding or deleting items. Items under "Needs a human" are never picked by the agent.
+
+Items that need accounts or keys (Firebase, RevenueCat or App Store products, Apple sign-in) are built against config placeholders, and the human step is added to "Needs a human".
 
 ## Up next
 
-- [ ] **CI**: GitHub Actions workflow running server tests and typecheck, plus app typecheck, on every push and PR.
-- [ ] **Push receipts**: fetch Expo push receipts after sending; clear the push token on `DeviceNotRegistered`; retry transient errors with backoff. Tests with a fake Expo endpoint.
-- [ ] **Data retention**: hourly job that expires ended events, deletes alerts older than 30 days and source items older than 7 days, and clears locations not updated in 30 days. Tests.
-- [ ] **API hardening**: per-token and per-IP rate limits, request size limits and security headers. Tests.
-- [ ] **Alert Desk login**: individual reviewer accounts (email + password hash, session cookie) instead of the shared token, plus an audit log of approve, edit and reject actions shown on the desk.
-- [ ] **BVG/VBB disruptions source**: adapter for the VBB/HAFAS disruption feed (remarks/himMessages) mapped to `transit` items with affected stations geocoded. Fixture-based tests, because the agent sandbox has no network access to the feed.
-- [ ] **Feuerwehr Berlin source**: press releases RSS adapter config plus extraction tuning for fire and hazardous-material incidents. Fixtures and tests.
-- [ ] **App: English UI**: lightweight i18n (de/en) driven by `prefs.language` and the device locale; a language switch in settings.
-- [ ] **App: offline feed**: cache the last feed and alert details in AsyncStorage; show the cached data with a "Stand: …" note when offline.
-- [ ] **App: unit tests**: jest-expo set up, with tests for `lib/api`, `lib/theme.timeAgo` and the onboarding step logic.
-- [ ] **Deploy config**: Dockerfile for the server, a `fly.toml` with a persistent volume for SQLite, a health check and a README section on deploying.
-- [ ] **Event updates**: when an event escalates or is lifted, send an update or an all-clear alert ("Entwarnung") to users who got the original, without counting toward the daily limit.
-- [ ] **Postgres adapter**: a Store interface with both SQLite and Postgres/PostGIS implementations behind it, selected by `DATABASE_URL`. Run the same test suite against both.
+### Phase 1: launch blockers
+
+- [ ] **CI** [9.3]: GitHub Actions running server tests and typecheck plus app typecheck on every push and PR.
+- [ ] **Crash reporting** [5.3, 13]: Firebase Crashlytics in the app (`@react-native-firebase/crashlytics` via config plugin), with a JS error boundary that reports, and the server's unhandled errors logged. Config files are placeholders until the Firebase project exists.
+- [ ] **Postgres + PostGIS + pgvector** [6.4, 10.4]: a Store interface with a Postgres implementation selected by `DATABASE_URL` (SQLite stays for tests and the demo); PostGIS for matching; a docker-compose file for local Postgres. Run the same test suite against both.
+- [ ] **Embedding-based dedup** [6.1 #3]: an embeddings interface (provider plus a deterministic fake for tests), stored in pgvector, with clustering on embedding similarity plus geo and time. Keep word overlap as the fallback. Tests showing that differently-worded reports of the same incident merge.
+- [ ] **Sign-in** [5.3, 7.1]: Sign in with Apple, Google sign-in and email (magic link) on top of the anonymous device token. Link the existing device user to the account, and restore it on a new phone. Server: account table, verification of identity tokens, session tokens. Tests.
+- [ ] **Freemium + subscriptions** [5.3, 5.5]: free tier = weather + public safety; paid tier (€2.50/month) = all categories and saved places. App: StoreKit 2 / Play Billing via RevenueCat (`react-native-purchases`), a paywall screen, restore purchases. Server: entitlement from store webhooks, enforced in ranking and the places API. Leave room for the €4.99 family plan test (Decision 17). Tests.
+- [ ] **OS geofencing** [5.3, 11]: register saved places and the current area as OS geofences (`Location.startGeofencingAsync`; iOS max 20 regions). Re-centre the home region on exit, so continuous updates become a fallback, not the main mechanism. Server hint endpoint for active-event regions.
+- [ ] **Notification actions** [5.3]: rich notifications with "Relevant" / "Nicht relevant" buttons (notification categories) that post feedback without opening the app; group related alerts via thread id.
+- [ ] **Digest bucket** [6.1 #7, 6.2 step 7]: ranking returns send / digest / suppress. Digest items are bundled into one push at a user-chosen time (default 18:00) or shown in the feed. Severity-5 official warnings always break through. Tests.
+- [ ] **Push receipts + retry** [5.4, 6.2 step 9]: fetch Expo push receipts, clear tokens on `DeviceNotRegistered`, retry transient errors with backoff, and record delivery status per alert. Tests with a fake Expo endpoint.
+- [ ] **Event updates and all-clear** [5.4]: when an event escalates, changes or is lifted, send an update or an "Entwarnung" to users who got the original. These don't count toward the daily limit. Tests.
+- [ ] **Source: Presseportal Blaulicht** [6.1 #1]: adapter for Presseportal police and fire press releases (RSS per agency) with an agency to region mapping for Berlin, Munich, Hamburg and Cologne. Fixtures and tests.
+- [ ] **Source: DWD direct + heat** [5.4]: DWD warnings via the DWD open data CAP feed as a NINA fallback (dedup on CAP id), plus heat thresholds from OpenWeatherMap at users' saved places (for example "38 °C at your mother's address"). Fixtures and tests.
+- [ ] **Source: BVG/VBB disruptions** [5.4]: VBB/HAFAS disruption messages mapped to `transit` events, with stations geocoded. Fixtures and tests.
+- [ ] **Source: EU-Alert + Feuerwehr Berlin** [5.4]: Cell Broadcast / EU-Alert messages as exposed via NINA (MoWaS), plus Feuerwehr Berlin press releases. Fixtures and tests.
+- [ ] **Source registry + health** [11 "data source failure"]: a sources table (approved list, category, region, fallback source); the Alert Desk shows the last successful fetch per source and flags failures.
+- [ ] **Second LLM provider** [6.3]: an OpenAI implementation of `StructuredLLM` behind a `LLM_PROVIDERS` order with automatic failover and an EU endpoint setting; the template fallback stays last. Tests with fakes.
+- [ ] **AI evaluation harness** [6.4, 6.5]: an `eval/` folder with labelled events (start with the fixtures plus 50 synthetic German cases); `npm run eval` reports extraction accuracy, severity agreement, verifier pass rate and cost per event. Alert Desk approve/edit actions export as new labels.
+- [ ] **Decision log + audit** [6.3 EU AI Act]: store every pipeline decision (extraction output, model, prompt version, verifier result, ranking reason) and every Alert Desk action. Admin view and CSV export.
+- [ ] **Alert Desk accounts** [6.2 step 5]: individual reviewer logins (password hash, session cookie) instead of the shared token; review-time metric against the target of under 3 minutes.
+- [ ] **Product analytics + KPIs** [13]: app events (onboarding steps, permission results, alert opened, rated, notifications disabled) to a provider abstraction (Mixpanel/Amplitude, Decision 9). Server-side KPIs: event-to-push p90, open rate, D7, beyond-NINA, alerts per user per day, false-alert rate (alerts retracted at the desk). Dashboard on the Alert Desk.
+- [ ] **Crime bias report** [6.3]: quarterly report of crime alerts by district normalised by population, shown on the Alert Desk; no area-level crime scores anywhere.
+- [ ] **Offline feed** [5.3]: cache the last 20 alerts and their details on the device; show a "Stand: …" note when offline.
+- [ ] **API hardening** [11]: per-token and per-IP rate limits, body size limits, security headers and input fuzz tests.
+- [ ] **Data retention** [11 GDPR]: hourly job expiring ended events, alerts older than 30 days and source items older than 7 days, and clearing locations not updated in 30 days. Tests.
+- [ ] **App unit tests**: jest-expo with tests for `lib/api`, `lib/theme`, the onboarding steps and the paywall gating.
+- [ ] **Deploy config** [10.4]: server Dockerfile, a `fly.toml` (EU region, Frankfurt) with managed Postgres, a health check, EAS build profiles and EAS Update (Decision 6), and a deploy section in the README.
+
+### Phase 2: growth
+
+- [ ] **Learned relevance ranking** [6.1 #6]: features from ratings, opens and dismissals; a send/digest/suppress model with a weekly retrain job and offline evaluation against rules; rules remain the fallback.
+- [ ] **Learned fatigue control and impact zones** [6.1 #4, #7].
+- [ ] **Family sharing** [6.1 #8, 3.3 #4]: family groups, invite links, shared places (protecting places, never tracking people), the family plan entitlement.
+- [ ] **"Hey, okay?" check-ins** [6.1 #8]: a severity ≥ 4 event at a family member's place asks them "Alles okay?". One tap tells the family; a gentle reminder follows; it never contacts emergency services.
+- [ ] **Ask Hey-Okay assistant** [6.1 #9]: retrieval over live events, the official guidance library and saved places; cites sources; refuses out-of-scope questions; always points to 112; paid tier, rate-limited.
+- [ ] **Daily and trip briefings** [6.1 #10]: a 30-second morning or pre-trip summary; paid tier.
+- [ ] **Searchable alert history** [5.3].
+- [ ] **Home-screen widgets** [5.3]: current risk level (iOS WidgetKit and Android via an Expo config plugin).
+- [ ] **Accessibility** [6.1 #11]: read alerts aloud (`expo-speech`) and a simple-language mode generated at composition time.
+- [ ] **English** [6.1 #5, 8.1]: i18n for the app (de/en) and English alert composition; the guidance library in English.
+- [ ] **Sources: Austria, Switzerland, UK** [8.1]: AT/CH official warnings and police sources; UK Met Office and police.
+- [ ] **B2B API + admin portal** [7.2]: org accounts, API keys, alert zones, employee groups and invite links, plus delivery analytics.
+- [ ] **AI incident summaries for orgs** [6.1 #13].
+- [ ] **Stripe invoicing for B2B** [7.2].
+- [ ] **Insurer embedding** [5.5, 8.2]: a white-label alert feed API and a co-brand configuration (logo, colours, partner categories) for the insurer pilot.
+
+### Phase 3: scale
+
+- [ ] **Opt-in data insights** [5.5]: aggregated, de-identified risk insights with k-anonymity thresholds; consent flow; export for partners.
+- [ ] **Predictive risk scoring** [6.1 #14]: 6/12/24-hour outlook per location from historical events.
+- [ ] **On-device context** [6.1 #12]: learn significant places and commutes on the phone; only coarse context leaves the device.
+- [ ] **Apple Watch + Wear OS** [8.3].
 
 ## Needs a human
 
-- Run the app on a real iPhone and Android phone (development build); verify background location and push when the app is closed.
-- Create the EAS project; put the `projectId` in `app/app.json → extra.eas.projectId`.
-- Get an Anthropic API key and admin token; choose hosting.
-- Privacy policy URL, DPIA, App Store and Play Store listings.
+Real devices and stores
+- Run the app on a real iPhone and Android phone (development build); verify background location, geofences and push when the app is closed; battery test.
+- EAS project (put the `projectId` in `app/app.json`), Apple Developer and Play Console accounts, DUNS number.
+- Apply for Apple's Critical Alerts entitlement (Decision 16).
+- App Store / Play listings, privacy labels, privacy policy URL; App Store specialist (Month 3).
+
+Accounts and keys
+- Firebase project (Crashlytics, FCM): `GoogleService-Info.plist` and `google-services.json`.
+- RevenueCat plus App Store / Play subscription products (€2.50; €4.99 family test).
+- Sign in with Apple capability, Google OAuth client IDs, an email sender for magic links.
+- Anthropic and OpenAI keys with EU residency and zero-retention terms and DPAs (Decision 12); OpenWeatherMap and VBB API access.
+- Hosting account (Fly.io or AWS in Frankfurt), managed Postgres, admin token.
+
+Decisions (PRD section 12) that the agent needs before the related item is final
+- 5: In-app purchase or web checkout.
+- 7: Minimum Android version.
+- 9: Analytics provider.
+- 10: Freemium model.
+- 14: Assistant free tier.
+- 17: Price test.
+- 22: Review rules for AI-written code. Until decided: every agent PR is reviewed by Flori or the Lead Engineer before merge.
+
+Legal and partners
+- DPIA, EU AI Act classification, security review / penetration test before launch.
+- BBK/NINA relationship, insurer pilot, transit operator data agreements.
+- Concierge pilot with 50–100 Berlin users; label every curated alert for the eval set.
 
 ## Done
 
-- [x] Server MVP: NINA + RSS ingest, AI extraction, clustering, review gate, compose + verifier, ranking, Expo push, Alert Desk, GDPR delete. 28 tests.
-- [x] App MVP: onboarding, feed, alert detail with map and rating, settings, background location, push deep links.
+- [x] 2026-11-14 Server MVP: NINA + RSS ingest, AI extraction, clustering, review gate, compose + verifier, ranking, Expo push, Alert Desk with manual alerts, GDPR delete. 28 tests.
+- [x] 2026-11-14 App MVP: onboarding (pre-permission screens, location, notifications, categories, consent), feed, alert detail (map, severity colour, recommended action, sources, AI label, rating), settings (categories, quiet hours, daily limit), saved places (Phase 2 feature delivered early), background location, push deep links.
