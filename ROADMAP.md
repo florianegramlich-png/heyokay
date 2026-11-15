@@ -94,5 +94,6 @@ Legal and partners
 
 ## Done
 
+- [x] 2026-11-15 Baseline fix (not a roadmap item): app `npm ci` failed on a peer conflict (react-dom 19.3.1 wanted react ^19.3.1). Pinned `react-dom` 19.3.0 via `npx expo install`, matching Expo SDK 58. CI is still the next item.
 - [x] 2026-11-14 Server MVP: NINA + RSS ingest, AI extraction, clustering, review gate, compose + verifier, ranking, Expo push, Alert Desk with manual alerts, GDPR delete. 28 tests.
 - [x] 2026-11-14 App MVP: onboarding (pre-permission screens, location, notifications, categories, consent), feed, alert detail (map, severity colour, recommended action, sources, AI label, rating), settings (categories, quiet hours, daily limit), saved places (Phase 2 feature delivered early), background location, push deep links.
