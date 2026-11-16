@@ -3,13 +3,19 @@ import * as Notifications from 'expo-notifications';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { ErrorScreen } from '../components/ErrorScreen';
+import { initCrashReporting } from '../lib/crash';
 import { alertIdFrom, setupChannels } from '../lib/notifications';
 import { colors } from '../lib/theme';
+
+// expo-router renders this when any screen below throws (PRD 5.3 crash reporting).
+export const ErrorBoundary = ErrorScreen;
 
 export default function RootLayout() {
   const router = useRouter();
 
   useEffect(() => {
+    void initCrashReporting();
     setupChannels();
     const open = (r: Notifications.NotificationResponse | null) => {
       const id = r && alertIdFrom(r);

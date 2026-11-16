@@ -5,6 +5,7 @@ import type { Store } from './db.js';
 import type { Pipeline } from './pipeline/run.js';
 import { CATEGORIES, DEFAULT_PREFS, type User } from './types.js';
 import { DESK_HTML } from './desk.js';
+import { logError, stderrSink, type ErrorSink } from './errors.js';
 
 const PrefsSchema = z.object({
   categories: z.array(z.enum(CATEGORIES)),
@@ -21,15 +22,21 @@ export interface ApiDeps {
   pipeline: Pipeline;
   adminToken: string;
   runIngest: () => Promise<unknown>;
+  /** Where unexpected errors are logged (default: JSON lines on stderr). */
+  errorSink?: ErrorSink;
 }
 
-export function buildApi({ store, pipeline, adminToken, runIngest }: ApiDeps) {
+export function buildApi({ store, pipeline, adminToken, runIngest, errorSink = stderrSink }: ApiDeps) {
   const app = Fastify({ logger: false });
   app.register(cors, { origin: true });
 
-  app.setErrorHandler((err, _req, reply) => {
+  app.setErrorHandler((err, req, reply) => {
     if (err instanceof z.ZodError) return reply.code(400).send({ error: 'invalid_request', details: err.issues });
-    console.error(err);
+    // Fastify's own client errors (malformed JSON, wrong content type, body too large) keep their 4xx.
+    const status = (err as { statusCode?: number }).statusCode;
+    if (status && status >= 400 && status < 500) return reply.code(status).send({ error: 'invalid_request' });
+    // Route pattern only (e.g. /v1/alerts/:id): no ids, query strings or tokens in the log.
+    logError('http', err, { method: req.method, route: req.routeOptions.url ?? 'unknown' }, errorSink);
     return reply.code(500).send({ error: 'internal' });
   });
 
