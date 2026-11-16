@@ -10,8 +10,6 @@ Items that need accounts or keys (Firebase, RevenueCat or App Store products, Ap
 
 ### Phase 1: launch blockers
 
-- [ ] **CI** [9.3]: GitHub Actions running server tests and typecheck plus app typecheck on every push and PR.
-- [ ] **Crash reporting** [5.3, 13]: Firebase Crashlytics in the app (`@react-native-firebase/crashlytics` via config plugin), with a JS error boundary that reports, and the server's unhandled errors logged. Config files are placeholders until the Firebase project exists.
 - [ ] **Postgres + PostGIS + pgvector** [6.4, 10.4]: a Store interface with a Postgres implementation selected by `DATABASE_URL` (SQLite stays for tests and the demo); PostGIS for matching; a docker-compose file for local Postgres. Run the same test suite against both.
 - [ ] **Embedding-based dedup** [6.1 #3]: an embeddings interface (provider plus a deterministic fake for tests), stored in pgvector, with clustering on embedding similarity plus geo and time. Keep word overlap as the fallback. Tests showing that differently-worded reports of the same incident merge.
 - [ ] **Sign-in** [5.3, 7.1]: Sign in with Apple, Google sign-in and email (magic link) on top of the anonymous device token. Link the existing device user to the account, and restore it on a new phone. Server: account table, verification of identity tokens, session tokens. Tests.
@@ -72,7 +70,7 @@ Real devices and stores
 - App Store / Play listings, privacy labels, privacy policy URL; App Store specialist (Month 3).
 
 Accounts and keys
-- Firebase project (Crashlytics, FCM): `GoogleService-Info.plist` and `google-services.json`.
+- Firebase project (Crashlytics, FCM): put `GoogleService-Info.plist` and `google-services.json` in `app/firebase/` (see its README), then make a new development build and confirm a test crash shows up in the console.
 - RevenueCat plus App Store / Play subscription products (€2.50; €4.99 family test).
 - Sign in with Apple capability, Google OAuth client IDs, an email sender for magic links.
 - Anthropic and OpenAI keys with EU residency and zero-retention terms and DPAs (Decision 12); OpenWeatherMap and VBB API access.
@@ -94,6 +92,8 @@ Legal and partners
 
 ## Done
 
+- [x] 2026-11-16 **Crash reporting** [5.3, 13]: Crashlytics (`@react-native-firebase/app` + `crashlytics`) wired via `app.config.ts`, enabled only when both Firebase config files are in `app/firebase/`; opt-in toggle in Settings; root `ErrorBoundary` with a calm retry screen that reports; server logs 5xx, ingest failures, unhandled rejections and uncaught exceptions as structured JSON. 4 server tests.
+- [x] 2026-11-16 **CI** [9.3]: `.github/workflows/ci.yml` runs server `npm ci` + tests + typecheck and app `npm ci` + `tsc --noEmit` on every push and PR (Node 22, npm cache).
 - [x] 2026-11-15 Baseline fix (not a roadmap item): app `npm ci` failed on a peer conflict (react-dom 19.3.1 wanted react ^19.3.1). Pinned `react-dom` 19.3.0 via `npx expo install`, matching Expo SDK 58. CI is still the next item.
 - [x] 2026-11-14 Server MVP: NINA + RSS ingest, AI extraction, clustering, review gate, compose + verifier, ranking, Expo push, Alert Desk with manual alerts, GDPR delete. 28 tests.
 - [x] 2026-11-14 App MVP: onboarding (pre-permission screens, location, notifications, categories, consent), feed, alert detail (map, severity colour, recommended action, sources, AI label, rating), settings (categories, quiet hours, daily limit), saved places (Phase 2 feature delivered early), background location, push deep links.

@@ -7,6 +7,9 @@ import { Pipeline } from './pipeline/run.js';
 import { fetchNinaChannel } from './sources/nina.js';
 import { fetchFeed } from './sources/rss.js';
 import { buildApi } from './api.js';
+import { installProcessHandlers, logError } from './errors.js';
+
+installProcessHandlers();
 
 const config = loadConfig();
 const store = new Store(config.dbPath);
@@ -26,12 +29,18 @@ async function runIngest() {
     for (const channel of config.ninaChannels) {
       try {
         report[`nina:${channel}`] = await pipeline.ingest(await fetchNinaChannel(channel, seen('nina')));
-      } catch (err) { report[`nina:${channel}`] = { error: (err as Error).message }; }
+      } catch (err) {
+        logError('ingest', err, { source: `nina:${channel}` });
+        report[`nina:${channel}`] = { error: (err as Error).message };
+      }
     }
     for (const feed of config.rssFeeds) {
       try {
         report[`rss:${feed.sourceName}`] = await pipeline.ingest(await fetchFeed(feed), feed.defaultArea);
-      } catch (err) { report[`rss:${feed.sourceName}`] = { error: (err as Error).message }; }
+      } catch (err) {
+        logError('ingest', err, { source: `rss:${feed.sourceName}` });
+        report[`rss:${feed.sourceName}`] = { error: (err as Error).message };
+      }
     }
   } finally {
     running = false;
@@ -45,7 +54,7 @@ console.log(`Hey-Okay server on :${config.port} · AI ${llm.enabled ? `on (${con
 if (config.adminToken === 'change-me') console.warn('⚠ Set ADMIN_TOKEN before exposing this server.');
 
 if (config.pollIntervalSec > 0) {
-  const tick = () => runIngest().then((r) => console.log('[ingest]', JSON.stringify(r))).catch((e) => console.error('[ingest]', e));
+  const tick = () => runIngest().then((r) => console.log('[ingest]', JSON.stringify(r))).catch((e) => logError('ingest', e));
   tick();
   setInterval(tick, config.pollIntervalSec * 1000);
 }

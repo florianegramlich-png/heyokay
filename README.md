@@ -64,6 +64,8 @@ npm start
    - Otherwise quiet hours and the daily limit decide.
 7. **Push**: Expo push with an urgent channel for severity 4–5 and a tap that deep-links to the alert. The first sync after install backfills to the feed without a burst of notifications.
 
+**Errors:** unexpected server errors (HTTP 5xx, ingest failures, unhandled rejections, uncaught exceptions) are written to stderr as one JSON line each with `"level":"error"` or `"fatal"`, with the route pattern but no query strings, headers or tokens.
+
 **Privacy:** only the latest location per user is kept (rounded to about 100 m on the device), with no history. The model only ever sees public source text, never user data. Device tokens are stored hashed. `DELETE /v1/me` erases everything (GDPR Art. 17).
 
 ## App (PRD 5.3)
@@ -73,6 +75,7 @@ npm start
 - **Alert detail**: map with the affected area, "Was du tun kannst", summary, linked sources, an "AI-written" note and a 👍/👎 rating that feeds ranking.
 - **Settings**: categories, quiet hours, daily limit, location status, saved places (address → OS geocoder) and delete all data.
 - **Background**: location task (about every 300 m or 15 min), push-token registration and notification tap → alert.
+- **Crash reporting**: Firebase Crashlytics, opt-in via Settings ("Absturzberichte senden"), plus a calm error screen that reports render errors. Active only in development/store builds once `app/firebase/` holds the Firebase config files (see `app/firebase/README.md`); a no-op in Expo Go.
 
 ## Done vs. next
 

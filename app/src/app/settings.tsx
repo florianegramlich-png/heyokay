@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Alert as RNAlert, Linking, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { Button, s, Section, ToggleRow } from '../components/ui';
 import { api } from '../lib/api';
+import { crashReportingAvailable, getCrashReportsOptIn, setCrashReportsOptIn } from '../lib/crash';
 import { geocode, locationAccess, stopBackgroundUpdates, type LocationAccess } from '../lib/location';
 import { session } from '../lib/session';
 import { colors } from '../lib/theme';
@@ -18,11 +19,19 @@ export default function Settings() {
   const [label, setLabel] = useState('');
   const [address, setAddress] = useState('');
   const [placeError, setPlaceError] = useState<string | null>(null);
+  const [crashReports, setCrashReports] = useState(false);
+  const showCrashToggle = crashReportingAvailable();
 
   useEffect(() => {
     api.me().then((me) => { setPrefs(me.prefs); setPlaces(me.places); }).catch(() => null);
     locationAccess().then(setAccess);
+    getCrashReportsOptIn().then(setCrashReports);
   }, []);
+
+  async function toggleCrashReports(v: boolean) {
+    setCrashReports(v);
+    await setCrashReportsOptIn(v);
+  }
 
   async function save(patch: Partial<UserPrefs>) {
     if (!prefs) return;
@@ -56,6 +65,7 @@ export default function Settings() {
         text: 'Löschen', style: 'destructive', onPress: async () => {
           await api.deleteAccount().catch(() => null);
           await stopBackgroundUpdates();
+          await setCrashReportsOptIn(false);
           await session.clear();
           router.replace('/onboarding');
         },
@@ -130,6 +140,15 @@ export default function Settings() {
 
       <Section title="Datenschutz">
         <Text style={s.p}>Wir speichern nur deinen letzten Standort, deine Orte und Einstellungen. Kein Verlauf.</Text>
+        {showCrashToggle ? (
+          <ToggleRow
+            label="Absturzberichte senden"
+            hint="Hilft uns, Fehler zu finden. Ohne Standort, ohne Konto, ohne Inhalte deiner Warnungen."
+            value={crashReports}
+            onChange={toggleCrashReports}
+            last
+          />
+        ) : null}
         <Button kind="danger" title="Alle Daten löschen" onPress={confirmDelete} />
       </Section>
     </ScrollView>
