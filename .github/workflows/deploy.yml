@@ -1,0 +1,58 @@
+name: Deploy server
+
+# Every merge to main that touches the server deploys it to Fly.io (fly.toml + Dockerfile at the
+# repo root), after the tests pass. One-time setup: README → "Deploy" → automatic deploys.
+# Until the FLY_API_TOKEN repository secret exists, this workflow skips the deploy instead of failing.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'server/**'
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'fly.toml'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch: # "Run workflow" button in the Actions tab
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-server
+  cancel-in-progress: false # never stop a deploy halfway
+
+jobs:
+  deploy:
+    name: Test and deploy to Fly.io
+    runs-on: ubuntu-latest
+    env:
+      FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+        working-directory: server
+      - run: npm test
+        working-directory: server
+      - run: npm run typecheck
+        working-directory: server
+
+      - name: Check for the Fly token
+        id: token
+        run: |
+          if [ -z "$FLY_API_TOKEN" ]; then
+            echo "::notice::FLY_API_TOKEN is not set, so nothing was deployed. See README → Deploy."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+        if: steps.token.outputs.present == 'true'
+      # SQLite on a volume = exactly one machine (--ha=false). Fly builds the image on its side.
+      - run: flyctl deploy --remote-only --ha=false
+        if: steps.token.outputs.present == 'true'

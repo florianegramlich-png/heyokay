@@ -6,6 +6,7 @@
 
 ## 2026-11-17
 
+- **Automatic server deploys.** Fly's GitHub connection doesn't deploy on merge (it only deploys from the dashboard), so `.github/workflows/deploy.yml` tests and deploys the server on every merge to `main` that touches it. It skips the deploy, without failing, until the `FLY_API_TOKEN` repository secret exists. For Flori: create a Fly deploy token and add it on GitHub (README → Deploy).
 - **Event updates and all-clears** [5.4] (roadmap item). People who got an alert are told when it changes or ends:
   - Gets more severe: a fresh alert, pushed as before.
   - Gets less severe, or its official end time moves by an hour or more: an "Update"/"Aktualisiert" alert in the feed only (no push).
