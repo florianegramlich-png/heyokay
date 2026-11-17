@@ -1,7 +1,7 @@
 # Fly.io config for the Hey-Okay API server (the Dockerfile next to this builds server/).
 # First deploy: see "Deploy" in the README.
-# `app` must be unique on Fly; `fly launch --no-deploy` can rename it for you.
-app = "heyokay-api"
+# `app` is the Fly app name (created in the Fly dashboard as "heyokay").
+app = "heyokay"
 primary_region = "fra" # Frankfurt (PRD 10.4: EU hosting)
 
 [build]
