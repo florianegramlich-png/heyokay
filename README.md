@@ -52,9 +52,11 @@ npm start
 
 ## Deploy (Fly.io)
 
-The server ships as a Docker image (`server/Dockerfile`) with a Fly.io config (`server/fly.toml`): Frankfurt, one always-on machine, SQLite on a 1 GB persistent volume, health check on `/health`. In production the server refuses to start without `ADMIN_TOKEN`.
+The server ships as a Docker image (`Dockerfile` at the repo root, building `server/`) with a Fly.io config (`fly.toml`, also at the root, where Fly's GitHub launcher looks): Frankfurt, one always-on machine, SQLite on a 1 GB persistent volume, health check on `/health`. In production the server refuses to start without `ADMIN_TOKEN`.
 
-First time (from `server/`):
+**Easiest: Fly's "Deploy from GitHub".** Connect the repo, branch `main`. Fly finds `fly.toml` and the Dockerfile at the root. Before deploying, add the secrets below (`ADMIN_TOKEN`, `NWS_USER_AGENT`, `GEOCODER_USER_AGENT`) and keep it to one machine. Fly then redeploys on every push to `main`.
+
+Or from the terminal, first time (from the repo root):
 
 ```bash
 brew install flyctl && fly auth login

@@ -6,6 +6,7 @@
 
 ## 2026-11-17
 
+- **Fix: Fly's GitHub launcher couldn't find the server.** It only looks at the repo root, so `Dockerfile` and `fly.toml` moved from `server/` to the root (the Dockerfile builds only `server/`; a root `.dockerignore` keeps the app out of the image). README → Deploy now describes Fly's "Deploy from GitHub" as the easiest route. Verified: the image builds from the root, `/health` answers, admin routes need the token.
 - **Hosted backend, step 1: server deploy config** [10.4] (part of the "Deploy config" roadmap item; Flori asked for it to stop using tunnels).
   - `server/Dockerfile` (multi-stage, Node 22, compiled with `tsc` to `dist/`, no dev dependencies in the image), `.dockerignore`, `server/fly.toml` (Frankfurt, one always-on machine because of the 2-minute polling, SQLite on volume `heyokay_data` at `/data`, `/health` check), and a README "Deploy" section.
   - New scripts: `npm run build` (`tsconfig.build.json`) and `npm run serve`.
