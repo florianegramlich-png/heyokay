@@ -4,6 +4,11 @@
 
 - **Crash reports: opt-in or opt-out?** (2026-11-16) Crashlytics is built as opt-in: native collection is off (`app/firebase.json`) and only the Settings toggle "Absturzberichte senden" turns it on, defaulting to off. That's the conservative reading of the privacy rules (§25 TTDSG consent for device access that isn't strictly necessary). If you'd rather collect by default, or ask during onboarding's consent step, tell me and I'll change it; it should also go into the privacy policy and DPIA either way.
 
+## 2026-11-17
+
+- **Fix: iOS build failed without Firebase** (found by Flori's first EAS development build). `pod install` stopped because React Native Firebase was still autolinked and requires dynamic frameworks, which `app.config.ts` only turns on when the Firebase files exist. New `app/react-native.config.js` unlinks `@react-native-firebase/app` and `crashlytics` on iOS and Android until both files are in `app/firebase/`, so the rule is the same everywhere.
+  - Verified: `expo-modules-autolinking react-native-config` lists no Firebase modules without the files and both with them; `tsc --noEmit` clean; iOS JS bundle builds. Not verifiable here: `pod install` itself (needs macOS), so the next EAS build is the real check.
+
 ## 2026-11-16
 
 - **CI** [9.3]: added `.github/workflows/ci.yml` with two jobs: `server` (`npm ci`, `npm test`, `npm run typecheck`) and `app` (`npm ci`, `npx tsc --noEmit`), on Node 22 with npm caching, triggered on every push and PR. Concurrent runs on the same ref are cancelled.
