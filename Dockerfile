@@ -1,11 +1,12 @@
-# Hey-Okay API server. Build: docker build -t heyokay-server .  (context = this folder)
+# Hey-Okay API server. Lives at the repo root so Fly.io (and its GitHub launcher) finds it.
+# Build: docker build -t heyokay-server .   (context = repo root; only server/ is used)
 # node:sqlite needs Node >= 22.13.
 FROM node:22-slim AS build
 WORKDIR /app
-COPY package.json package-lock.json ./
+COPY server/package.json server/package-lock.json ./
 RUN npm ci
-COPY tsconfig.json tsconfig.build.json ./
-COPY src ./src
+COPY server/tsconfig.json server/tsconfig.build.json ./
+COPY server/src ./src
 RUN npm run build && npm prune --omit=dev
 
 FROM node:22-slim
