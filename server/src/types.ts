@@ -6,7 +6,9 @@ export type Category = (typeof CATEGORIES)[number];
 /** 1 = info, 2 = minor, 3 = moderate, 4 = severe, 5 = extreme. Same meaning across all sources. */
 export type Severity = 1 | 2 | 3 | 4 | 5;
 
-export type SourceKind = 'nina' | 'rss' | 'manual';
+export type SourceKind = 'nina' | 'nws' | 'rss' | 'manual';
+
+export type Language = 'de' | 'en';
 
 /** A raw item as it arrives from a source, before the AI pipeline touches it. */
 export interface SourceItem {
@@ -14,6 +16,10 @@ export interface SourceItem {
   /** Feed-level name shown to users, e.g. "NINA (BBK)", "Polizei Berlin". */
   sourceName: string;
   externalId: string;
+  /** Earlier messages this one updates or cancels (NWS/CAP `references`). Used to keep one event per incident. */
+  references?: string[];
+  /** Language of the source text, and so of the alert copy. Default 'de'. */
+  language?: Language;
   /** Official warning systems (NINA/MoWaS, DWD via NINA). Official levels override the model. */
   official: boolean;
   title: string;
@@ -28,6 +34,8 @@ export interface SourceItem {
   category?: Category;
   expiresAt?: string;
   areaName?: string;
+  /** Exact warning area as polygon outlines ([lon, lat] rings). When present, matching uses these, not the circle. */
+  areas?: [number, number][][];
 }
 
 /** What extraction produces from one source item. */
@@ -68,6 +76,8 @@ export interface RiskEvent {
   lat: number;
   lon: number;
   radiusM: number;
+  /** Exact warning area, when the source gives one. The circle above stays for the map and as the fallback. */
+  areas?: [number, number][][];
   startsAt: string;
   endsAt: string | null;
   status: EventStatus;
@@ -80,6 +90,8 @@ export interface RiskEvent {
   copyIsTemplate: boolean;
   createdAt: string;
   updatedAt: string;
+  /** Language the alert copy is written in. Missing = 'de' (events created before this field existed). */
+  language?: Language;
   /** Bumped when severity rises or a new source changes the event, so users get an update. */
   revision: number;
 }
@@ -103,7 +115,7 @@ export interface UserPrefs {
   quietHours: QuietHours | null;
   dailyLimit: number;
   timezone: string;
-  language: 'de' | 'en';
+  language: Language;
 }
 
 export const DEFAULT_PREFS: UserPrefs = {

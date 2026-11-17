@@ -172,6 +172,7 @@ export function buildApi({ store, pipeline, adminToken, runIngest, errorSink = s
       title: z.string().min(3).max(50), body: z.string().min(3).max(100),
       sourceName: z.string().min(2), sourceUrl: z.string().url().optional(),
       ...Coord, radiusM: z.number().min(100).max(50000), areaName: z.string().min(2), endsAt: z.string().optional(),
+      language: z.enum(['de', 'en']).optional(),
     }).parse(req.body);
     return pipeline.manualAlert(b as any);
   });

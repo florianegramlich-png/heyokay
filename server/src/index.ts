@@ -6,6 +6,7 @@ import { ExpoPushSender } from './push.js';
 import { Pipeline } from './pipeline/run.js';
 import { fetchNinaChannel } from './sources/nina.js';
 import { fetchFeed } from './sources/rss.js';
+import { fetchNwsArea, nwsFetcher } from './sources/nws.js';
 import { buildApi } from './api.js';
 import { installProcessHandlers, logError } from './errors.js';
 
@@ -40,6 +41,15 @@ async function runIngest() {
       } catch (err) {
         logError('ingest', err, { source: `rss:${feed.sourceName}` });
         report[`rss:${feed.sourceName}`] = { error: (err as Error).message };
+      }
+    }
+    const nwsGet = nwsFetcher(config.nwsUserAgent);
+    for (const area of config.nwsAreas) {
+      try {
+        report[`nws:${area}`] = await pipeline.ingest(await fetchNwsArea(area, seen('nws'), nwsGet));
+      } catch (err) {
+        logError('ingest', err, { source: `nws:${area}` });
+        report[`nws:${area}`] = { error: (err as Error).message };
       }
     }
   } finally {

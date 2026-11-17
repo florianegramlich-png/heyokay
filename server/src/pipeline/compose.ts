@@ -1,7 +1,7 @@
 import { z } from 'zod';
-import type { AlertCopy, RiskEvent } from '../types.js';
+import type { AlertCopy, Language, RiskEvent } from '../types.js';
 import type { StructuredLLM } from '../llm.js';
-import { CATEGORY_LABEL_DE, recommendedAction } from './guidance.js';
+import { CATEGORY_LABEL_DE, CATEGORY_LABEL_EN, recommendedAction } from './guidance.js';
 
 export const TITLE_MAX = 50;
 export const BODY_MAX = 100;
@@ -11,7 +11,9 @@ const CopySchema = z.object({
   body: z.string().describe(`Max ${BODY_MAX} characters. The key fact people need. No advice — that is added separately.`),
 });
 
-const SYSTEM = `You write lock-screen safety alerts in German for the Hey-Okay app.
+const LANGUAGE_NAME: Record<Language, string> = { de: 'German', en: 'English' };
+
+const system = (language: Language) => `You write lock-screen safety alerts in ${LANGUAGE_NAME[language]} for the Hey-Okay app.
 Hard rules:
 - Use ONLY facts in FACTS. Every number, time, date, temperature and place must appear in FACTS.
 - Title ≤ ${TITLE_MAX} characters: what and where. Body ≤ ${BODY_MAX} characters: the single most useful fact.
@@ -21,12 +23,13 @@ Hard rules:
 
 /** Write and verify alert copy for an event. Falls back to a template built from source text. */
 export async function compose(event: RiskEvent, llm: StructuredLLM): Promise<AlertCopy & { isTemplate: boolean }> {
-  const action = recommendedAction(event.category, event.severity);
+  const language = event.language ?? 'de';
+  const action = recommendedAction(event.category, event.severity, language);
   if (llm.enabled) {
     let feedback = '';
     for (let attempt = 0; attempt < 2; attempt++) {
       const out = await llm.generate(
-        SYSTEM,
+        system(language),
         `Category: ${event.category}\nSeverity (1-5): ${event.severity}\nArea: ${event.areaName}\n\nFACTS:\n${event.facts.slice(0, 6000)}${feedback}`,
         CopySchema,
       );
@@ -42,14 +45,25 @@ export async function compose(event: RiskEvent, llm: StructuredLLM): Promise<Ale
 /** Deterministic copy from verbatim source text — always grounded. */
 export function template(event: RiskEvent): { title: string; body: string } {
   const src = event.sources[0];
+  const label = (event.language === 'en' ? CATEGORY_LABEL_EN : CATEGORY_LABEL_DE)[event.category];
+  const srcTitle = src?.title || event.title;
+  // NWS lists several forecast zones ("San Francisco; Coastal North Bay; …"). Naming only the first
+  // would mislead people in the others, so name the warning instead: "Weather: Wind Advisory".
+  if (event.areaName.includes(';')) {
+    const what = srcTitle.split(/\s+(?:until|from|for)\s+/i)[0];
+    return { title: truncate(`${label}: ${what}`, TITLE_MAX), body: truncate(srcTitle, BODY_MAX) };
+  }
   const area = event.areaName.split(',')[0].trim();
-  const title = truncate(`${CATEGORY_LABEL_DE[event.category]}${area ? `: ${area}` : ''}`, TITLE_MAX);
-  const body = truncate(src?.title || event.title, BODY_MAX);
+  const title = truncate(`${label}${area ? `: ${area}` : ''}`, TITLE_MAX);
+  const body = truncate(srcTitle, BODY_MAX);
   return { title, body };
 }
 
-const ALARM_STEMS = ['lebensgefahr', 'evakuier', 'explosion', 'tote', 'getötet', 'verletzt', 'schüsse', 'geschossen', 'bombe', 'amok', 'terror', 'geiselnahme', 'brand', 'feuer'];
-const AREA_STIGMA = /\b(gefährlich\w*|unsicher\w*|kriminell\w*)\s+(viertel|kiez|gegend|stadtteil|bezirk|ecke)\b|\b(problemviertel|brennpunkt)\b/i;
+const ALARM_STEMS = [
+  'lebensgefahr', 'evakuier', 'explosion', 'tote', 'getötet', 'verletzt', 'schüsse', 'geschossen', 'bombe', 'amok', 'terror', 'geiselnahme', 'brand', 'feuer',
+  'life-threatening', 'evacuat', 'killed', 'injur', 'shooting', 'shots', 'gunfire', 'bomb', 'hostage', 'fire',
+];
+const AREA_STIGMA = /\b(gefährlich\w*|unsicher\w*|kriminell\w*)\s+(viertel|kiez|gegend|stadtteil|bezirk|ecke)\b|\b(problemviertel|brennpunkt)\b|\b(dangerous|unsafe|crime-ridden|sketchy)\s+(neighbou?rhood|area|part of town|district|block)\b/i;
 
 /**
  * The fact verifier. Returns a list of problems; empty = safe to send.

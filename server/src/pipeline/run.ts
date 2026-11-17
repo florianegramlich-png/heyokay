@@ -166,12 +166,13 @@ export class Pipeline {
   /** Concierge pilot: a human-curated alert. Goes straight out (a person wrote it). */
   async manualAlert(input: {
     category: Category; severity: Severity; title: string; body: string; sourceName: string; sourceUrl?: string;
-    lat: number; lon: number; radiusM: number; areaName: string; endsAt?: string;
+    lat: number; lon: number; radiusM: number; areaName: string; endsAt?: string; language?: 'de' | 'en';
   }) {
     const item: SourceItem = {
       source: 'manual', sourceName: input.sourceName, externalId: `manual:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`,
       official: false, title: input.title, body: input.body, url: input.sourceUrl, publishedAt: this.now().toISOString(),
       lat: input.lat, lon: input.lon, radiusM: input.radiusM, category: input.category, areaName: input.areaName,
+      language: input.language ?? 'de',
     };
     this.d.store.recordSourceItem(item);
     const event = newEvent({
@@ -182,7 +183,7 @@ export class Pipeline {
     event.copyTitle = input.title.slice(0, 50);
     event.copyBody = input.body.slice(0, 100);
     event.copyIsTemplate = true;
-    event.copyAction = recommendedAction(event.category, event.severity);
+    event.copyAction = recommendedAction(event.category, event.severity, event.language);
     this.d.store.saveEvent(event);
     const out = await this.deliver(event);
     return { eventId: event.id, ...out };
