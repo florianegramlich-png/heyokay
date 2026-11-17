@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { ErrorScreen } from '../components/ErrorScreen';
 import { initCrashReporting } from '../lib/crash';
+import { loadLanguage, useI18n } from '../lib/i18n';
 import { alertIdFrom, setupChannels } from '../lib/notifications';
 import { colors } from '../lib/theme';
 
@@ -13,10 +14,17 @@ export const ErrorBoundary = ErrorScreen;
 
 export default function RootLayout() {
   const router = useRouter();
+  const { t, lang } = useI18n();
+
+  useEffect(() => {
+    void loadLanguage();
+  }, []);
+  useEffect(() => {
+    setupChannels(lang);
+  }, [lang]);
 
   useEffect(() => {
     void initCrashReporting();
-    setupChannels();
     const open = (r: Notifications.NotificationResponse | null) => {
       const id = r && alertIdFrom(r);
       if (id) router.push({ pathname: '/alert/[id]', params: { id } });
@@ -42,8 +50,8 @@ export default function RootLayout() {
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="onboarding" options={{ headerShown: false, gestureEnabled: false }} />
         <Stack.Screen name="feed" options={{ title: 'Hey-Okay', headerBackVisible: false }} />
-        <Stack.Screen name="alert/[id]" options={{ title: 'Warnung' }} />
-        <Stack.Screen name="settings" options={{ title: 'Einstellungen' }} />
+        <Stack.Screen name="alert/[id]" options={{ title: t('nav.alert') }} />
+        <Stack.Screen name="settings" options={{ title: t('nav.settings') }} />
       </Stack>
     </>
   );

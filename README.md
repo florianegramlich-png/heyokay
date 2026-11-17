@@ -43,6 +43,8 @@ npm start
 | `HEYOKAY_MODEL` | claude-haiku-5-5 | |
 | `NINA_CHANNELS` | mowas,katwarn,biwapp,dwd,lhp,police | Official BBK warnings |
 | `RSS_FEEDS` | [] | JSON list of police / transit feeds |
+| `NWS_AREAS` | – | US National Weather Service alerts for testing in the US: state codes (`CA`) or `lat,lon` points, separated by `;`. Off when empty |
+| `NWS_USER_AGENT` | `GEOCODER_USER_AGENT` | Contact string NWS requires, e.g. `HeyOkay (you@example.com)` |
 | `POLL_INTERVAL_SEC` | 120 | |
 | `GEOCODER_URL` | Nominatim | Use your own instance for volume; the built-in gazetteer is the fallback |
 | `MATCH_BUFFER_M` | 1500 | Extra distance around an event's area |

@@ -2,6 +2,7 @@ import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+import { translate, type Lang } from './i18n';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -13,14 +14,14 @@ Notifications.setNotificationHandler({
 });
 
 /** Channels match server/src/push.ts: severity ≥ 4 uses "urgent". */
-export async function setupChannels() {
+export async function setupChannels(lang: Lang) {
   if (Platform.OS !== 'android') return;
   await Notifications.setNotificationChannelAsync('alerts', {
-    name: 'Warnungen',
+    name: translate(lang, 'channel.alerts'),
     importance: Notifications.AndroidImportance.DEFAULT,
   });
   await Notifications.setNotificationChannelAsync('urgent', {
-    name: 'Dringende Warnungen',
+    name: translate(lang, 'channel.urgent'),
     importance: Notifications.AndroidImportance.MAX,
     vibrationPattern: [0, 400, 200, 400],
   });

@@ -20,19 +20,4 @@ export const severityColor: Record<Severity, string> = {
   5: '#B42318',
 };
 
-export const severityLabel: Record<Severity, string> = {
-  1: 'Info',
-  2: 'Gering',
-  3: 'Mittel',
-  4: 'Hoch',
-  5: 'Extrem',
-};
-
-export function timeAgo(iso: string, now = Date.now()) {
-  const min = Math.round((now - Date.parse(iso)) / 60_000);
-  if (min < 1) return 'gerade eben';
-  if (min < 60) return `vor ${min} Min.`;
-  const h = Math.round(min / 60);
-  if (h < 24) return `vor ${h} Std.`;
-  return new Date(iso).toLocaleDateString('de-DE', { day: 'numeric', month: 'short' });
-}
+// Severity labels and timeAgo live in lib/i18n.ts (German + English).
