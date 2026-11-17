@@ -1,5 +1,5 @@
 import type { Config } from '../config.js';
-import type { Store } from '../db.js';
+import type { Store } from '../store.js';
 import type { Geocoder } from '../geocode.js';
 import type { StructuredLLM } from '../llm.js';
 import type { PushSender } from '../push.js';
@@ -43,12 +43,12 @@ export class Pipeline {
     const touched = new Map<string, RiskEvent>();
 
     for (const item of items) {
-      if (!this.d.store.recordSourceItem(item)) continue; // seen before
+      if (!await this.d.store.recordSourceItem(item)) continue; // seen before
       r.new++;
       const ext = await extract(item, { llm: this.d.llm, geocoder: this.d.geocoder, now: this.now(), defaultArea });
       if (!ext || ext.lat == null || ext.lon == null) { r.ignored++; continue; }
 
-      const active = [...this.d.store.activeEvents(this.now()), ...touched.values()].filter((e, i, a) => a.findIndex((x) => x.id === e.id) === i);
+      const active = [...(await this.d.store.activeEvents(this.now())), ...touched.values()].filter((e, i, a) => a.findIndex((x) => x.id === e.id) === i);
       const existing = findCluster(ext, item, active);
       let event: RiskEvent;
       if (existing) {
@@ -66,8 +66,8 @@ export class Pipeline {
         if (needsReview) r.sentToReview++;
         r.eventsCreated++;
       }
-      this.d.store.saveEvent(event);
-      this.d.store.linkSourceItem(item, event.id);
+      await this.d.store.saveEvent(event);
+      await this.d.store.linkSourceItem(item, event.id);
       touched.set(event.id, event);
     }
 
@@ -90,25 +90,25 @@ export class Pipeline {
       event.copyBody = copy.body;
       event.copyAction = copy.action;
       event.copyIsTemplate = copy.isTemplate;
-      this.d.store.saveEvent(event);
+      await this.d.store.saveEvent(event);
     }
 
     const outbox: Array<{ token: string; alert: Alert }> = [];
     let alerts = 0;
-    for (const user of onlyUsers ?? this.d.store.allUsers()) {
-      const m = match(user, this.d.store.places(user.id), event, this.d.config.matchBufferM, this.now());
+    for (const user of onlyUsers ?? (await this.d.store.allUsers())) {
+      const m = match(user, await this.d.store.places(user.id), event, this.d.config.matchBufferM, this.now());
       if (!m) continue;
       const since = new Date(this.now().getTime() - 24 * 3600_000).toISOString();
       let { delivery, reason } = decide(user, event, {
         now: this.now(),
-        pushesLast24h: this.d.store.pushCountSince(user.id, since),
-        feedback: this.d.store.feedbackByCategory(user.id),
+        pushesLast24h: await this.d.store.pushCountSince(user.id, since),
+        feedback: await this.d.store.feedbackByCategory(user.id),
       });
       // First sync after install: show what's going on without a burst of notifications.
       if (backfill && delivery === 'push' && !(event.official && event.severity === 5)) { delivery = 'feed'; reason = 'catch-up after setup'; }
 
       const primary = event.sources.find((s) => s.official) ?? event.sources[0];
-      const alert = this.d.store.insertAlert({
+      const alert = await this.d.store.insertAlert({
         userId: user.id, eventId: event.id, eventRevision: event.revision,
         title: m.place ? truncateTo(`${m.place}: ${event.copyTitle}`, 50, event.copyTitle!) : event.copyTitle!,
         body: event.copyBody!, action: event.copyAction!,
@@ -129,13 +129,13 @@ export class Pipeline {
   /** New location or new saved place: check currently active events for this user. */
   async refreshUser(user: User, backfill = false) {
     let alerts = 0;
-    for (const e of this.d.store.activeEvents(this.now())) alerts += (await this.deliver(e, [user], backfill)).alerts;
+    for (const e of await this.d.store.activeEvents(this.now())) alerts += (await this.deliver(e, [user], backfill)).alerts;
     return alerts;
   }
 
   // ── Alert Desk (human review) ─────────────────────────────────────────────
   async approve(eventId: string, edits?: { title?: string; body?: string; severity?: Severity }) {
-    const e = this.d.store.getEvent(eventId);
+    const e = await this.d.store.getEvent(eventId);
     if (!e) return null;
     e.status = 'approved';
     if (edits?.severity && edits.severity !== e.severity) {
@@ -150,16 +150,16 @@ export class Pipeline {
     if (edits?.title) { e.copyTitle = edits.title.slice(0, 50); e.copyIsTemplate = true; }
     if (edits?.body) { e.copyBody = edits.body.slice(0, 100); e.copyIsTemplate = true; }
     e.updatedAt = this.now().toISOString();
-    this.d.store.saveEvent(e);
+    await this.d.store.saveEvent(e);
     return this.deliver(e);
   }
 
-  reject(eventId: string) {
-    const e = this.d.store.getEvent(eventId);
+  async reject(eventId: string) {
+    const e = await this.d.store.getEvent(eventId);
     if (!e) return false;
     e.status = 'rejected';
     e.updatedAt = this.now().toISOString();
-    this.d.store.saveEvent(e);
+    await this.d.store.saveEvent(e);
     return true;
   }
 
@@ -173,7 +173,7 @@ export class Pipeline {
       official: false, title: input.title, body: input.body, url: input.sourceUrl, publishedAt: this.now().toISOString(),
       lat: input.lat, lon: input.lon, radiusM: input.radiusM, category: input.category, areaName: input.areaName,
     };
-    this.d.store.recordSourceItem(item);
+    await this.d.store.recordSourceItem(item);
     const event = newEvent({
       category: input.category, severity: input.severity, confidence: 1, title: input.title, summary: input.body,
       areaName: input.areaName, lat: input.lat, lon: input.lon, radiusM: input.radiusM,
@@ -183,7 +183,7 @@ export class Pipeline {
     event.copyBody = input.body.slice(0, 100);
     event.copyIsTemplate = true;
     event.copyAction = recommendedAction(event.category, event.severity);
-    this.d.store.saveEvent(event);
+    await this.d.store.saveEvent(event);
     const out = await this.deliver(event);
     return { eventId: event.id, ...out };
   }

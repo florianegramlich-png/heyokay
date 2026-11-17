@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildApi } from './api.js';
 import { loadConfig } from './config.js';
-import { Store } from './db.js';
+import { SqliteStore } from './db.js';
 import { GazetteerGeocoder } from './geocode.js';
 import { AnthropicLLM } from './llm.js';
 import { Pipeline } from './pipeline/run.js';
@@ -18,7 +18,7 @@ const fx = (f: string) => readFileSync(join(import.meta.dirname, '..', 'test', '
 const FIXTURE_NOW = new Date('2026-11-14T09:50:00+01:00');
 
 const config = { ...loadConfig(), dbPath: ':memory:', pollIntervalSec: 0 };
-const store = new Store(':memory:');
+const store = new SqliteStore(':memory:');
 const llm = new AnthropicLLM(config.anthropicApiKey, config.model);
 const push = new MemoryPushSender();
 const pipeline = new Pipeline({ store, llm, geocoder: new GazetteerGeocoder(), push, config, now: () => FIXTURE_NOW });
@@ -39,8 +39,8 @@ const app = buildApi({ store, pipeline, adminToken: config.adminToken, runIngest
 await app.listen({ port: config.port, host: '0.0.0.0' });
 
 // A ready-made user standing at Ostkreuz, so the feed has something in it straight away.
-const { user, token } = store.createUser(null);
-store.updateLocation(user.id, 52.503, 13.469);
+const { user, token } = await store.createUser(null);
+await store.updateLocation(user.id, 52.503, 13.469);
 const report = await runIngest();
 
 console.log(`\nHey-Okay demo on http://localhost:${config.port}  ·  AI ${llm.enabled ? 'on' : 'off (rules + templates)'}`);

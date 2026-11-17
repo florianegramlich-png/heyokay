@@ -6,6 +6,11 @@
 
 ## 2026-11-17
 
+- **Async Store interface** [6.4]: first of three parts of "Postgres + PostGIS + pgvector", which was too big for one go. `ROADMAP.md` now has "Postgres store" and "PostGIS matching" as the next two items, and the pgvector part moved into "Embedding-based dedup", where it's actually used.
+  - `server/src/store.ts` defines `Store` as an interface with async methods (Postgres drivers are async; `node:sqlite` isn't). `server/src/db.ts` is now `SqliteStore implements Store`, otherwise unchanged. The pipeline, the API, `index.ts` and the demo await the store. New `hasSourceItem()` replaces the raw SQL that `index.ts` ran against the SQLite handle, and `close()` was added. KPI maths moved to a shared `computeMetrics()` so both backends report identical numbers. `fetchNinaChannel`'s `isNew` callback may now be async.
+  - Tests: new `server/test/store.test.ts` (7 store contract tests: users and hashed tokens, latest-location-only, prefs, place ownership, source-item idempotence, event filters, alerts/feedback/metrics/GDPR delete). `test/backends.ts` lists the backends the contract and end-to-end suites run against (SQLite today; Postgres joins in the next item). Server 39/39, both typechecks clean, `npm run demo` still runs.
+  - Fix on the way: the intermittent test failure noted on 2026-11-16 was the 5xx-logging test checking that the log line doesn't contain the route id `42`. The line includes a timestamp, so it failed whenever the clock read :42. The id is now `id-8f3c9a`.
+  - For Flori: nothing to do. No behaviour change for the app.
 - **Fix: iOS build failed without Firebase** (found by Flori's first EAS development build). `pod install` stopped because React Native Firebase was still autolinked and requires dynamic frameworks, which `app.config.ts` only turns on when the Firebase files exist. New `app/react-native.config.js` unlinks `@react-native-firebase/app` and `crashlytics` on iOS and Android until both files are in `app/firebase/`, so the rule is the same everywhere.
   - Verified: `expo-modules-autolinking react-native-config` lists no Firebase modules without the files and both with them; `tsc --noEmit` clean; iOS JS bundle builds. Not verifiable here: `pod install` itself (needs macOS), so the next EAS build is the real check.
 

@@ -12,7 +12,7 @@ heyokay/
 
 ```bash
 cd server && npm install
-npm test            # 28 tests: sources, verifier, ranking, end-to-end pipeline
+npm test            # sources, verifier, ranking, store contract, end-to-end pipeline
 npm run demo        # API on :8787 with an in-memory DB fed from Berlin fixtures
 ```
 

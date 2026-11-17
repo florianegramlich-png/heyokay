@@ -1,5 +1,5 @@
 import { loadConfig } from './config.js';
-import { Store } from './db.js';
+import { SqliteStore } from './db.js';
 import { AnthropicLLM } from './llm.js';
 import { NominatimGeocoder, GazetteerGeocoder } from './geocode.js';
 import { ExpoPushSender } from './push.js';
@@ -12,13 +12,12 @@ import { installProcessHandlers, logError } from './errors.js';
 installProcessHandlers();
 
 const config = loadConfig();
-const store = new Store(config.dbPath);
+const store = new SqliteStore(config.dbPath);
 const llm = new AnthropicLLM(config.anthropicApiKey, config.model);
 const geocoder = config.geocoderUrl ? new NominatimGeocoder(config.geocoderUrl, config.geocoderUserAgent) : new GazetteerGeocoder();
 const pipeline = new Pipeline({ store, llm, geocoder, push: new ExpoPushSender(config.expoPushUrl), config });
 
-const seen = (source: string) => (externalId: string) =>
-  !store.db.prepare('SELECT 1 FROM source_items WHERE source = ? AND external_id = ?').get(source, externalId);
+const seen = (source: string) => async (externalId: string) => !(await store.hasSourceItem(source, externalId));
 
 let running = false;
 async function runIngest() {

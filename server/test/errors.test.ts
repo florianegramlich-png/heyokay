@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { describe, it, expect } from 'vitest';
-import { Store } from '../src/db.js';
+import { SqliteStore } from '../src/db.js';
 import { NoLLM } from '../src/llm.js';
 import { GazetteerGeocoder } from '../src/geocode.js';
 import { MemoryPushSender } from '../src/push.js';
@@ -11,7 +11,7 @@ import { errorEntry, installProcessHandlers, type ErrorLogEntry } from '../src/e
 
 function api() {
   const logged: ErrorLogEntry[] = [];
-  const store = new Store();
+  const store = new SqliteStore();
   const pipeline = new Pipeline({ store, llm: new NoLLM(), geocoder: new GazetteerGeocoder(), push: new MemoryPushSender(), config: loadConfig({}) });
   const app = buildApi({ store, pipeline, adminToken: 'secret-admin', runIngest: async () => ({}), errorSink: (e) => logged.push(e) });
   return { app, logged };
@@ -21,7 +21,7 @@ describe('server error reporting', () => {
   it('logs an unexpected route error as one structured entry without query or token, and returns 500', async () => {
     const { app, logged } = api();
     app.get('/boom/:id', async () => { throw new Error('kaputt'); });
-    const res = await app.inject({ method: 'GET', url: '/boom/42?token=secret-admin', headers: { authorization: 'Bearer device-token' } });
+    const res = await app.inject({ method: 'GET', url: '/boom/id-8f3c9a?token=secret-admin', headers: { authorization: 'Bearer device-token' } });
     expect(res.statusCode).toBe(500);
     expect(res.json()).toEqual({ error: 'internal' });
     expect(logged).toHaveLength(1);
@@ -29,7 +29,7 @@ describe('server error reporting', () => {
     const line = JSON.stringify(logged[0]);
     expect(line).not.toContain('secret-admin');
     expect(line).not.toContain('device-token');
-    expect(line).not.toContain('42');
+    expect(line).not.toContain('id-8f3c9a');
   });
 
   it('keeps client errors (malformed JSON) as 400 and does not log them as errors', async () => {
