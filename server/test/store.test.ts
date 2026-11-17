@@ -110,6 +110,11 @@ describe.each(storeBackends())('store contract ($name)', (backend) => {
     expect(await store.setFeedback(user.id, a!.id, 'not_relevant')).toBe(true);
     expect(await store.setFeedback('someone-else', a!.id, 'relevant')).toBe(false);
     expect((await store.getAlert(user.id, a!.id))?.feedback).toBe('not_relevant');
+    // Ids straight from URLs: unknown or malformed ids are "not found", never an error.
+    expect(await store.getAlert(user.id, 'nope')).toBeNull();
+    expect(await store.setFeedback(user.id, 'nope', 'relevant')).toBe(false);
+    expect(await store.getUser('nope')).toBeNull();
+    await store.deletePlace(user.id, 'nope');
     expect(await store.feedbackByCategory(user.id)).toEqual({ transit: { relevant: 0, notRelevant: 1 } });
 
     const m = await store.metrics('2000-01-01T00:00:00Z');

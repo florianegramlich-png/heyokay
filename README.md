@@ -4,7 +4,7 @@ Calm, location-aware safety alerts for Germany. One sentence on what's happening
 
 ```
 heyokay/
-├── server/   Node 22 · Fastify · SQLite (node:sqlite) · Claude API — ingest → AI pipeline → push
+├── server/   Node 22 · Fastify · Postgres or SQLite (node:sqlite) · Claude API — ingest → AI pipeline → push
 └── app/      Expo SDK 58 · expo-router · background location · Expo push
 ```
 
@@ -37,7 +37,8 @@ npm start
 | Variable | Default | |
 |---|---|---|
 | `PORT` | 8787 | |
-| `DB_PATH` | ./heyokay.db | SQLite file |
+| `DATABASE_URL` | – | Postgres connection string. When set, Postgres is used and `DB_PATH` is ignored; tables are created/migrated on start |
+| `DB_PATH` | ./heyokay.db | SQLite file (tests, demo, single-node setups) |
 | `ADMIN_TOKEN` | change-me | Alert Desk + admin API — **set this** |
 | `ANTHROPIC_API_KEY` | – | Without it: keyword rules + fixed templates (still works, less coverage) |
 | `HEYOKAY_MODEL` | claude-haiku-5-5 | |
@@ -47,6 +48,17 @@ npm start
 | `GEOCODER_URL` | Nominatim | Use your own instance for volume; the built-in gazetteer is the fallback |
 | `MATCH_BUFFER_M` | 1500 | Extra distance around an event's area |
 | `REVIEW_CONFIDENCE` / `REVIEW_SEVERITY` | 0.6 / 4 | Below/at these, non-official items go to the Alert Desk |
+
+### Postgres
+
+```bash
+cd server
+docker compose up -d   # Postgres 16 + PostGIS + pgvector on localhost:5432
+DATABASE_URL=postgres://heyokay:heyokay@localhost:5432/heyokay npm run dev
+TEST_DATABASE_URL=postgres://heyokay:heyokay@localhost:5432/heyokay_test npm test   # runs the store and pipeline suites on SQLite and Postgres
+```
+
+Schema changes are numbered migrations in `server/src/pg.ts` (`MIGRATIONS`), applied on start under an advisory lock, so several instances can start at once.
 
 ## How an alert is made (PRD 6.2)
 
@@ -86,6 +98,6 @@ npm start
 - Push receipts (handle `DeviceNotRegistered`), retries, and Sentry.
 - More sources: BVG/VBB disruption API, Feuerwehr, and city press releases beyond Berlin.
 - An English UI (prefs already carry `language`).
-- Postgres + PostGIS once the user count passes about 50k (the schema maps 1:1), and a hosted deployment (Fly/Render) with a managed Nominatim.
+- PostGIS matching (Postgres storage is in), and a hosted deployment (Fly/Render) with a managed Nominatim.
 - Alert Desk login (currently one shared token), plus an audit log.
 - App Store assets, privacy policy URL and the DPIA.

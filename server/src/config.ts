@@ -9,6 +9,8 @@ export interface RssFeedConfig {
 
 export interface Config {
   port: number;
+  /** Postgres connection string. When set, it is used instead of the SQLite file. */
+  databaseUrl: string | null;
   dbPath: string;
   adminToken: string;
   anthropicApiKey: string | null;
@@ -33,6 +35,7 @@ export interface Config {
 export function loadConfig(env = process.env): Config {
   return {
     port: Number(env.PORT ?? 8787),
+    databaseUrl: env.DATABASE_URL || null,
     dbPath: env.DB_PATH ?? './heyokay.db',
     adminToken: env.ADMIN_TOKEN ?? 'change-me',
     anthropicApiKey: env.ANTHROPIC_API_KEY ?? null,

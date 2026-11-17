@@ -17,7 +17,7 @@ const fx = (f: string) => readFileSync(join(import.meta.dirname, '..', 'test', '
 // Fixtures describe a Saturday morning in Berlin; pin the pipeline clock there so nothing is "stale".
 const FIXTURE_NOW = new Date('2026-11-14T09:50:00+01:00');
 
-const config = { ...loadConfig(), dbPath: ':memory:', pollIntervalSec: 0 };
+const config = { ...loadConfig(), databaseUrl: null, dbPath: ':memory:', pollIntervalSec: 0 };
 const store = new SqliteStore(':memory:');
 const llm = new AnthropicLLM(config.anthropicApiKey, config.model);
 const push = new MemoryPushSender();
