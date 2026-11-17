@@ -5,6 +5,7 @@ import type { Store } from './store.js';
 import type { Pipeline } from './pipeline/run.js';
 import { CATEGORIES, DEFAULT_PREFS, type User } from './types.js';
 import { DESK_HTML } from './desk.js';
+import { MAX_PLACE_RADIUS_M } from './geo.js';
 import { logError, stderrSink, type ErrorSink } from './errors.js';
 
 const PrefsSchema = z.object({
@@ -95,7 +96,7 @@ export function buildApi({ store, pipeline, adminToken, runIngest, errorSink = s
 
   app.post('/v1/me/places', async (req, reply) => {
     const u = await authed(req, reply); if (!u) return;
-    const b = z.object({ label: z.string().min(1).max(40), ...Coord, radiusM: z.number().min(100).max(5000).default(500) }).parse(req.body);
+    const b = z.object({ label: z.string().min(1).max(40), ...Coord, radiusM: z.number().min(100).max(MAX_PLACE_RADIUS_M).default(500) }).parse(req.body);
     if ((await store.places(u.id)).length >= 10) return reply.code(400).send({ error: 'too_many_places' });
     const place = await store.addPlace(u.id, b.label, b.lat, b.lon, b.radiusM);
     await pipeline.refreshUser(u, true);

@@ -58,7 +58,7 @@ DATABASE_URL=postgres://heyokay:heyokay@localhost:5432/heyokay npm run dev
 TEST_DATABASE_URL=postgres://heyokay:heyokay@localhost:5432/heyokay_test npm test   # runs the store and pipeline suites on SQLite and Postgres
 ```
 
-Schema changes are numbered migrations in `server/src/pg.ts` (`MIGRATIONS`), applied on start under an advisory lock, so several instances can start at once.
+Schema changes are numbered migrations in `server/src/pg.ts` (`MIGRATIONS`), applied on start under an advisory lock, so several instances can start at once. Postgres needs the **PostGIS** extension: the server runs `CREATE EXTENSION IF NOT EXISTS postgis`, so on a managed database either enable it once as an admin or let the app's role create it. Finding the users affected by an event is a GIST index lookup on current locations and saved places.
 
 ## How an alert is made (PRD 6.2)
 
@@ -67,7 +67,7 @@ Schema changes are numbered migrations in `server/src/pg.ts` (`MIGRATIONS`), app
 3. **Cluster**: the same incident from several sources becomes one event. A NINA update escalates the same event rather than creating a new one.
 4. **Review gate**: unofficial items with low confidence or high severity wait at the Alert Desk.
 5. **Compose and verify**: Claude writes a ≤50-character title and a ≤100-character body. A verifier rejects any number not found in the sources, alarm words ("Terror", "Panik"…) and stigmatising area labels. After two failures the alert falls back to a template. The recommended action always comes from a fixed library, never from the model.
-6. **Match and rank**: the event is checked against the user's last location and saved places. Then:
+6. **Match and rank**: the store finds users whose last location (from the past 24 hours) or saved places are near the event (a PostGIS index lookup on Postgres), and the event is checked against each of them. Then:
    - Official extreme warnings always push.
    - Categories the user turned off are suppressed.
    - Severity 1 goes to the feed only.
@@ -98,6 +98,6 @@ Schema changes are numbered migrations in `server/src/pg.ts` (`MIGRATIONS`), app
 - Push receipts (handle `DeviceNotRegistered`), retries, and Sentry.
 - More sources: BVG/VBB disruption API, Feuerwehr, and city press releases beyond Berlin.
 - An English UI (prefs already carry `language`).
-- PostGIS matching (Postgres storage is in), and a hosted deployment (Fly/Render) with a managed Nominatim.
+- A hosted deployment (Fly/Render) with managed Postgres + PostGIS and a managed Nominatim.
 - Alert Desk login (currently one shared token), plus an audit log.
 - App Store assets, privacy policy URL and the DPIA.

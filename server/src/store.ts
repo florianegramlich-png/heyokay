@@ -2,6 +2,9 @@ import type {
   Alert, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
 } from './types.js';
 
+export interface Area { lat: number; lon: number; radiusM: number }
+export interface UserWithPlaces { user: User; places: SavedPlace[] }
+
 export interface Metrics {
   alerts: number;
   pushed: number;
@@ -34,6 +37,13 @@ export interface Store {
   addPlace(userId: string, label: string, lat: number, lon: number, radiusM: number): Promise<SavedPlace>;
   places(userId: string): Promise<SavedPlace[]>;
   deletePlace(userId: string, placeId: string): Promise<void>;
+  /**
+   * Users who may be inside an area: their current location (if updated within
+   * LOCATION_MAX_AGE_MS of `now`) is within radius + bufferM, or one of their saved places
+   * overlaps it (radius + place radius). Each comes with all of their saved places.
+   * A superset is allowed (the pipeline's `match` makes the final call); missing a user is not.
+   */
+  usersNear(area: Area, bufferM: number, now: Date): Promise<UserWithPlaces[]>;
 
   // source items
   /** Returns true if the item is new (not seen before). */

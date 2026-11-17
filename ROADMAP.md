@@ -10,7 +10,6 @@ Items that need accounts or keys (Firebase, RevenueCat or App Store products, Ap
 
 ### Phase 1: launch blockers
 
-- [ ] **PostGIS matching** [6.4]: the store returns only the users whose current location or saved places can be inside an event's area (`ST_DWithin` on geography columns with GIST indexes in Postgres; the same rule in SQLite), so delivery no longer loops over every user. Tests that both backends pick the same users. *(Split from "Postgres + PostGIS + pgvector", 2026-11-17.)*
 - [ ] **Embedding-based dedup** [6.1 #3]: an embeddings interface (provider plus a deterministic fake for tests), stored in pgvector (the pgvector part of the original Postgres item lives here), with clustering on embedding similarity plus geo and time. Keep word overlap as the fallback. Tests showing that differently-worded reports of the same incident merge.
 - [ ] **Sign-in** [5.3, 7.1]: Sign in with Apple, Google sign-in and email (magic link) on top of the anonymous device token. Link the existing device user to the account, and restore it on a new phone. Server: account table, verification of identity tokens, session tokens. Tests.
 - [ ] **Freemium + subscriptions** [5.3, 5.5]: free tier = weather + public safety; paid tier (€2.50/month) = all categories and saved places. App: StoreKit 2 / Play Billing via RevenueCat (`react-native-purchases`), a paywall screen, restore purchases. Server: entitlement from store webhooks, enforced in ranking and the places API. Leave room for the €4.99 family plan test (Decision 17). Tests.
@@ -92,6 +91,7 @@ Legal and partners
 
 ## Done
 
+- [x] 2026-11-17 **PostGIS matching** [6.4] (split from "Postgres + PostGIS + pgvector"): `Store.usersNear()` returns only users near an event; Postgres uses generated geography columns with GIST indexes (migration 2); SQLite applies the same rule in JS; delivery no longer loops over all users. 3 tests per backend, including a boundary test that both backends agree with `match`.
 - [x] 2026-11-17 **Postgres store** [6.4, 10.4] (split from "Postgres + PostGIS + pgvector"): `PgStore` (`pg`) selected by `DATABASE_URL`, numbered migrations under an advisory lock, `server/docker-compose.yml` with PostGIS + pgvector, store contract and end-to-end suites run on Postgres when `TEST_DATABASE_URL` is set; CI has a Postgres service. 2 Postgres-only tests + 1 factory test.
 - [x] 2026-11-17 **Async Store interface** [6.4] (split from "Postgres + PostGIS + pgvector"): `Store` is now an async interface in `server/src/store.ts`; SQLite is `SqliteStore`; pipeline, API, server and demo await it; shared store contract tests (7) run per backend via `test/backends.ts`.
 - [x] 2026-11-16 **Crash reporting** [5.3, 13]: Crashlytics (`@react-native-firebase/app` + `crashlytics`) wired via `app.config.ts`, enabled only when both Firebase config files are in `app/firebase/`; opt-in toggle in Settings; root `ErrorBoundary` with a calm retry screen that reports; server logs 5xx, ingest failures, unhandled rejections and uncaught exceptions as structured JSON. 4 server tests.

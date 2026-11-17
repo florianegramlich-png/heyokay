@@ -95,8 +95,12 @@ export class Pipeline {
 
     const outbox: Array<{ token: string; alert: Alert }> = [];
     let alerts = 0;
-    for (const user of onlyUsers ?? (await this.d.store.allUsers())) {
-      const m = match(user, await this.d.store.places(user.id), event, this.d.config.matchBufferM, this.now());
+    // Only users the store finds near the event (PostGIS index in production); `match` decides.
+    const candidates = onlyUsers
+      ? await Promise.all(onlyUsers.map(async (user) => ({ user, places: await this.d.store.places(user.id) })))
+      : await this.d.store.usersNear(event, this.d.config.matchBufferM, this.now());
+    for (const { user, places } of candidates) {
+      const m = match(user, places, event, this.d.config.matchBufferM, this.now());
       if (!m) continue;
       const since = new Date(this.now().getTime() - 24 * 3600_000).toISOString();
       let { delivery, reason } = decide(user, event, {

@@ -4,7 +4,8 @@ import type {
   Alert, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
 } from './types.js';
 import { DEFAULT_PREFS } from './types.js';
-import { computeMetrics, type Metrics, type Store } from './store.js';
+import { computeMetrics, type Area, type Metrics, type Store, type UserWithPlaces } from './store.js';
+import { distanceM, LOCATION_MAX_AGE_MS } from './geo.js';
 
 export type { Store } from './store.js';
 
@@ -111,6 +112,25 @@ export class SqliteStore implements Store {
 
   async deletePlace(userId: string, placeId: string): Promise<void> {
     this.db.prepare(`DELETE FROM saved_places WHERE id = ? AND user_id = ?`).run(placeId, userId);
+  }
+
+  /** Same rule as PgStore.usersNear, evaluated in JS (SQLite has no spatial index here). */
+  async usersNear(area: Area, bufferM: number, now: Date): Promise<UserWithPlaces[]> {
+    const placesByUser = new Map<string, SavedPlace[]>();
+    for (const r of this.db.prepare(`SELECT * FROM saved_places ORDER BY label, id`).all() as any[]) {
+      const p: SavedPlace = { id: r.id, userId: r.user_id, label: r.label, lat: r.lat, lon: r.lon, radiusM: r.radius_m };
+      placesByUser.set(p.userId, [...(placesByUser.get(p.userId) ?? []), p]);
+    }
+    const out: UserWithPlaces[] = [];
+    for (const user of this.db.prepare(`SELECT * FROM users`).all().map(rowToUser)) {
+      const places = placesByUser.get(user.id) ?? [];
+      const here = user.lat != null && user.lon != null && user.locationUpdatedAt != null &&
+        now.getTime() - Date.parse(user.locationUpdatedAt) < LOCATION_MAX_AGE_MS &&
+        distanceM(user.lat, user.lon, area.lat, area.lon) <= area.radiusM + bufferM;
+      const atPlace = places.some((p) => distanceM(p.lat, p.lon, area.lat, area.lon) <= area.radiusM + p.radiusM);
+      if (here || atPlace) out.push({ user, places });
+    }
+    return out;
   }
 
   // ── source items ─────────────────────────────────────────────────────────

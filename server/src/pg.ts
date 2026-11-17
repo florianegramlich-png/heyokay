@@ -5,7 +5,8 @@ import type {
 } from './types.js';
 import { DEFAULT_PREFS } from './types.js';
 import { hashToken } from './db.js';
-import { computeMetrics, type Metrics, type Store } from './store.js';
+import { LOCATION_MAX_AGE_MS, MAX_PLACE_RADIUS_M } from './geo.js';
+import { computeMetrics, type Area, type Metrics, type Store, type UserWithPlaces } from './store.js';
 
 /**
  * Schema migrations, applied in order and recorded in `schema_migrations`. Append new entries;
@@ -47,7 +48,34 @@ export const MIGRATIONS: { version: number; sql: string }[] = [
       CREATE INDEX alerts_created ON alerts(created_at);
     `,
   },
+  {
+    // PostGIS matching: generated geography points with GIST indexes, so finding affected users
+    // is an index lookup instead of a loop over everyone.
+    version: 2,
+    sql: `
+      CREATE EXTENSION IF NOT EXISTS postgis SCHEMA public;
+      ALTER TABLE users ADD COLUMN geog public.geography(Point, 4326) GENERATED ALWAYS AS (
+        CASE WHEN lat IS NULL OR lon IS NULL THEN NULL
+             ELSE public.ST_SetSRID(public.ST_MakePoint(lon, lat), 4326)::public.geography END
+      ) STORED;
+      CREATE INDEX users_geog ON users USING GIST (geog);
+      CREATE INDEX users_location_updated ON users(location_updated_at);
+      ALTER TABLE saved_places ADD COLUMN geog public.geography(Point, 4326) GENERATED ALWAYS AS (
+        public.ST_SetSRID(public.ST_MakePoint(lon, lat), 4326)::public.geography
+      ) STORED;
+      CREATE INDEX saved_places_geog ON saved_places USING GIST (geog);
+      ALTER TABLE saved_places ADD CONSTRAINT saved_places_radius CHECK (radius_m > 0 AND radius_m <= ${MAX_PLACE_RADIUS_M});
+    `,
+  },
 ];
+
+/**
+ * PostGIS measures on the WGS84 spheroid; the pipeline's `match` uses a sphere. The two differ by
+ * well under 1 %, so the index search is widened by 1 % + 10 m to return a superset, and `match`
+ * makes the final call. Both backends therefore pick exactly the same users.
+ */
+const SPHEROID_SLACK = 1.01;
+const SLACK_M = 10;
 
 export interface PgStoreOptions {
   /** Use a separate schema (created if missing), e.g. one per test. Default: the connection's search_path. */
@@ -179,6 +207,32 @@ export class PgStore implements Store {
   async deletePlace(userId: string, placeId: string): Promise<void> {
     if (!isUuid(userId) || !isUuid(placeId)) return;
     await this.q(`DELETE FROM saved_places WHERE id = $1 AND user_id = $2`, [placeId, userId]);
+  }
+
+  async usersNear(area: Area, bufferM: number, now: Date): Promise<UserWithPlaces[]> {
+    const freshSince = new Date(now.getTime() - LOCATION_MAX_AGE_MS).toISOString();
+    const { rows } = await this.q(`
+      WITH ev AS (SELECT public.ST_SetSRID(public.ST_MakePoint($2::float8, $1::float8), 4326)::public.geography AS g),
+      hits AS (
+        -- Two index lookups (current locations, saved places) instead of one OR that would scan every user.
+        SELECT u.id FROM users u, ev
+        WHERE u.location_updated_at > $3::timestamptz
+          AND public.ST_DWithin(u.geog, ev.g, ($4::float8 + $5::float8) * ${SPHEROID_SLACK} + ${SLACK_M})
+        UNION
+        SELECT p.user_id FROM saved_places p, ev
+        WHERE public.ST_DWithin(p.geog, ev.g, ($4::float8 + ${MAX_PLACE_RADIUS_M}) * ${SPHEROID_SLACK} + ${SLACK_M})
+          AND public.ST_Distance(p.geog, ev.g) <= ($4::float8 + p.radius_m) * ${SPHEROID_SLACK} + ${SLACK_M}
+      )
+      SELECT u.* FROM users u WHERE u.id IN (SELECT id FROM hits)
+    `, [area.lat, area.lon, freshSince, area.radiusM, bufferM]);
+    if (!rows.length) return [];
+    const users = rows.map(rowToUser);
+    const placeRows = (await this.q(`SELECT * FROM saved_places WHERE user_id = ANY($1::uuid[]) ORDER BY label, id`, [users.map((u) => u.id)])).rows;
+    const byUser = new Map<string, SavedPlace[]>();
+    for (const r of placeRows) {
+      byUser.set(r.user_id, [...(byUser.get(r.user_id) ?? []), { id: r.id, userId: r.user_id, label: r.label, lat: r.lat, lon: r.lon, radiusM: r.radius_m }]);
+    }
+    return users.map((user) => ({ user, places: byUser.get(user.id) ?? [] }));
   }
 
   // ── source items ─────────────────────────────────────────────────────────
