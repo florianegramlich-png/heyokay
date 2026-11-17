@@ -6,6 +6,7 @@
 
 ## 2026-11-17
 
+- **App talks to the hosted server by default.** `extra.apiUrl` is now `https://heyokay.fly.dev` (was `localhost:8787`), so builds work without a tunnel; `EXPO_PUBLIC_API_URL` still overrides it for a local server. Also committed Flori's EAS setup from her Mac (`app/eas.json` with development/preview/production profiles, EAS project id and owner in `app.json`, `expo-dev-client`) and removed duplicated `UIBackgroundModes` entries. Verified: `npm ci`, `tsc --noEmit`, `expo config` resolves the hosted URL, `expo install --check` clean.
 - **Fix: Fly's GitHub launcher couldn't find the server.** It only looks at the repo root, so `Dockerfile` and `fly.toml` moved from `server/` to the root (the Dockerfile builds only `server/`; a root `.dockerignore` keeps the app out of the image). README → Deploy now describes Fly's "Deploy from GitHub" as the easiest route. Verified: the image builds from the root, `/health` answers, admin routes need the token.
 - **Hosted backend, step 1: server deploy config** [10.4] (part of the "Deploy config" roadmap item; Flori asked for it to stop using tunnels).
   - `server/Dockerfile` (multi-stage, Node 22, compiled with `tsc` to `dist/`, no dev dependencies in the image), `.dockerignore`, `server/fly.toml` (Frankfurt, one always-on machine because of the 2-minute polling, SQLite on volume `heyokay_data` at `/data`, `/health` check), and a README "Deploy" section.
