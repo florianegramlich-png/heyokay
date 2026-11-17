@@ -76,14 +76,17 @@ describe('NWS source', () => {
       return z;
     };
     const cache = new Map();
-    const items = await fetchNwsArea('ca', () => true, get, cache);
+    const { feedKey, items, listedIds } = await fetchNwsArea('ca', () => true, get, cache);
+    expect(feedKey).toBe('nws:CA');
+    expect(items.every((i) => i.feedKey === 'nws:CA')).toBe(true);
+    expect([...listedIds]).toEqual([WIND.properties.id, FLOOD.properties.id]); // the test message is not listed
     expect(calls[0]).toBe('https://api.weather.gov/alerts/active?area=CA&status=actual');
     expect(items.map((i) => i.title)).toEqual(['Wind Advisory until November 18 at 1:00PM PST', expect.stringContaining('Flood Warning')]);
     const zoneCalls = calls.filter((c) => c.includes('/zones/')).length;
     expect(zoneCalls).toBe(WIND.properties.affectedZones!.length);
 
     calls.length = 0;
-    expect(await fetchNwsArea('36.684,-121.801', (id) => id !== WIND.properties.id, get, cache)).toHaveLength(1);
+    expect((await fetchNwsArea('36.684,-121.801', (id) => id !== WIND.properties.id, get, cache)).items).toHaveLength(1);
     expect(calls[0]).toContain('point=36.684,-121.801');
     expect(calls.filter((c) => c.includes('/zones/'))).toHaveLength(0); // cached
   });

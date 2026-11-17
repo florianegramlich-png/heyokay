@@ -18,7 +18,6 @@ Items that need accounts or keys (Firebase, RevenueCat or App Store products, Ap
 - [ ] **Notification actions** [5.3]: rich notifications with "Relevant" / "Nicht relevant" buttons (notification categories) that post feedback without opening the app; group related alerts via thread id.
 - [ ] **Digest bucket** [6.1 #7, 6.2 step 7]: ranking returns send / digest / suppress. Digest items are bundled into one push at a user-chosen time (default 18:00) or shown in the feed. Severity-5 official warnings always break through. Tests.
 - [ ] **Push receipts + retry** [5.4, 6.2 step 9]: fetch Expo push receipts, clear tokens on `DeviceNotRegistered`, retry transient errors with backoff, and record delivery status per alert. Tests with a fake Expo endpoint.
-- [ ] **Event updates and all-clear** [5.4]: when an event escalates, changes or is lifted, send an update or an "Entwarnung" to users who got the original. These don't count toward the daily limit. Tests.
 - [ ] **Source: Presseportal Blaulicht** [6.1 #1]: adapter for Presseportal police and fire press releases (RSS per agency) with an agency to region mapping for Berlin, Munich, Hamburg and Cologne. Fixtures and tests.
 - [ ] **Source: DWD direct + heat** [5.4]: DWD warnings via the DWD open data CAP feed as a NINA fallback (dedup on CAP id), plus heat thresholds from OpenWeatherMap at users' saved places (for example "38 °C at your mother's address"). Fixtures and tests.
 - [ ] **Source: BVG/VBB disruptions** [5.4]: VBB/HAFAS disruption messages mapped to `transit` events, with stations geocoded. Fixtures and tests.
@@ -92,6 +91,7 @@ Legal and partners
 
 ## Done
 
+- [x] 2026-11-17 **Event updates and all-clear** [5.4]: escalation → new alert; downgrade or end time moved ≥ 1 h → feed update; early end (cancel, vanished from feed, Alert Desk) → all-clear, pushed only to earlier push recipients outside quiet hours; none count toward the daily limit. Ended events greyed out in the app.
 - [x] 2026-11-17 **US test mode** (Flori's request): NWS source with exact zone outlines for matching, English alert copy and guidance for English sources, English app UI with a language switch, location-off note in the feed. Part of the Phase 2 **English** item (the app i18n is done; German sources are still composed in German).
 - [x] 2026-11-16 **Crash reporting** [5.3, 13]: Crashlytics (`@react-native-firebase/app` + `crashlytics`) wired via `app.config.ts`, enabled only when both Firebase config files are in `app/firebase/`; opt-in toggle in Settings; root `ErrorBoundary` with a calm retry screen that reports; server logs 5xx, ingest failures, unhandled rejections and uncaught exceptions as structured JSON. 4 server tests.
 - [x] 2026-11-16 **CI** [9.3]: `.github/workflows/ci.yml` runs server `npm ci` + tests + typecheck and app `npm ci` + `tsc --noEmit` on every push and PR (Node 22, npm cache).

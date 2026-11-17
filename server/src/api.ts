@@ -119,7 +119,17 @@ export function buildApi({ store, pipeline, adminToken, runIngest, errorSink = s
   app.get('/v1/me/alerts', async (req, reply) => {
     const u = authed(req, reply); if (!u) return;
     const limit = Math.min(Number((req.query as any)?.limit ?? 50), 200);
-    return { alerts: store.alertsForUser(u.id, limit) };
+    // `ended`: the event is over (ran out or was lifted) — the app greys these out.
+    const now = Date.now();
+    const endedById = new Map<string, boolean>();
+    const alerts = store.alertsForUser(u.id, limit).map((a) => {
+      if (!endedById.has(a.eventId)) {
+        const e = store.getEvent(a.eventId);
+        endedById.set(a.eventId, !e || e.status === 'rejected' || (!!e.endsAt && Date.parse(e.endsAt) <= now));
+      }
+      return { ...a, kind: a.kind ?? 'new', ended: endedById.get(a.eventId)! };
+    });
+    return { alerts };
   });
 
   app.get('/v1/alerts/:id', async (req, reply) => {
@@ -175,6 +185,14 @@ export function buildApi({ store, pipeline, adminToken, runIngest, errorSink = s
       language: z.enum(['de', 'en']).optional(),
     }).parse(req.body);
     return pipeline.manualAlert(b as any);
+  });
+
+  /** End an active event now and send the all-clear to everyone who got it. */
+  app.post('/admin/api/events/:id/end', async (req, reply) => {
+    if (!admin(req, reply)) return;
+    const out = await pipeline.endEvent((req.params as any).id);
+    if (!out) return reply.code(404).send({ error: 'not_found' });
+    return out;
   });
 
   app.post('/admin/api/ingest', async (req, reply) => {

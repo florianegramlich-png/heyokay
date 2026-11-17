@@ -76,3 +76,19 @@ export const CATEGORY_LABEL_EN: Record<Category, string> = {
   weather: 'Weather', crime: 'Police', transit: 'Transit', public_safety: 'Safety',
   health: 'Health', infrastructure: 'Infrastructure',
 };
+
+/** Wording for update and all-clear alerts (PRD 5.4). Calm, no alarm words. */
+export const LIFECYCLE: Record<'de' | 'en', { updatePrefix: string; allClearPrefix: string; allClearBody: string; allClearAction: string }> = {
+  de: {
+    updatePrefix: 'Aktualisiert',
+    allClearPrefix: 'Entwarnung',
+    allClearBody: 'Die Warnung ist aufgehoben.',
+    allClearAction: 'Keine Maßnahmen mehr nötig.',
+  },
+  en: {
+    updatePrefix: 'Update',
+    allClearPrefix: 'All clear',
+    allClearBody: 'The warning has been lifted.',
+    allClearAction: 'No further action needed.',
+  },
+};

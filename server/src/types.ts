@@ -20,6 +20,8 @@ export interface SourceItem {
   references?: string[];
   /** Language of the source text, and so of the alert copy. Default 'de'. */
   language?: Language;
+  /** The polled feed this item came from (e.g. 'nws:CA'); see RiskEvent.feedKeys. */
+  feedKey?: string;
   /** Official warning systems (NINA/MoWaS, DWD via NINA). Official levels override the model. */
   official: boolean;
   title: string;
@@ -92,6 +94,9 @@ export interface RiskEvent {
   updatedAt: string;
   /** Language the alert copy is written in. Missing = 'de' (events created before this field existed). */
   language?: Language;
+  /** Source feeds that list this event while it is active, e.g. 'nws:CA'. When an event drops out of
+   *  its feed before its end time, it was lifted early (NWS removes cancelled alerts instead of announcing it). */
+  feedKeys?: string[];
   /** Bumped when severity rises or a new source changes the event, so users get an update. */
   revision: number;
 }
@@ -103,6 +108,9 @@ export interface AlertCopy {
 }
 
 export type Delivery = 'push' | 'feed' | 'suppressed';
+
+/** new = first alert for an event; update = it changed (downgrade, new end time); all_clear = it ended early. */
+export type AlertKind = 'new' | 'update' | 'all_clear';
 export type Feedback = 'relevant' | 'not_relevant';
 
 export interface QuietHours {
@@ -166,6 +174,8 @@ export interface Alert {
   matchedPlace: string | null;
   delivery: Delivery;
   reason: string;
+  /** Missing on alerts created before updates existed = 'new'. */
+  kind?: AlertKind;
   feedback: Feedback | null;
   createdAt: string;
 }

@@ -6,6 +6,17 @@
 
 ## 2026-11-17
 
+- **Event updates and all-clears** [5.4] (roadmap item). People who got an alert are told when it changes or ends:
+  - Gets more severe: a fresh alert, pushed as before.
+  - Gets less severe, or its official end time moves by an hour or more: an "Update"/"Aktualisiert" alert in the feed only (no push).
+  - Ends early (a cancellation, an NWS alert that vanishes from the feed with 15+ minutes left, or "End now" at the Alert Desk): an all-clear ("All clear: …" / "Entwarnung: …", "The warning has been lifted." / "Die Warnung ist aufgehoben."). It's a push only for people who got a push for it, never during their quiet hours.
+  - Runs out on schedule: no message; the feed greys it out as "Ended"/"Beendet".
+  - Updates and all-clears never count toward the daily push limit.
+  - Server: alerts carry a `kind` (`new`/`update`/`all_clear`); `/v1/me/alerts` adds `kind` and `ended`; new `POST /admin/api/events/:id/end`; an "Active events" list with "End now (all clear)" on the Alert Desk. CAP updates now find their event through the stored source ids at any age, not just within 24 h, so multi-day NWS warnings no longer split into duplicates. The NWS poller reports which alerts are still listed and the pipeline reconciles after each successful poll. Template copy now follows the newest official message.
+  - App: all-clear (green), update and "Ended" labels on cards and the detail screen, in German and English.
+  - Fix: severe pushes used Android channel `severe`, which the app doesn't define; now `urgent`.
+  - Tests: `server/test/lifecycle.test.ts` (8 tests: cancellation all-clear push, daily limit + quiet hours, downgrade and end-time updates incl. the 1-hour threshold, escalation, updates to multi-day warnings, feed reconciliation, German wording, API flags and admin auth). Server 50/50, typecheck clean; app `tsc` clean, iOS bundle exports; Alert Desk script syntax-checked.
+  - For Flori: the app labels need a new app build (`eas build --profile preview`). The server part goes live with the merge (Fly redeploys `main`).
 - **App talks to the hosted server by default.** `extra.apiUrl` is now `https://heyokay.fly.dev` (was `localhost:8787`), so builds work without a tunnel; `EXPO_PUBLIC_API_URL` still overrides it for a local server. Also committed Flori's EAS setup from her Mac (`app/eas.json` with development/preview/production profiles, EAS project id and owner in `app.json`, `expo-dev-client`) and removed duplicated `UIBackgroundModes` entries. Verified: `npm ci`, `tsc --noEmit`, `expo config` resolves the hosted URL, `expo install --check` clean.
 - **Fix: Fly's GitHub launcher couldn't find the server.** It only looks at the repo root, so `Dockerfile` and `fly.toml` moved from `server/` to the root (the Dockerfile builds only `server/`; a root `.dockerignore` keeps the app out of the image). README → Deploy now describes Fly's "Deploy from GitHub" as the easiest route. Verified: the image builds from the root, `/health` answers, admin routes need the token.
 - **Hosted backend, step 1: server deploy config** [10.4] (part of the "Deploy config" roadmap item; Flori asked for it to stop using tunnels).

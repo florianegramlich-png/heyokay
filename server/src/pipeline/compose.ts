@@ -44,7 +44,8 @@ export async function compose(event: RiskEvent, llm: StructuredLLM): Promise<Ale
 
 /** Deterministic copy from verbatim source text — always grounded. */
 export function template(event: RiskEvent): { title: string; body: string } {
-  const src = event.sources[0];
+  // The latest official message describes the current state (an update may carry a new end time).
+  const src = [...event.sources].reverse().find((s) => s.official) ?? event.sources[0];
   const label = (event.language === 'en' ? CATEGORY_LABEL_EN : CATEGORY_LABEL_DE)[event.category];
   const srcTitle = src?.title || event.title;
   // NWS lists several forecast zones ("San Francisco; Coastal North Bay; …"). Naming only the first

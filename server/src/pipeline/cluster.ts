@@ -50,16 +50,23 @@ export function newEvent(ext: ExtractedEvent, item: SourceItem, status: EventSta
     sources: [{ sourceName: item.sourceName, externalId: item.externalId, url: item.url, title: item.title, official: item.official }],
     copyTitle: null, copyBody: null, copyAction: null, copyIsTemplate: false,
     language: item.language ?? 'de',
+    ...(item.feedKey ? { feedKeys: [item.feedKey] } : {}),
     createdAt: now.toISOString(), updatedAt: now.toISOString(), revision: 1,
   };
 }
 
+/** End-time shifts smaller than this aren't worth telling anyone about. */
+const END_SHIFT_MS = 60 * 60_000;
+
 /**
- * Merge a new report into an existing event. Returns whether users should get an update
- * (severity went up). Official severity always wins over model severity.
+ * Merge a new report into an existing event. Official severity always wins over model severity.
+ * - escalated: severity went up → everyone affected gets a fresh alert (and may get a push).
+ * - changed: it went down or its official end time moved by an hour or more → people who already
+ *   got it get a calm update in their feed.
  */
-export function mergeInto(e: RiskEvent, ext: ExtractedEvent, item: SourceItem, now = new Date()): { escalated: boolean } {
+export function mergeInto(e: RiskEvent, ext: ExtractedEvent, item: SourceItem, now = new Date()): { escalated: boolean; changed: boolean } {
   const before = e.severity;
+  const endBefore = e.endsAt;
   if (item.official) {
     e.severity = ext.severity;
     e.official = true;
@@ -82,13 +89,17 @@ export function mergeInto(e: RiskEvent, ext: ExtractedEvent, item: SourceItem, n
     e.sources.push({ sourceName: item.sourceName, externalId: item.externalId, url: item.url, title: item.title, official: item.official });
     e.facts = `${e.facts}\n---\n${factText(item)}`.slice(-20_000);
   }
+  if (item.feedKey && !(e.feedKeys ?? []).includes(item.feedKey)) e.feedKeys = [...(e.feedKeys ?? []), item.feedKey];
   e.updatedAt = now.toISOString();
   const escalated = e.severity > before;
-  if (escalated) {
+  const endShifted = endBefore !== e.endsAt && (
+    !endBefore || !e.endsAt || Math.abs(Date.parse(e.endsAt) - Date.parse(endBefore)) >= END_SHIFT_MS);
+  const changed = !escalated && (e.severity < before || (item.official && endShifted));
+  if (escalated || changed) {
     e.revision += 1;
-    e.copyTitle = e.copyBody = e.copyAction = null; // re-write the alert for the new severity
+    e.copyTitle = e.copyBody = e.copyAction = null; // re-write the alert for what changed
   }
-  return { escalated };
+  return { escalated, changed };
 }
 
 function factText(item: SourceItem): string {

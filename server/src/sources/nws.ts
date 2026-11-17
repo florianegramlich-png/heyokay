@@ -102,15 +102,19 @@ const zoneCache = new Map<string, Geometry>();
 
 /**
  * Poll active alerts for one area: a state code ("CA"), a marine area, or "lat,lon" for a point.
- * Only builds items for alerts not seen before (`isNew`).
+ * Builds items only for alerts not seen before (`isNew`), and returns the ids of everything still
+ * listed, so the pipeline can tell when an alert was lifted early (NWS drops cancelled alerts).
  */
-export async function fetchNwsArea(area: string, isNew: (externalId: string) => boolean, get: NwsFetcher, cache = zoneCache): Promise<SourceItem[]> {
+export async function fetchNwsArea(area: string, isNew: (externalId: string) => boolean, get: NwsFetcher, cache = zoneCache): Promise<{ feedKey: string; items: SourceItem[]; listedIds: Set<string> }> {
+  const feedKey = `nws:${area.toUpperCase()}`;
   const q = /^-?\d+(\.\d+)?,-?\d+(\.\d+)?$/.test(area) ? `point=${area}` : `area=${encodeURIComponent(area.toUpperCase())}`;
   const data = await get(`${NWS_BASE}/alerts/active?${q}&status=actual`);
   const out: SourceItem[] = [];
+  const listedIds = new Set<string>();
   for (const f of (data?.features ?? []) as NwsFeature[]) {
-    if (!f?.properties?.id || !isNew(f.properties.id)) continue;
-    if ((f.properties.status ?? 'Actual') !== 'Actual') continue;
+    if (!f?.properties?.id || (f.properties.status ?? 'Actual') !== 'Actual') continue;
+    listedIds.add(f.properties.id);
+    if (!isNew(f.properties.id)) continue;
     if (!f.geometry) {
       for (const z of (f.properties.affectedZones ?? []).slice(0, MAX_ZONES)) {
         if (cache.has(z)) continue;
@@ -118,7 +122,7 @@ export async function fetchNwsArea(area: string, isNew: (externalId: string) => 
       }
     }
     const item = toSourceItem(f, cache);
-    if (item) out.push(item);
+    if (item) out.push({ ...item, feedKey });
   }
-  return out;
+  return { feedKey, items: out, listedIds };
 }
