@@ -65,7 +65,15 @@ fly secrets set ADMIN_TOKEN="$(openssl rand -hex 24)" \
 fly deploy --ha=false                     # SQLite = exactly one machine
 ```
 
-Afterwards: `fly deploy --ha=false` for each update, `fly logs` for logs, `fly secrets list` to check secrets. The API is at `https://<app>.fly.dev` and the Alert Desk at `https://<app>.fly.dev/admin`. To see the admin token later, set a new one with `fly secrets set ADMIN_TOKEN=…` (Fly never shows secrets again).
+**Automatic deploys from GitHub** (`.github/workflows/deploy.yml`): every merge to `main` that touches `server/` runs the tests and deploys. One-time setup after the steps above:
+
+1. If `fly launch` changed the app name in `server/fly.toml`, commit that change.
+2. `fly tokens create deploy -x 999999h` and copy the token.
+3. GitHub → the repo → Settings → Secrets and variables → Actions → New repository secret: name `FLY_API_TOKEN`, value the token.
+
+Without that secret the workflow skips the deploy instead of failing. "Run workflow" in the Actions tab deploys by hand.
+
+Afterwards: merges to `main` deploy by themselves (or `fly deploy --ha=false` by hand), `fly logs` for logs, `fly secrets list` to check secrets. The API is at `https://<app>.fly.dev` and the Alert Desk at `https://<app>.fly.dev/admin`. To see the admin token later, set a new one with `fly secrets set ADMIN_TOKEN=…` (Fly never shows secrets again).
 
 Point the app at it: `EXPO_PUBLIC_API_URL=https://<app>.fly.dev npx expo start --dev-client --tunnel`, or set `extra.apiUrl` in `app/app.json` for builds.
 
