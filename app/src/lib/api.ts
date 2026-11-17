@@ -2,9 +2,9 @@ import Constants from 'expo-constants';
 import { session } from './session';
 import type { Alert, AlertDetail, Feedback, SavedPlace, UserPrefs } from './types';
 
-/** EXPO_PUBLIC_API_URL wins (e.g. your LAN IP when testing on a phone), else app.json extra.apiUrl. */
+/** EXPO_PUBLIC_API_URL wins (e.g. a tunnel to a local server), else app.json extra.apiUrl (the hosted server). */
 export const API_URL: string =
-  process.env.EXPO_PUBLIC_API_URL ?? (Constants.expoConfig?.extra as { apiUrl?: string } | undefined)?.apiUrl ?? 'http://localhost:8787';
+  process.env.EXPO_PUBLIC_API_URL ?? (Constants.expoConfig?.extra as { apiUrl?: string } | undefined)?.apiUrl ?? 'https://heyokay.fly.dev';
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }

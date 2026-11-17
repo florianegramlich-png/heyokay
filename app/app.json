@@ -15,7 +15,8 @@
         "UIBackgroundModes": [
           "location",
           "remote-notification"
-        ]
+        ],
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -57,7 +58,17 @@
     ],
     "scheme": "heyokay",
     "extra": {
-      "apiUrl": "http://localhost:8787"
-    }
+      "apiUrl": "https://heyokay.fly.dev",
+      "firebaseEnabled": false,
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "48b6164f-ab15-4bd1-b348-b4bab0e7f8ea"
+      }
+    },
+    "owner": "florigramlich"
   }
 }
