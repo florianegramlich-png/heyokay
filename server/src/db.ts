@@ -165,13 +165,33 @@ export class Store {
     return Number(res.changes) > 0 ? alert : null;
   }
 
+  /** Everyone who was told about this event (feed or push), and whether any of it reached them as a push. */
+  recipients(eventId: string): Array<{ userId: string; pushed: boolean }> {
+    return (this.db.prepare(
+      `SELECT user_id, MAX(delivery = 'push') AS pushed FROM alerts
+       WHERE event_id = ? AND delivery != 'suppressed' GROUP BY user_id`,
+    ).all(eventId) as any[]).map((r) => ({ userId: r.user_id, pushed: !!r.pushed }));
+  }
+
+  /** The event an earlier source message belongs to (any age), for updates that reference it. */
+  eventIdForSourceRefs(source: string, externalIds: string[]): string | null {
+    if (!externalIds.length) return null;
+    const row: any = this.db.prepare(
+      `SELECT event_id FROM source_items WHERE source = ? AND event_id IS NOT NULL
+         AND external_id IN (${externalIds.map(() => '?').join(',')}) ORDER BY first_seen_at DESC LIMIT 1`,
+    ).get(source, ...externalIds);
+    return row?.event_id ?? null;
+  }
+
   hasAlertForEvent(userId: string, eventId: string): boolean {
     return !!this.db.prepare(`SELECT 1 FROM alerts WHERE user_id = ? AND event_id = ? LIMIT 1`).get(userId, eventId);
   }
 
+  /** Pushes that count toward the daily limit: updates and all-clears don't (PRD 5.4). */
   pushCountSince(userId: string, sinceIso: string): number {
     const row: any = this.db.prepare(
-      `SELECT COUNT(*) AS n FROM alerts WHERE user_id = ? AND delivery = 'push' AND created_at >= ?`,
+      `SELECT COUNT(*) AS n FROM alerts WHERE user_id = ? AND delivery = 'push' AND created_at >= ?
+         AND COALESCE(json_extract(data, '$.kind'), 'new') = 'new'`,
     ).get(userId, sinceIso);
     return Number(row.n);
   }

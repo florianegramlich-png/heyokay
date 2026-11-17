@@ -64,6 +64,10 @@ const de = {
   'alert.yes': '👍 Ja',
   'alert.no': '👎 Nein',
   'alert.thanks': 'Danke – wir passen künftige Warnungen an.',
+  'alert.kind.update': 'Aktualisiert',
+  'alert.kind.allClear': 'Entwarnung',
+  'alert.ended': 'Beendet',
+  'alert.endedNote': 'Diese Lage ist vorbei.',
 
   // Settings
   'set.loading': 'Lädt…',
@@ -168,6 +172,10 @@ const en: Record<Key, string> = {
   'alert.yes': '👍 Yes',
   'alert.no': '👎 No',
   'alert.thanks': 'Thanks – we’ll tune future alerts.',
+  'alert.kind.update': 'Update',
+  'alert.kind.allClear': 'All clear',
+  'alert.ended': 'Ended',
+  'alert.endedNote': 'This is over.',
 
   'set.loading': 'Loading…',
   'set.language': 'Language',

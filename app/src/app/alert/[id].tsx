@@ -37,7 +37,9 @@ export default function AlertScreen() {
     <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
       <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
         <Pill text={categoryLabel(alert.category)} color={color} />
-        <Pill text={severityLabel(alert.severity)} color={color} />
+        {alert.kind === 'all_clear' ? <Pill text={t('alert.kind.allClear')} color={colors.brand} />
+          : alert.kind === 'update' ? <Pill text={t('alert.kind.update')} color={color} />
+          : <Pill text={severityLabel(alert.severity)} color={color} />}
         {alert.official ? <Pill text={t('alert.official')} color={colors.text} /> : null}
       </View>
       <Text style={[s.h1, { fontSize: 24 }]}>{alert.title}</Text>
@@ -47,6 +49,10 @@ export default function AlertScreen() {
         {endsAt ? ` · ${t('alert.until', { time: new Date(endsAt).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) })}` : ''}
         {alert.matchedPlace ? ` · ${t('alert.affects', { place: alert.matchedPlace })}` : ''}
       </Text>
+
+      {endsAt && Date.parse(endsAt) <= Date.now() ? (
+        <Text style={[s.muted, { marginTop: 10 }]}>{t('alert.endedNote')}</Text>
+      ) : null}
 
       <Card style={{ marginTop: 16, backgroundColor: colors.brandSoft, borderColor: colors.brandSoft }}>
         <Text style={{ fontWeight: '700', color: colors.brand, marginBottom: 4 }}>{t('alert.whatToDo')}</Text>

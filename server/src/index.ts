@@ -51,7 +51,10 @@ async function runIngest() {
     const nwsGet = nwsFetcher(config.nwsUserAgent);
     for (const area of config.nwsAreas) {
       try {
-        report[`nws:${area}`] = await pipeline.ingest(await fetchNwsArea(area, seen('nws'), nwsGet));
+        const { feedKey, items, listedIds } = await fetchNwsArea(area, seen('nws'), nwsGet);
+        const ingested = await pipeline.ingest(items);
+        // Only after a successful poll: alerts that vanished early get an all-clear.
+        report[`nws:${area}`] = { ...ingested, liftedEarly: await pipeline.reconcileFeed(feedKey, listedIds) };
       } catch (err) {
         logError('ingest', err, { source: `nws:${area}` });
         report[`nws:${area}`] = { error: (err as Error).message };

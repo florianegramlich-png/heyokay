@@ -6,12 +6,18 @@ import { Card, Pill, s } from './ui';
 
 export function AlertCard({ alert, onPress }: { alert: Alert; onPress: () => void }) {
   const { t, categoryLabel, timeAgo } = useI18n();
-  const color = severityColor[alert.severity];
+  const allClear = alert.kind === 'all_clear';
+  // All-clears are good news: calm green. Ended warnings fade back.
+  const color = allClear ? colors.brand : alert.ended ? colors.muted : severityColor[alert.severity];
   return (
     <Pressable onPress={onPress} accessibilityRole="button">
-      <Card style={{ marginBottom: 10, borderLeftWidth: 4, borderLeftColor: color }}>
+      <Card style={{ marginBottom: 10, borderLeftWidth: 4, borderLeftColor: color, opacity: alert.ended && !allClear ? 0.6 : 1 }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
-          <Pill text={categoryLabel(alert.category)} color={color} />
+          <View style={{ flexDirection: 'row', gap: 6 }}>
+            <Pill text={allClear ? t('alert.kind.allClear') : categoryLabel(alert.category)} color={color} />
+            {alert.kind === 'update' ? <Pill text={t('alert.kind.update')} color={color} /> : null}
+            {alert.ended && !allClear ? <Pill text={t('alert.ended')} color={colors.muted} /> : null}
+          </View>
           <Text style={s.muted}>{timeAgo(alert.createdAt)}</Text>
         </View>
         <Text style={{ fontSize: 17, fontWeight: '600', color: colors.text }}>{alert.title}</Text>
