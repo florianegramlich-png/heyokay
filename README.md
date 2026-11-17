@@ -43,10 +43,33 @@ npm start
 | `HEYOKAY_MODEL` | claude-haiku-5-5 | |
 | `NINA_CHANNELS` | mowas,katwarn,biwapp,dwd,lhp,police | Official BBK warnings |
 | `RSS_FEEDS` | [] | JSON list of police / transit feeds |
+| `NWS_AREAS` | – | US National Weather Service alerts for testing in the US: state codes (`CA`) or `lat,lon` points, separated by `;`. Off when empty |
+| `NWS_USER_AGENT` | `GEOCODER_USER_AGENT` | Contact string NWS requires, e.g. `HeyOkay (you@example.com)` |
 | `POLL_INTERVAL_SEC` | 120 | |
 | `GEOCODER_URL` | Nominatim | Use your own instance for volume; the built-in gazetteer is the fallback |
 | `MATCH_BUFFER_M` | 1500 | Extra distance around an event's area |
 | `REVIEW_CONFIDENCE` / `REVIEW_SEVERITY` | 0.6 / 4 | Below/at these, non-official items go to the Alert Desk |
+
+## Deploy (Fly.io)
+
+The server ships as a Docker image (`server/Dockerfile`) with a Fly.io config (`server/fly.toml`): Frankfurt, one always-on machine, SQLite on a 1 GB persistent volume, health check on `/health`. In production the server refuses to start without `ADMIN_TOKEN`.
+
+First time (from `server/`):
+
+```bash
+brew install flyctl && fly auth login
+fly launch --no-deploy --copy-config      # accept the config; pick a unique app name if asked
+fly volumes create heyokay_data --region fra --size 1 --yes
+fly secrets set ADMIN_TOKEN="$(openssl rand -hex 24)" \
+  NWS_USER_AGENT="HeyOkay (your contact email)" GEOCODER_USER_AGENT="HeyOkay (your contact email)"
+fly deploy --ha=false                     # SQLite = exactly one machine
+```
+
+Afterwards: `fly deploy --ha=false` for each update, `fly logs` for logs, `fly secrets list` to check secrets. The API is at `https://<app>.fly.dev` and the Alert Desk at `https://<app>.fly.dev/admin`. To see the admin token later, set a new one with `fly secrets set ADMIN_TOKEN=…` (Fly never shows secrets again).
+
+Point the app at it: `EXPO_PUBLIC_API_URL=https://<app>.fly.dev npx expo start --dev-client --tunnel`, or set `extra.apiUrl` in `app/app.json` for builds.
+
+`fly.toml` sets `NWS_AREAS=CA` for US testing; remove it for a Germany-only server.
 
 ## How an alert is made (PRD 6.2)
 

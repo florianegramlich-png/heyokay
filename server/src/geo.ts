@@ -28,3 +28,57 @@ export function enclosingCircle(circles: { lat: number; lon: number; radiusM: nu
   const radiusM = Math.max(...circles.map((c) => distanceM(lat, lon, c.lat, c.lon) + c.radiusM));
   return { lat, lon, radiusM };
 }
+
+/** A polygon outline as [lon, lat] pairs (GeoJSON order). */
+export type Ring = [number, number][];
+
+/** Ray casting. Ring in [lon, lat]. */
+export function pointInRing(lat: number, lon: number, ring: Ring): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i];
+    const [xj, yj] = ring[j];
+    if ((yi > lat) !== (yj > lat) && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * Metres from a point to the nearest of several polygon outlines; 0 when inside one.
+ * Uses a local flat projection around the point — accurate to well under 1% at alert scales.
+ */
+export function distanceToAreasM(lat: number, lon: number, rings: Ring[]): number {
+  let best = Infinity;
+  const kx = R * rad(1) * Math.cos(rad(lat));
+  const ky = R * rad(1);
+  for (const ring of rings) {
+    if (ring.length < 3) continue;
+    if (pointInRing(lat, lon, ring)) return 0;
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const ax = (ring[j][0] - lon) * kx, ay = (ring[j][1] - lat) * ky;
+      const bx = (ring[i][0] - lon) * kx, by = (ring[i][1] - lat) * ky;
+      const dx = bx - ax, dy = by - ay;
+      const len2 = dx * dx + dy * dy;
+      const t = len2 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / len2)) : 0;
+      best = Math.min(best, Math.hypot(ax + t * dx, ay + t * dy));
+    }
+  }
+  return best;
+}
+
+/** Keep stored outlines small: at most `max` points per ring, first and last kept. */
+export function thinRing(ring: Ring, max = 300): Ring {
+  if (ring.length <= max) return ring;
+  const step = Math.ceil(ring.length / max);
+  const out = ring.filter((_, i) => i % step === 0);
+  if (out[out.length - 1] !== ring[ring.length - 1]) out.push(ring[ring.length - 1]);
+  return out;
+}
+
+/** Outer rings of a GeoJSON Polygon / MultiPolygon. */
+export function outerRings(geometry: { type: string; coordinates: any } | null | undefined): Ring[] {
+  if (!geometry) return [];
+  if (geometry.type === 'Polygon') return geometry.coordinates[0] ? [geometry.coordinates[0]] : [];
+  if (geometry.type === 'MultiPolygon') return geometry.coordinates.map((p: any) => p[0]).filter(Boolean);
+  return [];
+}

@@ -4,10 +4,11 @@ import { Alert as RNAlert, Linking, Pressable, ScrollView, Text, TextInput, View
 import { Button, s, Section, ToggleRow } from '../components/ui';
 import { api } from '../lib/api';
 import { crashReportingAvailable, getCrashReportsOptIn, setCrashReportsOptIn } from '../lib/crash';
+import { setLanguage, useI18n, type Lang } from '../lib/i18n';
 import { geocode, locationAccess, stopBackgroundUpdates, type LocationAccess } from '../lib/location';
 import { session } from '../lib/session';
 import { colors } from '../lib/theme';
-import { CATEGORIES, CATEGORY_HINT, CATEGORY_LABEL, type SavedPlace, type UserPrefs } from '../lib/types';
+import { CATEGORIES, type SavedPlace, type UserPrefs } from '../lib/types';
 
 const LIMITS = [1, 3, 5, 10];
 
@@ -21,6 +22,7 @@ export default function Settings() {
   const [placeError, setPlaceError] = useState<string | null>(null);
   const [crashReports, setCrashReports] = useState(false);
   const showCrashToggle = crashReportingAvailable();
+  const { t, lang, categoryLabel, categoryHint } = useI18n();
 
   useEffect(() => {
     api.me().then((me) => { setPrefs(me.prefs); setPlaces(me.places); }).catch(() => null);
@@ -40,16 +42,21 @@ export default function Settings() {
     try { setPrefs((await api.updatePrefs(patch)).prefs); } catch { setPrefs(prefs); }
   }
 
+  function changeLanguage(l: Lang) {
+    void setLanguage(l);
+    void save({ language: l });
+  }
+
   async function addPlace() {
     setPlaceError(null);
     const hit = await geocode(address).catch(() => null);
-    if (!hit) { setPlaceError('Adresse nicht gefunden.'); return; }
+    if (!hit) { setPlaceError(t('set.places.notFound')); return; }
     try {
       const { place } = await api.addPlace(label.trim() || address.trim(), hit.lat, hit.lon);
       setPlaces((p) => [...p, place]);
       setLabel(''); setAddress('');
     } catch {
-      setPlaceError('Konnte den Ort nicht speichern (max. 10 Orte).');
+      setPlaceError(t('set.places.saveFailed'));
     }
   }
 
@@ -59,10 +66,10 @@ export default function Settings() {
   }
 
   function confirmDelete() {
-    RNAlert.alert('Alle Daten löschen?', 'Dein Konto, Standort, Orte und Warnungen werden sofort und endgültig gelöscht.', [
-      { text: 'Abbrechen', style: 'cancel' },
+    RNAlert.alert(t('set.delete.title'), t('set.delete.text'), [
+      { text: t('set.delete.cancel'), style: 'cancel' },
       {
-        text: 'Löschen', style: 'destructive', onPress: async () => {
+        text: t('set.delete.confirm'), style: 'destructive', onPress: async () => {
           await api.deleteAccount().catch(() => null);
           await stopBackgroundUpdates();
           await setCrashReportsOptIn(false);
@@ -73,17 +80,33 @@ export default function Settings() {
     ]);
   }
 
-  if (!prefs) return <Text style={[s.muted, { padding: 24 }]}>Lädt…</Text>;
+  if (!prefs) return <Text style={[s.muted, { padding: 24 }]}>{t('set.loading')}</Text>;
   const quiet = prefs.quietHours;
 
   return (
     <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
-      <Section title="Worüber informieren">
+      <Section title={t('set.language')}>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          {(['de', 'en'] as Lang[]).map((l) => (
+            <Pressable
+              key={l}
+              onPress={() => changeLanguage(l)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: lang === l }}
+              style={{ flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center', backgroundColor: lang === l ? colors.brand : colors.brandSoft }}
+            >
+              <Text style={{ color: lang === l ? '#fff' : colors.brand, fontWeight: '600' }}>{l === 'de' ? 'Deutsch' : 'English'}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </Section>
+
+      <Section title={t('set.topics')}>
         {CATEGORIES.map((c, i) => (
           <ToggleRow
             key={c}
-            label={CATEGORY_LABEL[c]}
-            hint={CATEGORY_HINT[c]}
+            label={categoryLabel(c)}
+            hint={categoryHint(c)}
             value={prefs.categories.includes(c)}
             last={i === CATEGORIES.length - 1}
             onChange={(on) => save({ categories: on ? [...prefs.categories, c] : prefs.categories.filter((x) => x !== c) })}
@@ -91,14 +114,14 @@ export default function Settings() {
         ))}
       </Section>
 
-      <Section title="Benachrichtigungen">
+      <Section title={t('set.notifications')}>
         <ToggleRow
-          label="Nachtruhe 22–7 Uhr"
-          hint="Nur amtliche Extremwarnungen kommen durch"
+          label={t('set.quiet')}
+          hint={t('set.quiet.hint')}
           value={!!quiet}
           onChange={(on) => save({ quietHours: on ? { start: '22:00', end: '07:00' } : null })}
         />
-        <Text style={[s.rowLabel, { marginTop: 12 }]}>Höchstens pro Tag</Text>
+        <Text style={[s.rowLabel, { marginTop: 12 }]}>{t('set.limit')}</Text>
         <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
           {LIMITS.map((n) => (
             <Pressable
@@ -113,43 +136,43 @@ export default function Settings() {
             </Pressable>
           ))}
         </View>
-        <Text style={[s.rowHint, { marginTop: 8 }]}>Hohe und extreme Warnungen zählen nicht zum Limit.</Text>
+        <Text style={[s.rowHint, { marginTop: 8 }]}>{t('set.limit.hint')}</Text>
       </Section>
 
-      <Section title="Standort">
+      <Section title={t('set.location')}>
         <Text style={s.p}>
-          {access === 'always' ? 'Immer erlaubt – Warnungen auch unterwegs.'
-            : access === 'foreground' ? 'Nur beim Öffnen. Unterwegs warnen wir nur für gespeicherte Orte.'
-            : 'Nicht erlaubt. Wir warnen nur für gespeicherte Orte.'}
+          {access === 'always' ? t('set.location.always')
+            : access === 'foreground' ? t('set.location.foreground')
+            : t('set.location.denied')}
         </Text>
-        {access !== 'always' ? <Button kind="secondary" title="In den Systemeinstellungen ändern" onPress={() => Linking.openSettings()} /> : null}
+        {access !== 'always' ? <Button kind="secondary" title={t('set.location.change')} onPress={() => Linking.openSettings()} /> : null}
       </Section>
 
-      <Section title="Gespeicherte Orte">
+      <Section title={t('set.places')}>
         {places.map((p) => (
           <View key={p.id} style={[s.row, s.rowLine]}>
             <Text style={[s.rowLabel, { flex: 1 }]}>{p.label}</Text>
-            <Text style={{ color: colors.danger }} onPress={() => removePlace(p.id)}>Entfernen</Text>
+            <Text style={{ color: colors.danger }} onPress={() => removePlace(p.id)}>{t('set.places.remove')}</Text>
           </View>
         ))}
-        <TextInput placeholder="Name, z. B. Kita" value={label} onChangeText={setLabel} style={input} maxLength={40} />
-        <TextInput placeholder="Adresse" value={address} onChangeText={setAddress} style={input} />
+        <TextInput placeholder={t('set.places.name')} value={label} onChangeText={setLabel} style={input} maxLength={40} />
+        <TextInput placeholder={t('set.places.address')} value={address} onChangeText={setAddress} style={input} />
         {placeError ? <Text style={{ color: colors.danger, marginTop: 6 }}>{placeError}</Text> : null}
-        <Button kind="secondary" title="Ort hinzufügen" disabled={!address.trim()} onPress={addPlace} />
+        <Button kind="secondary" title={t('set.places.add')} disabled={!address.trim()} onPress={addPlace} />
       </Section>
 
-      <Section title="Datenschutz">
-        <Text style={s.p}>Wir speichern nur deinen letzten Standort, deine Orte und Einstellungen. Kein Verlauf.</Text>
+      <Section title={t('set.privacy')}>
+        <Text style={s.p}>{t('set.privacy.text')}</Text>
         {showCrashToggle ? (
           <ToggleRow
-            label="Absturzberichte senden"
-            hint="Hilft uns, Fehler zu finden. Ohne Standort, ohne Konto, ohne Inhalte deiner Warnungen."
+            label={t('set.crash')}
+            hint={t('set.crash.hint')}
             value={crashReports}
             onChange={toggleCrashReports}
             last
           />
         ) : null}
-        <Button kind="danger" title="Alle Daten löschen" onPress={confirmDelete} />
+        <Button kind="danger" title={t('set.delete')} onPress={confirmDelete} />
       </Section>
     </ScrollView>
   );

@@ -37,6 +37,7 @@ export const DESK_HTML = `<!doctype html>
       <div><label>Latitude</label><input name="lat" type="number" step="any" value="52.5155" required></div>
       <div><label>Longitude</label><input name="lon" type="number" step="any" value="13.4549" required></div>
       <div><label>Radius (m)</label><input name="radiusM" type="number" value="1500" required></div>
+      <div><label>Language</label><select name="language"><option value="de">Deutsch</option><option value="en">English</option></select></div>
       <div style="align-self:end"><button>Send to affected users</button></div>
     </form><p class="muted" id="manualOut"></p>
   </section>

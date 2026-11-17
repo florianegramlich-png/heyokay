@@ -4,14 +4,16 @@ import { ActivityIndicator, Linking, ScrollView, Text, View } from 'react-native
 import MapView, { Circle, Marker } from 'react-native-maps';
 import { Button, Card, Pill, s } from '../../components/ui';
 import { api } from '../../lib/api';
-import { colors, severityColor, severityLabel, timeAgo } from '../../lib/theme';
-import { CATEGORY_LABEL, type AlertDetail, type Feedback } from '../../lib/types';
+import { useI18n } from '../../lib/i18n';
+import { colors, severityColor } from '../../lib/theme';
+import type { AlertDetail, Feedback } from '../../lib/types';
 
 export default function AlertScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [detail, setDetail] = useState<AlertDetail | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [error, setError] = useState(false);
+  const { t, categoryLabel, severityLabel, timeAgo, locale } = useI18n();
 
   useEffect(() => {
     api.alert(id)
@@ -19,7 +21,7 @@ export default function AlertScreen() {
       .catch(() => setError(true));
   }, [id]);
 
-  if (error) return <Text style={[s.muted, { padding: 24 }]}>Diese Warnung ist nicht mehr verfügbar.</Text>;
+  if (error) return <Text style={[s.muted, { padding: 24 }]}>{t('alert.gone')}</Text>;
   if (!detail) return <ActivityIndicator style={{ marginTop: 40 }} color={colors.brand} />;
 
   const { alert, sources, summary, endsAt } = detail;
@@ -34,20 +36,20 @@ export default function AlertScreen() {
   return (
     <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
       <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
-        <Pill text={CATEGORY_LABEL[alert.category]} color={color} />
-        <Pill text={severityLabel[alert.severity]} color={color} />
-        {alert.official ? <Pill text="Amtlich" color={colors.text} /> : null}
+        <Pill text={categoryLabel(alert.category)} color={color} />
+        <Pill text={severityLabel(alert.severity)} color={color} />
+        {alert.official ? <Pill text={t('alert.official')} color={colors.text} /> : null}
       </View>
       <Text style={[s.h1, { fontSize: 24 }]}>{alert.title}</Text>
       <Text style={[s.p, { marginTop: 8 }]}>{alert.body}</Text>
       <Text style={[s.muted, { marginTop: 6 }]}>
         {timeAgo(alert.createdAt)}
-        {endsAt ? ` · bis ${new Date(endsAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}` : ''}
-        {alert.matchedPlace ? ` · betrifft „${alert.matchedPlace}“` : ''}
+        {endsAt ? ` · ${t('alert.until', { time: new Date(endsAt).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) })}` : ''}
+        {alert.matchedPlace ? ` · ${t('alert.affects', { place: alert.matchedPlace })}` : ''}
       </Text>
 
       <Card style={{ marginTop: 16, backgroundColor: colors.brandSoft, borderColor: colors.brandSoft }}>
-        <Text style={{ fontWeight: '700', color: colors.brand, marginBottom: 4 }}>Was du tun kannst</Text>
+        <Text style={{ fontWeight: '700', color: colors.brand, marginBottom: 4 }}>{t('alert.whatToDo')}</Text>
         <Text style={s.p}>{alert.action}</Text>
       </Card>
 
@@ -65,13 +67,13 @@ export default function AlertScreen() {
 
       {summary ? (
         <Card style={{ marginTop: 16 }}>
-          <Text style={{ fontWeight: '700', marginBottom: 4, color: colors.text }}>Zusammenfassung</Text>
+          <Text style={{ fontWeight: '700', marginBottom: 4, color: colors.text }}>{t('alert.summary')}</Text>
           <Text style={s.p}>{summary}</Text>
         </Card>
       ) : null}
 
       <Card style={{ marginTop: 16 }}>
-        <Text style={{ fontWeight: '700', marginBottom: 6, color: colors.text }}>Quellen</Text>
+        <Text style={{ fontWeight: '700', marginBottom: 6, color: colors.text }}>{t('alert.sources')}</Text>
         {sources.map((src, i) => (
           <Text
             key={i}
@@ -83,21 +85,21 @@ export default function AlertScreen() {
         ))}
         {alert.aiWritten ? (
           <Text style={[s.muted, { marginTop: 4, fontSize: 12 }]}>
-            Text von KI formuliert und gegen die Quellen geprüft. Maßgeblich sind die Originalmeldungen.
+            {t('alert.aiNote')}
           </Text>
         ) : null}
       </Card>
 
-      <Text style={[s.sectionTitle, { marginTop: 24 }]}>War das relevant für dich?</Text>
+      <Text style={[s.sectionTitle, { marginTop: 24 }]}>{t('alert.relevant')}</Text>
       <View style={{ flexDirection: 'row', gap: 10 }}>
         <View style={{ flex: 1 }}>
-          <Button kind={feedback === 'relevant' ? 'primary' : 'secondary'} title="👍 Ja" onPress={() => rate('relevant')} />
+          <Button kind={feedback === 'relevant' ? 'primary' : 'secondary'} title={t('alert.yes')} onPress={() => rate('relevant')} />
         </View>
         <View style={{ flex: 1 }}>
-          <Button kind={feedback === 'not_relevant' ? 'primary' : 'secondary'} title="👎 Nein" onPress={() => rate('not_relevant')} />
+          <Button kind={feedback === 'not_relevant' ? 'primary' : 'secondary'} title={t('alert.no')} onPress={() => rate('not_relevant')} />
         </View>
       </View>
-      {feedback ? <Text style={[s.muted, { marginTop: 8 }]}>Danke – wir passen künftige Warnungen an.</Text> : null}
+      {feedback ? <Text style={[s.muted, { marginTop: 8 }]}>{t('alert.thanks')}</Text> : null}
     </ScrollView>
   );
 }

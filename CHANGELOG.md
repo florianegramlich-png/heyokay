@@ -4,6 +4,29 @@
 
 - **Crash reports: opt-in or opt-out?** (2026-11-16) Crashlytics is built as opt-in: native collection is off (`app/firebase.json`) and only the Settings toggle "Absturzberichte senden" turns it on, defaulting to off. That's the conservative reading of the privacy rules (§25 TTDSG consent for device access that isn't strictly necessary). If you'd rather collect by default, or ask during onboarding's consent step, tell me and I'll change it; it should also go into the privacy policy and DPIA either way.
 
+## 2026-11-17
+
+- **Hosted backend, step 1: server deploy config** [10.4] (part of the "Deploy config" roadmap item; Flori asked for it to stop using tunnels).
+  - `server/Dockerfile` (multi-stage, Node 22, compiled with `tsc` to `dist/`, no dev dependencies in the image), `.dockerignore`, `server/fly.toml` (Frankfurt, one always-on machine because of the 2-minute polling, SQLite on volume `heyokay_data` at `/data`, `/health` check), and a README "Deploy" section.
+  - New scripts: `npm run build` (`tsconfig.build.json`) and `npm run serve`.
+  - Safety: with `NODE_ENV=production` the server exits if `ADMIN_TOKEN` is still `change-me`. Contact strings and tokens are Fly secrets, not in `fly.toml`.
+  - Verified: image builds; in the container `/health` answers, admin routes return 401 without the token and 200 with it, a registered device survives a container restart (volume), and the production guard stops a start without a token. Server 42/42, typecheck clean. Not verified here: an actual `fly deploy` (needs Flori's Fly account).
+  - Still open for this roadmap item: managed Postgres (after the Postgres item), EAS build profiles and EAS Update.
+  - For Flori: create a Fly.io account and run the five commands in README → Deploy.
+- **Fix: iOS build failed without Firebase** (found by Flori's first EAS development build). `pod install` stopped because React Native Firebase was still autolinked and requires dynamic frameworks, which `app.config.ts` only turns on when the Firebase files exist. New `app/react-native.config.js` unlinks `@react-native-firebase/app` and `crashlytics` on iOS and Android until both files are in `app/firebase/`, so the rule is the same everywhere.
+  - Verified: `expo-modules-autolinking react-native-config` lists no Firebase modules without the files and both with them; `tsc --noEmit` clean; iOS JS bundle builds. Not verifiable here: `pod install` itself (needs macOS), so the next EAS build is the real check.
+
+## 2026-11-17
+
+- **US test mode** (not a roadmap item; asked for by Flori to test on a real iPhone in California). Builds on [6.1 #5, 8.1].
+  - Server: new source `src/sources/nws.ts` for US National Weather Service alerts (api.weather.gov, official CAP). Turn it on with `NWS_AREAS=CA` (state codes, or `lat,lon` points separated by `;`) and set `NWS_USER_AGENT` to a contact, as NWS requires. Test and exercise messages are dropped; a cancellation ends the event; an update that names an earlier alert (CAP `references`) merges into the same event. Different NWS alerts are never merged by similar wording.
+  - Server: **exact warning areas.** Most NWS alerts only list forecast zones. Zone outlines are fetched once and cached, and stored on the event (`areas`). Matching now checks whether the user or saved place is inside an outline (plus the usual buffer) instead of the rough circle. Without this, one San Francisco alert would have matched everyone within 140 km. Events without outlines (NINA, RSS, manual) still use the circle.
+  - Server: **English alerts.** Events carry a `language` taken from their source (NWS → `en`). Copy is written in that language: LLM prompt, template labels, and an English guidance library (US emergency number 911, because the only English source today is US). The verifier now also checks English alarm words and area-stigma phrases. Multi-zone alerts are titled by the warning ("Weather: Wind Advisory"), not by the first zone name. The Alert Desk manual form has a language field.
+  - App: **English UI.** All text moved to `src/lib/i18n.ts` (German + English). Language defaults to the device language, can be switched on the first onboarding screen and in Settings ("Sprache / Language"), and is saved to the server prefs. Dates and times follow the language.
+  - App: the feed shows a short note with a link to the system settings when location is off. That was today's "nothing shows up" cause on the iPhone.
+  - Tests: `server/test/nws.test.ts` (10 tests) with real api.weather.gov responses from today (trimmed): headline cleaning, mapping, zone outlines, skipping tests, cancellation, the fetcher's zone cache, English copy end to end, reference-based merging, no fuzzy merging of different NWS alerts, and the English verifier. Server 42/42, typecheck clean. App `tsc --noEmit` clean, `expo export --platform ios` bundles. Live check: 43 active California alerts ingested into 43 events. A device in Pacifica got the Wind Advisory and the Beach Hazards Statement. Marina also got both, which is correct, because those alerts include zone CAZ530 (Southern Monterey Bay).
+  - Follow-up idea: give NINA warnings exact outlines too (their GeoJSON is already fetched).
+
 ## 2026-11-16
 
 - **CI** [9.3]: added `.github/workflows/ci.yml` with two jobs: `server` (`npm ci`, `npm test`, `npm run typecheck`) and `app` (`npm ci`, `npx tsc --noEmit`), on Node 22 with npm caching, triggered on every push and PR. Concurrent runs on the same ref are cancelled.

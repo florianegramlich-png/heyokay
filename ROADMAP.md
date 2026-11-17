@@ -34,7 +34,7 @@ Items that need accounts or keys (Firebase, RevenueCat or App Store products, Ap
 - [ ] **API hardening** [11]: per-token and per-IP rate limits, body size limits, security headers and input fuzz tests.
 - [ ] **Data retention** [11 GDPR]: hourly job expiring ended events, alerts older than 30 days and source items older than 7 days, and clearing locations not updated in 30 days. Tests.
 - [ ] **App unit tests**: jest-expo with tests for `lib/api`, `lib/theme`, the onboarding steps and the paywall gating.
-- [ ] **Deploy config** [10.4]: server Dockerfile, a `fly.toml` (EU region, Frankfurt) with managed Postgres, a health check, EAS build profiles and EAS Update (Decision 6), and a deploy section in the README.
+- [ ] **Deploy config** [10.4]: ~~server Dockerfile, a `fly.toml` (EU region, Frankfurt), a health check and a deploy section in the README~~ (done 2026-11-17, SQLite on a volume for now). Still open: managed Postgres (after the Postgres item), EAS build profiles and EAS Update (Decision 6).
 
 ### Phase 2: growth
 
@@ -92,6 +92,7 @@ Legal and partners
 
 ## Done
 
+- [x] 2026-11-17 **US test mode** (Flori's request): NWS source with exact zone outlines for matching, English alert copy and guidance for English sources, English app UI with a language switch, location-off note in the feed. Part of the Phase 2 **English** item (the app i18n is done; German sources are still composed in German).
 - [x] 2026-11-16 **Crash reporting** [5.3, 13]: Crashlytics (`@react-native-firebase/app` + `crashlytics`) wired via `app.config.ts`, enabled only when both Firebase config files are in `app/firebase/`; opt-in toggle in Settings; root `ErrorBoundary` with a calm retry screen that reports; server logs 5xx, ingest failures, unhandled rejections and uncaught exceptions as structured JSON. 4 server tests.
 - [x] 2026-11-16 **CI** [9.3]: `.github/workflows/ci.yml` runs server `npm ci` + tests + typecheck and app `npm ci` + `tsc --noEmit` on every push and PR (Node 22, npm cache).
 - [x] 2026-11-15 Baseline fix (not a roadmap item): app `npm ci` failed on a peer conflict (react-dom 19.3.1 wanted react ^19.3.1). Pinned `react-dom` 19.3.0 via `npx expo install`, matching Expo SDK 58. CI is still the next item.

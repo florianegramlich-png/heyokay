@@ -1,14 +1,15 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Linking, ScrollView, Text, View } from 'react-native';
+import { Linking, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button, Card, s, ToggleRow } from '../components/ui';
 import { api } from '../lib/api';
+import { setLanguage, useI18n, type Lang } from '../lib/i18n';
 import { requestBackground, requestForeground, startBackgroundUpdates, syncNow } from '../lib/location';
 import { getPushToken, requestPermission } from '../lib/notifications';
 import { session } from '../lib/session';
 import { colors } from '../lib/theme';
-import { CATEGORIES, CATEGORY_HINT, CATEGORY_LABEL, DEFAULT_PREFS, type Category } from '../lib/types';
+import { CATEGORIES, DEFAULT_PREFS, type Category } from '../lib/types';
 
 type Step = 'value' | 'location' | 'always' | 'notifications' | 'categories' | 'consent';
 
@@ -19,6 +20,7 @@ export default function Onboarding() {
   const [categories, setCategories] = useState<Category[]>(DEFAULT_PREFS.categories);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { t, lang, categoryLabel, categoryHint } = useI18n();
 
   const toggle = (c: Category, on: boolean) =>
     setCategories((cur) => (on ? [...new Set([...cur, c])] : cur.filter((x) => x !== c)));
@@ -29,14 +31,14 @@ export default function Onboarding() {
     try {
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || DEFAULT_PREFS.timezone;
       const pushToken = await getPushToken();
-      const { token } = await api.register({ ...DEFAULT_PREFS, categories, timezone }, pushToken);
+      const { token } = await api.register({ ...DEFAULT_PREFS, categories, timezone, language: lang }, pushToken);
       await session.setToken(token);
       await session.setOnboarded();
       await startBackgroundUpdates();
       await syncNow(true).catch(() => null); // backfill: current alerts go to the feed, no push burst
       router.replace('/feed');
     } catch (e) {
-      setError('Verbindung zum Server fehlgeschlagen. Bitte später erneut versuchen.');
+      setError(t('onb.error'));
     } finally {
       setBusy(false);
     }
@@ -46,80 +48,62 @@ export default function Onboarding() {
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
       <ScrollView contentContainerStyle={{ padding: 24, flexGrow: 1, justifyContent: 'center' }}>
         {step === 'value' && (
-          <Screen
-            title="Weniger Alarm. Mehr Bescheid wissen."
-            text="Hey-Okay sagt dir in einem Satz, was in deiner Nähe los ist – Unwetter, Polizeilagen, Sperrungen – und was du tun kannst. Nur wenn es dich betrifft."
-          >
-            <Button title="Los geht’s" onPress={() => setStep('location')} />
+          <Screen title={t('onb.value.title')} text={t('onb.value.text')}>
+            <Button title={t('onb.value.cta')} onPress={() => setStep('location')} />
+            <LanguageSwitch value={lang} onChange={(l) => { void setLanguage(l); }} />
           </Screen>
         )}
 
         {step === 'location' && (
-          <Screen
-            title="Wo bist du?"
-            text="Wir brauchen deinen Standort, um nur Lagen in deiner Nähe zu melden. Wir speichern ausschließlich deinen letzten Standort – keinen Bewegungsverlauf."
-          >
+          <Screen title={t('onb.location.title')} text={t('onb.location.text')}>
             <Button
-              title="Standort erlauben"
+              title={t('onb.location.cta')}
               onPress={async () => setStep((await requestForeground()) ? 'always' : 'notifications')}
             />
-            <Button kind="secondary" title="Später" onPress={() => setStep('notifications')} />
+            <Button kind="secondary" title={t('onb.later')} onPress={() => setStep('notifications')} />
           </Screen>
         )}
 
         {step === 'always' && (
-          <Screen
-            title="Auch wenn die App zu ist?"
-            text="Mit „Immer erlauben“ warnen wir dich auch unterwegs, ohne dass du die App öffnest. Ohne bekommst du Warnungen nur für deine gespeicherten Orte."
-          >
-            <Button title="Immer erlauben" onPress={async () => { await requestBackground(); setStep('notifications'); }} />
-            <Button kind="secondary" title="Nur beim Öffnen" onPress={() => setStep('notifications')} />
+          <Screen title={t('onb.always.title')} text={t('onb.always.text')}>
+            <Button title={t('onb.always.cta')} onPress={async () => { await requestBackground(); setStep('notifications'); }} />
+            <Button kind="secondary" title={t('onb.always.skip')} onPress={() => setStep('notifications')} />
           </Screen>
         )}
 
         {step === 'notifications' && (
-          <Screen
-            title="Benachrichtigungen"
-            text="Höchstens 3 pro Tag, nachts still – außer bei amtlichen Extremwarnungen. Du kannst das jederzeit ändern."
-          >
-            <Button title="Benachrichtigungen erlauben" onPress={async () => { await requestPermission(); setStep('categories'); }} />
-            <Button kind="secondary" title="Nur im Feed anzeigen" onPress={() => setStep('categories')} />
+          <Screen title={t('onb.notif.title')} text={t('onb.notif.text')}>
+            <Button title={t('onb.notif.cta')} onPress={async () => { await requestPermission(); setStep('categories'); }} />
+            <Button kind="secondary" title={t('onb.notif.skip')} onPress={() => setStep('categories')} />
           </Screen>
         )}
 
         {step === 'categories' && (
-          <Screen title="Was ist dir wichtig?" text="Wähle, worüber du informiert werden willst.">
+          <Screen title={t('onb.cat.title')} text={t('onb.cat.text')}>
             <Card style={{ marginBottom: 8 }}>
               {CATEGORIES.map((c, i) => (
                 <ToggleRow
                   key={c}
-                  label={CATEGORY_LABEL[c]}
-                  hint={CATEGORY_HINT[c]}
+                  label={categoryLabel(c)}
+                  hint={categoryHint(c)}
                   value={categories.includes(c)}
                   onChange={(on) => toggle(c, on)}
                   last={i === CATEGORIES.length - 1}
                 />
               ))}
             </Card>
-            <Text style={s.muted}>Amtliche Extremwarnungen bekommst du immer.</Text>
-            <Button title="Weiter" disabled={categories.length === 0} onPress={() => setStep('consent')} />
+            <Text style={s.muted}>{t('onb.cat.always')}</Text>
+            <Button title={t('onb.next')} disabled={categories.length === 0} onPress={() => setStep('consent')} />
           </Screen>
         )}
 
         {step === 'consent' && (
-          <Screen
-            title="Deine Daten"
-            text={
-              'Wir verarbeiten deinen letzten Standort und deine Einstellungen, nur um dich zu warnen. ' +
-              'Kein Verlauf, kein Konto, keine Werbung. Die KI sieht nie deine Daten – nur öffentliche Meldungen. ' +
-              'Du kannst alles jederzeit in den Einstellungen löschen.'
-            }
-          >
+          <Screen title={t('onb.consent.title')} text={t('onb.consent.text')}>
             <Text style={[s.muted, { color: colors.brand, marginBottom: 8 }]} onPress={() => Linking.openURL('https://heyokay.de/datenschutz')}>
-              Datenschutzerklärung lesen
+              {t('onb.consent.policy')}
             </Text>
             {error ? <Text style={{ color: colors.danger, marginBottom: 8 }}>{error}</Text> : null}
-            <Button title={busy ? 'Einen Moment…' : 'Zustimmen und starten'} disabled={busy} onPress={finish} />
+            <Button title={busy ? t('onb.consent.busy') : t('onb.consent.cta')} disabled={busy} onPress={finish} />
           </Screen>
         )}
       </ScrollView>
@@ -133,6 +117,22 @@ function Screen({ title, text, children }: { title: string; text: string; childr
       <Text style={[s.h1, { marginBottom: 12 }]}>{title}</Text>
       <Text style={[s.p, { marginBottom: 24, color: colors.muted }]}>{text}</Text>
       {children}
+    </View>
+  );
+}
+
+/** "Deutsch · English" — shown before any permission is asked, so the rest of onboarding is readable. */
+export function LanguageSwitch({ value, onChange }: { value: Lang; onChange: (l: Lang) => void }) {
+  const opt = (l: Lang, label: string) => (
+    <Pressable key={l} onPress={() => onChange(l)} accessibilityRole="button" accessibilityState={{ selected: value === l }} hitSlop={8}>
+      <Text style={{ color: value === l ? colors.text : colors.brand, fontWeight: value === l ? '700' : '500', fontSize: 15 }}>{label}</Text>
+    </Pressable>
+  );
+  return (
+    <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 16, marginTop: 20 }}>
+      {opt('de', 'Deutsch')}
+      <Text style={{ color: colors.muted }}>·</Text>
+      {opt('en', 'English')}
     </View>
   );
 }

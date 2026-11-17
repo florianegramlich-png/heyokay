@@ -17,6 +17,9 @@ export interface Config {
   /** NINA channels to poll. https://warnung.bund.de/api31 */
   ninaChannels: string[];
   rssFeeds: RssFeedConfig[];
+  /** US National Weather Service areas to poll: state codes ("CA") or "lat,lon" points. Empty = off. */
+  nwsAreas: string[];
+  nwsUserAgent: string;
   pollIntervalSec: number;
   /** Nominatim (OpenStreetMap) for geocoding place names from unstructured sources. */
   geocoderUrl: string | null;
@@ -39,6 +42,8 @@ export function loadConfig(env = process.env): Config {
     model: env.HEYOKAY_MODEL ?? 'claude-haiku-5-5',
     ninaChannels: (env.NINA_CHANNELS ?? 'mowas,katwarn,biwapp,dwd,lhp,police').split(',').map((s) => s.trim()).filter(Boolean),
     rssFeeds: env.RSS_FEEDS ? (JSON.parse(env.RSS_FEEDS) as RssFeedConfig[]) : [],
+    nwsAreas: (env.NWS_AREAS ?? '').split(';').flatMap((a) => (a.includes(',') && /\d/.test(a) ? [a] : a.split(','))).map((s) => s.trim()).filter(Boolean),
+    nwsUserAgent: env.NWS_USER_AGENT ?? env.GEOCODER_USER_AGENT ?? 'HeyOkay/0.1 (set NWS_USER_AGENT to your contact)',
     pollIntervalSec: Number(env.POLL_INTERVAL_SEC ?? 120),
     geocoderUrl: env.GEOCODER_URL ?? 'https://nominatim.openstreetmap.org/search',
     geocoderUserAgent: env.GEOCODER_USER_AGENT ?? 'HeyOkay/0.1 (set GEOCODER_USER_AGENT to your contact)',

@@ -52,20 +52,4 @@ export interface SourceRef { sourceName: string; url?: string; title: string; of
 
 export interface AlertDetail { alert: Alert; sources: SourceRef[]; summary: string; endsAt: string | null }
 
-export const CATEGORY_LABEL: Record<Category, string> = {
-  weather: 'Unwetter',
-  crime: 'Polizeilage',
-  transit: 'ÖPNV-Störung',
-  public_safety: 'Gefahrenlage',
-  health: 'Gesundheit',
-  infrastructure: 'Infrastruktur',
-};
-
-export const CATEGORY_HINT: Record<Category, string> = {
-  weather: 'Sturm, Gewitter, Hitze, Hochwasser',
-  crime: 'Polizeieinsätze und Sperrungen in deiner Nähe',
-  transit: 'Ausfälle und Sperrungen bei S-/U-Bahn',
-  public_safety: 'Brände, Bombenfunde, Gefahrstoffe',
-  health: 'Trinkwasser, Luftqualität',
-  infrastructure: 'Strom-, Wasser- und Netzausfälle',
-};
+// Category labels and hints live in lib/i18n.ts (German + English).
