@@ -34,7 +34,7 @@ Items that need accounts or keys (Firebase, RevenueCat or App Store products, Ap
 - [ ] **API hardening** [11]: per-token and per-IP rate limits, body size limits, security headers and input fuzz tests.
 - [ ] **Data retention** [11 GDPR]: hourly job expiring ended events, alerts older than 30 days and source items older than 7 days, and clearing locations not updated in 30 days. Tests.
 - [ ] **App unit tests**: jest-expo with tests for `lib/api`, `lib/theme`, the onboarding steps and the paywall gating.
-- [ ] **Deploy config** [10.4]: server Dockerfile, a `fly.toml` (EU region, Frankfurt) with managed Postgres, a health check, EAS build profiles and EAS Update (Decision 6), and a deploy section in the README.
+- [ ] **Deploy config** [10.4]: ~~server Dockerfile, a `fly.toml` (EU region, Frankfurt), a health check and a deploy section in the README~~ (done 2026-11-17, SQLite on a volume for now). Still open: managed Postgres (after the Postgres item), EAS build profiles and EAS Update (Decision 6).
 
 ### Phase 2: growth
 

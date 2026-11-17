@@ -6,6 +6,13 @@
 
 ## 2026-11-17
 
+- **Hosted backend, step 1: server deploy config** [10.4] (part of the "Deploy config" roadmap item; Flori asked for it to stop using tunnels).
+  - `server/Dockerfile` (multi-stage, Node 22, compiled with `tsc` to `dist/`, no dev dependencies in the image), `.dockerignore`, `server/fly.toml` (Frankfurt, one always-on machine because of the 2-minute polling, SQLite on volume `heyokay_data` at `/data`, `/health` check), and a README "Deploy" section.
+  - New scripts: `npm run build` (`tsconfig.build.json`) and `npm run serve`.
+  - Safety: with `NODE_ENV=production` the server exits if `ADMIN_TOKEN` is still `change-me`. Contact strings and tokens are Fly secrets, not in `fly.toml`.
+  - Verified: image builds; in the container `/health` answers, admin routes return 401 without the token and 200 with it, a registered device survives a container restart (volume), and the production guard stops a start without a token. Server 42/42, typecheck clean. Not verified here: an actual `fly deploy` (needs Flori's Fly account).
+  - Still open for this roadmap item: managed Postgres (after the Postgres item), EAS build profiles and EAS Update.
+  - For Flori: create a Fly.io account and run the five commands in README → Deploy.
 - **Fix: iOS build failed without Firebase** (found by Flori's first EAS development build). `pod install` stopped because React Native Firebase was still autolinked and requires dynamic frameworks, which `app.config.ts` only turns on when the Firebase files exist. New `app/react-native.config.js` unlinks `@react-native-firebase/app` and `crashlytics` on iOS and Android until both files are in `app/firebase/`, so the rule is the same everywhere.
   - Verified: `expo-modules-autolinking react-native-config` lists no Firebase modules without the files and both with them; `tsc --noEmit` clean; iOS JS bundle builds. Not verifiable here: `pod install` itself (needs macOS), so the next EAS build is the real check.
 

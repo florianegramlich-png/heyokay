@@ -13,6 +13,11 @@ import { installProcessHandlers, logError } from './errors.js';
 installProcessHandlers();
 
 const config = loadConfig();
+// A hosted server with the default admin token would let anyone send alerts from the Alert Desk.
+if (process.env.NODE_ENV === 'production' && config.adminToken === 'change-me') {
+  console.error('Refusing to start: set ADMIN_TOKEN (e.g. `fly secrets set ADMIN_TOKEN=…`).');
+  process.exit(1);
+}
 const store = new Store(config.dbPath);
 const llm = new AnthropicLLM(config.anthropicApiKey, config.model);
 const geocoder = config.geocoderUrl ? new NominatimGeocoder(config.geocoderUrl, config.geocoderUserAgent) : new GazetteerGeocoder();
