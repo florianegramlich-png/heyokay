@@ -6,6 +6,7 @@
 
 ## 2026-11-17
 
+- **Fix: flaky test** in `server/test/errors.test.ts`. It checked that a logged error didn't contain "42" (the id in the URL), which failed whenever the log timestamp contained :42 seconds, and it blocked the first automatic deploy. It now checks for the concrete path `/boom/42` and `token=` instead.
 - **Automatic server deploys.** Fly's GitHub connection doesn't deploy on merge (it only deploys from the dashboard), so `.github/workflows/deploy.yml` tests and deploys the server on every merge to `main` that touches it. It skips the deploy, without failing, until the `FLY_API_TOKEN` repository secret exists. For Flori: create a Fly deploy token and add it on GitHub (README → Deploy).
 - **Event updates and all-clears** [5.4] (roadmap item). People who got an alert are told when it changes or ends:
   - Gets more severe: a fresh alert, pushed as before.
