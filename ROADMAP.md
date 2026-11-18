@@ -1,6 +1,6 @@
 # Hey-Okay roadmap
 
-Source of truth: **PRD v6.4** (section numbers in brackets). Phase 1 = launch in Germany, Month 4. Phase 2 = Months 7–9. Phase 3 = Months 10–12.
+Source of truth: **PRD v6.5** (`docs/PRD.md`, section numbers in brackets; the Google Doc `HeyOkay_PRD_v6.5` is the editable original). Phase 1 = launch in **Germany, the US (California) and India (Bengaluru)**, Month 4. Phase 2 = Months 7–9. Phase 3 = Months 10–12.
 
 The build agent takes the **first unchecked item** in "Up next", builds it, and ticks it off in the same commit. If an item is too big for one run, it splits it into smaller items here and does the first. Flori steers by reordering, adding or deleting items. Items under "Needs a human" are never picked by the agent.
 
@@ -17,7 +17,14 @@ Items that need accounts or keys (Firebase, RevenueCat or App Store products, Ap
 - [x] **Delivery queue** [6.2 step 9]: `push_jobs` table between matching and push (Postgres migration 8, `FOR UPDATE SKIP LOCKED`); `PUSH_CONCURRENCY` senders claim 500 at a time; a dead sender's jobs return after 5 minutes; queue depth on `/health`. Load test: 20 000 pushes for one event drained in ~1 s on Postgres (without network). (2026-11-18)
 - [x] **Country packs, part 1** [8.1]: `server/src/countries.ts` with DE, AT, CH, US (language, emergency/police/medical numbers, units); every source tags its items with a country, events keep it, and the recommended actions name that country's numbers. (2026-11-18)
 - [x] **Country packs, part 2** [8.1]: `COUNTRIES=DE,AT` setting that switches each country's sources on, plus the source registry below. (2026-11-18)
-- [ ] **Country packs, part 3** [8.1]: the first non-German sources (e.g. Austria's official warnings) once Flori picks the next country.
+#### Launch markets: Germany, US, India (PRD v6.5, 2026-11-18)
+
+- [ ] **Country pack India** [8.1, 5.4]: `IN` in `countries.ts` (English; emergency 112, police 100, ambulance 108, fire 101 — verify against official sources), NDMA SACHET CAP feed as the official source (exact areas, like NINA), IMD warnings if a usable feed exists. Fixtures and tests. `COUNTRIES=DE,US,IN`.
+- [ ] **US sources beyond the weather service** [5.4, 8.1]: FEMA IPAWS public alert feed (CAP) next to NWS; then one California city police/fire feed with clear terms. Fixtures and tests.
+- [ ] **Category: technology** [1, 5.4]: new category `technology` (outages, cyber attacks) in server, app and web (label, colour, settings toggle). Sources: BSI / CERT-Bund (DE), CISA (US), CERT-In (IN) advisories filtered to consumer-relevant ones, and status pages of major services (payments, telecoms) for outages. Calm wording; severity rules in the guidance library. Tests.
+- [ ] **Risk outlook (MVP basic)** [6.1 #14]: an "Ahead" section in the app and web listing forecast risks for the person's places in the next 24–48 h — heat (built), official pre-warnings (DWD, NWS watches). Feed only, no push unless an official warning follows.
+- [ ] **AI cost guard** [6.6]: daily LLM spending cap (`LLM_DAILY_BUDGET_EUR`) with the template fallback above it; cost per event and per MAU on the Alert Desk; alert when 80% is reached. Tests.
+- [ ] **Data-insights consent at onboarding** [5.5, Decision 25]: an optional, separate consent ("help improve safety insights — aggregated and anonymous") stored per user with a timestamp; changeable in Settings; nothing is shared until a partner programme exists. Tests.
 - [x] **Observability** [13]: Prometheus metrics on an internal port (`METRICS_PORT` 9091, scraped by Fly via `[metrics]`, never public). The metrics are push latency, pushes sent/failed, queue depth, per-source polls, duration, up and last-OK age, HTTP requests by route pattern, errors by context, and worker lease. Server errors also go to Sentry when `SENTRY_DSN` is set (envelope API, no SDK, 30/min cap, no user data). (2026-11-18; Sentry project and uptime monitor are under "Needs a human".)
 - [x] **Staging and release channels** [10.4]: `fly.staging.toml` (app `heyokay-staging`, schema `heyokay_staging` in the same Supabase project), `.github/workflows/deploy-staging.yml` (deploys on push to `agent/next`, skipped until `FLY_STAGING_API_TOKEN` exists), EAS Update (`expo-updates`, `runtimeVersion: appVersion`, channels development/preview/production, `npm run update:preview|production`), and a secrets table in `docs/runbooks/staging.md`. (2026-11-18; one-time setup steps are under "Needs a human".)
 
@@ -25,11 +32,11 @@ Items that need accounts or keys (Firebase, RevenueCat or App Store products, Ap
 - [ ] **Sign-in: screens in the app and the web** [5.3]: "Anmelden" in Settings (email → code → signed in; sign out), restore on a new phone, account shown in Settings; Apple/Google buttons once their part is done. *(Split from "Sign-in", 2026-11-18.)*
 - [ ] **Source: BVG/VBB disruptions** [5.4]: VBB/HAFAS disruption messages mapped to `transit` events, with stations geocoded. Fixtures and tests.
   - *Blocked 2026-11-18, needs Flori:* VBB's official API (HAFAS with disruption messages) needs an access agreement, and BVG's website uses an internal disruptions endpoint with no published terms, which the agent won't build on without permission. See CHANGELOG → Open questions.
-- [ ] **Freemium + subscriptions** [5.3, 5.5]: free tier = weather + public safety; paid tier (€2.50/month) = all categories and saved places. App: StoreKit 2 / Play Billing via RevenueCat (`react-native-purchases`), a paywall screen, restore purchases. Server: entitlement from store webhooks, enforced in ranking and the places API. Leave room for the €4.99 family plan test (Decision 17). Tests.
+- [ ] **Freemium + subscriptions** [5.3, 5.5]: free tier = weather + public safety; paid tier (€2.50/month, price to be confirmed; local price points for the US and India via store price tiers, Decision 17) = all categories and saved places. App: StoreKit 2 / Play Billing via RevenueCat (`react-native-purchases`), a paywall screen, restore purchases. Server: entitlement from store webhooks, enforced in ranking and the places API. Leave room for the €4.99 family plan test (Decision 17). Tests.
 - [ ] **OS geofencing** [5.3, 11]: register saved places and the current area as OS geofences (`Location.startGeofencingAsync`; iOS max 20 regions). Re-centre the home region on exit, so continuous updates become a fallback, not the main mechanism. Server hint endpoint for active-event regions.
 - [ ] **Digest bucket** [6.1 #7, 6.2 step 7]: ranking returns send / digest / suppress. Digest items are bundled into one push at a user-chosen time (default 18:00) or shown in the feed. Severity-5 official warnings always break through. Tests.
 - [x] **Source registry + health** [11 "data source failure"]: `server/src/sources/registry.ts` describes every source (publisher, country, official, category, fallback, docs). The worker saves each source's status to the database after every poll (`source_status`, Postgres migration 9), so any API machine can show it. The Alert Desk has a Sources table (ok / failing / stale / waiting, last OK, last error, fallback) with problems listed first. (2026-11-18)
-- [ ] **Second LLM provider** [6.3]: an OpenAI implementation of `StructuredLLM` behind a `LLM_PROVIDERS` order with automatic failover and an EU endpoint setting; the template fallback stays last. Tests with fakes.
+- [ ] **Second LLM provider** [6.3, 6.4]: a Mistral (EU) implementation of `StructuredLLM` behind an `LLM_PROVIDERS` order with automatic failover; an OpenAI-compatible adapter so open-weight models hosted in the EU can be plugged in; the template fallback stays last. Compare quality and cost on the eval set (Decision 12). Tests with fakes.
 - [ ] **AI evaluation harness** [6.4, 6.5]: an `eval/` folder with labelled events (start with the fixtures plus 50 synthetic German cases); `npm run eval` reports extraction accuracy, severity agreement, verifier pass rate and cost per event. Alert Desk approve/edit actions export as new labels.
 - [ ] **Decision log + audit** [6.3 EU AI Act]: store every pipeline decision (extraction output, model, prompt version, verifier result, ranking reason) and every Alert Desk action. Admin view and CSV export.
 - [ ] **Alert Desk accounts** [6.2 step 5]: individual reviewer logins (password hash, session cookie) instead of the shared token; review-time metric against the target of under 3 minutes.
@@ -52,7 +59,7 @@ Items that need accounts or keys (Firebase, RevenueCat or App Store products, Ap
 - [ ] **Searchable alert history** [5.3].
 - [ ] **Home-screen widgets** [5.3]: current risk level (iOS WidgetKit and Android via an Expo config plugin).
 - [ ] **Accessibility** [6.1 #11]: read alerts aloud (`expo-speech`) and a simple-language mode generated at composition time.
-- [ ] **English** [6.1 #5, 8.1]: i18n for the app (de/en) and English alert composition; the guidance library in English.
+- [ ] **Hindi** [6.1 #5, 8.1]: Hindi app strings and alert composition for India (English is done for app, web and alert texts since 2026-11-17).
 - [ ] **Sources: Austria, Switzerland, UK** [8.1]: AT/CH official warnings and police sources; UK Met Office and police.
 - [ ] **B2B API + admin portal** [7.2]: org accounts, API keys, alert zones, employee groups and invite links, plus delivery analytics.
 - [ ] **AI incident summaries for orgs** [6.1 #13].
@@ -67,6 +74,12 @@ Items that need accounts or keys (Firebase, RevenueCat or App Store products, Ap
 - [ ] **Apple Watch + Wear OS** [8.3].
 
 ## Needs a human
+
+PRD v6.5 decisions (see PRD Section 12)
+- Decision 24: raise €2M (12 months) or €5M (24 months).
+- Decision 27: data sovereignty — stay on Fly.io / Supabase EU regions or move to EU-owned providers; where US and Indian users' data lives.
+- Concierge pilots: 30–50 users each in Berlin, the Bay Area and Bengaluru.
+- India: local legal review (DPDP Act), entity or partner, price point.
 
 Operations
 - Staging (10 min, `docs/runbooks/staging.md`): `fly apps create heyokay-staging`, set its secrets, add `FLY_STAGING_API_TOKEN` to GitHub, and set `NEXT_PUBLIC_API_URL` for Vercel previews. Then one `preview` and one `production` EAS build, after which app updates go out with `npm run update:preview|production`.
