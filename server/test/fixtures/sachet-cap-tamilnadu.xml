@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+  <identifier>1763480000999999</identifier>
+  <sender>incois@incois.gov.in</sender>
+  <sent>2026-11-18T12:00:00+05:30</sent>
+  <status>Actual</status>
+  <msgType>Alert</msgType>
+  <scope>Public</scope>
+  <info>
+    <language>en-IN</language>
+    <category>Met</category>
+    <event>High Wave Alert</event>
+    <severity>Moderate</severity>
+    <expires>2026-11-19T23:30:00+05:30</expires>
+    <senderName>INCOIS</senderName>
+    <headline>High wave alert for the Tamil Nadu coast</headline>
+    <description>High waves of 2.5 to 3.0 m are forecast along the coast.</description>
+    <area><areaDesc>Chennai coast</areaDesc><circle>13.08,80.29 25</circle></area>
+  </info>
+</alert>
