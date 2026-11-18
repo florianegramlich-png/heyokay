@@ -44,6 +44,9 @@ npm start
 | `HEYOKAY_MODEL` | claude-haiku-5-5 | |
 | `NINA_CHANNELS` | mowas,katwarn,biwapp,dwd,lhp,police | Official BBK warnings |
 | `RSS_FEEDS` | [] | JSON list of police / transit feeds |
+| `FEUERWEHR_BERLIN` | on | Berliner Feuerwehr incident reports (`off` to disable) |
+| `DWD_DIRECT` | fallback | DWD warnings straight from DWD open data: `fallback` (only while NINA's DWD channel fails), `always`, or `off` |
+| `PRESSEPORTAL_AGENCIES` | all | Presseportal Blaulicht press releases: `all`, `off`, or a comma list of agency keys (`polizei-hamburg`, `feuerwehr-hamburg`, `bundespolizei-hamburg`, `polizei-koeln`, `feuerwehr-koeln`, `feuerwehr-muenchen`, `bundespolizei-muenchen`, `bundespolizei-berlin`) |
 | `NWS_AREAS` | – | US National Weather Service alerts for testing in the US: state codes (`CA`) or `lat,lon` points, separated by `;`. Off when empty |
 | `NWS_USER_AGENT` | `GEOCODER_USER_AGENT` | Contact string NWS requires, e.g. `HeyOkay (you@example.com)` |
 | `POLL_INTERVAL_SEC` | 120 | |

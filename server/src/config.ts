@@ -1,3 +1,6 @@
+import { selectAgencies, type PresseportalAgency } from './sources/presseportal.js';
+import { parseDwdMode, type DwdMode } from './sources/dwd.js';
+
 export interface RssFeedConfig {
   url: string;
   sourceName: string;
@@ -19,6 +22,12 @@ export interface Config {
   /** NINA channels to poll. https://warnung.bund.de/api31 */
   ninaChannels: string[];
   rssFeeds: RssFeedConfig[];
+  /** Berliner Feuerwehr incident reports (FEUERWEHR_BERLIN=off to disable). */
+  feuerwehrBerlin: boolean;
+  /** DWD warnings from DWD open data: only while NINA's DWD channel fails (default), always, or off. */
+  dwdDirect: DwdMode;
+  /** Presseportal Blaulicht agencies to poll (keys from sources/presseportal.ts). Default: all of them. */
+  presseportalAgencies: PresseportalAgency[];
   /** US National Weather Service areas to poll: state codes ("CA") or "lat,lon" points. Empty = off. */
   nwsAreas: string[];
   nwsUserAgent: string;
@@ -52,6 +61,9 @@ export function loadConfig(env = process.env): Config {
     model: env.HEYOKAY_MODEL ?? 'claude-haiku-5-5',
     ninaChannels: (env.NINA_CHANNELS ?? 'mowas,katwarn,biwapp,dwd,lhp,police').split(',').map((s) => s.trim()).filter(Boolean),
     rssFeeds: env.RSS_FEEDS ? (JSON.parse(env.RSS_FEEDS) as RssFeedConfig[]) : [],
+    presseportalAgencies: selectAgencies(env.PRESSEPORTAL_AGENCIES),
+    dwdDirect: parseDwdMode(env.DWD_DIRECT),
+    feuerwehrBerlin: !/^(off|false|0|no)$/i.test(env.FEUERWEHR_BERLIN ?? 'on'),
     nwsAreas: (env.NWS_AREAS ?? '').split(';').flatMap((a) => (a.includes(',') && /\d/.test(a) ? [a] : a.split(','))).map((s) => s.trim()).filter(Boolean),
     nwsUserAgent: env.NWS_USER_AGENT ?? env.GEOCODER_USER_AGENT ?? 'HeyOkay/0.1 (set NWS_USER_AGENT to your contact)',
     pollIntervalSec: Number(env.POLL_INTERVAL_SEC ?? 120),

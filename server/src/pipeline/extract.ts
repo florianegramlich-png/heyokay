@@ -5,6 +5,9 @@ import type { StructuredLLM } from '../llm.js';
 import type { Geocoder } from '../geocode.js';
 import { findInText } from '../geocode.js';
 
+/** A geocoder result this wide is a whole city, not a place. */
+const CITY_RADIUS_M = 10_000;
+
 /** Items older than this are history, not alerts. */
 const MAX_AGE_H = 12;
 
@@ -60,13 +63,16 @@ export async function extract(item: SourceItem, deps: ExtractDeps): Promise<Extr
 
   if (llmOut) {
     if (!llmOut.isCurrentSafetyEvent) return null;
-    const geo = (llmOut.place && (await deps.geocoder.geocode(llmOut.place))) || findInText(text) || deps.defaultArea || null;
+    const located = (llmOut.place && (await deps.geocoder.geocode(llmOut.place))) || findInText(text) || null;
+    const geo = located || deps.defaultArea || null;
     if (!geo) return null;
-    const placeFromText = !!llmOut.place && text.toLowerCase().includes(llmOut.place.split(',')[0].trim().toLowerCase());
+    // Only a whole city as the location (nothing more precise could be placed): a person decides.
+    const precise = !!located && located.radiusM < CITY_RADIUS_M;
+    const placeFromText = precise && !!llmOut.place && text.toLowerCase().includes(llmOut.place.split(',')[0].trim().toLowerCase());
     return {
       category: (item.category && llmOut.category === 'public_safety' ? item.category : llmOut.category) as Category,
       severity: llmOut.severity as Severity,
-      // A place the model could not point to in the text lowers confidence → Alert Desk.
+      // A place the model could not point to in the text, or could not be located, lowers confidence → Alert Desk.
       confidence: placeFromText ? llmOut.confidence : Math.min(llmOut.confidence, 0.5),
       title: llmOut.title,
       summary: llmOut.summary,

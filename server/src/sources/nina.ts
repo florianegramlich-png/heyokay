@@ -1,5 +1,5 @@
 import type { Category, Severity, SourceItem } from '../types.js';
-import { enclosingCircle, polygonCircle } from '../geo.js';
+import { enclosingCircle, outerRings, polygonCircle, thinRing } from '../geo.js';
 
 /**
  * NINA (Bundesamt für Bevölkerungsschutz und Katastrophenhilfe) public API.
@@ -35,6 +35,8 @@ export interface NinaWarning {
     headline?: string;
     description?: string;
     instruction?: string;
+    /** MoWaS adds the authority's own extra instructions here (`instructionText`). */
+    parameter?: Array<{ valueName?: string; value?: string }>;
     web?: string;
     expires?: string;
     area?: Array<{ areaDesc?: string }>;
@@ -80,13 +82,29 @@ export function geojsonCircle(g: GeoJson): { lat: number; lon: number; radiusM: 
   return circles.length ? enclosingCircle(circles) : null;
 }
 
+/** More outlines than this (a warning for hundreds of municipalities) and the circle is used instead, to keep events small. */
+const MAX_AREA_RINGS = 60;
+
+/**
+ * Exact warning outlines ([lon, lat] rings) so matching follows the warned area, not the enclosing
+ * circle: a drinking-water warning for two villages shouldn't reach the whole district.
+ */
+export function warningAreas(g: GeoJson | null): [number, number][][] | undefined {
+  const rings = (g?.features ?? []).flatMap((f) => outerRings(f.geometry ?? null)).filter((r) => r?.length >= 3);
+  if (!rings.length || rings.length > MAX_AREA_RINGS) return undefined;
+  return rings.map((r) => thinRing(r, 150));
+}
+
 /** Build a SourceItem from a NINA warning + its GeoJSON. Pure — tested with fixtures. */
 export function toSourceItem(channel: string, entry: NinaMapEntry, warning: NinaWarning, geo: GeoJson | null): SourceItem | null {
   const info = warning.info.find((i) => (i.language ?? '').toUpperCase().startsWith('DE')) ?? warning.info[0];
   if (!info) return null;
   const circle = geo ? geojsonCircle(geo) : null;
   const cancelled = (entry.type ?? warning.msgType ?? '').toLowerCase() === 'cancel';
-  const body = [info.description, info.instruction].filter(Boolean).join('\n\n');
+  // The authority's own extra instructions (MoWaS `instructionText`) come after the standard ones.
+  const extra = (info.parameter ?? []).find((p) => p.valueName === 'instructionText')?.value;
+  const body = [info.description, info.instruction, extra && !(info.instruction ?? '').includes(extra) ? extra : null].filter(Boolean).join('\n\n');
+  const areas = warningAreas(geo);
   return {
     source: 'nina',
     sourceName: CHANNEL_NAMES[channel] ?? `NINA · ${channel}`,
@@ -98,6 +116,7 @@ export function toSourceItem(channel: string, entry: NinaMapEntry, warning: Nina
     url: info.web || `https://warnung.bund.de/meldungen/${encodeURIComponent(entry.id)}`,
     publishedAt: warning.sent ?? entry.startDate ?? new Date().toISOString(),
     lat: circle?.lat, lon: circle?.lon, radiusM: circle?.radiusM,
+    ...(areas ? { areas } : {}),
     officialSeverity: mapSeverity(info.severity ?? entry.severity),
     category: mapCategory(channel, info.category),
     expiresAt: cancelled ? new Date().toISOString() : (info.expires ?? entry.expiresDate),
