@@ -6,12 +6,18 @@ import { ExpoPushSender } from './push.js';
 import { Pipeline } from './pipeline/run.js';
 import { fetchNinaChannel } from './sources/nina.js';
 import { fetchFeed } from './sources/rss.js';
+import { fetchNwsArea, nwsFetcher } from './sources/nws.js';
 import { buildApi } from './api.js';
 import { installProcessHandlers, logError } from './errors.js';
 
 installProcessHandlers();
 
 const config = loadConfig();
+// A hosted server with the default admin token would let anyone send alerts from the Alert Desk.
+if (process.env.NODE_ENV === 'production' && config.adminToken === 'change-me') {
+  console.error('Refusing to start: set ADMIN_TOKEN (e.g. `fly secrets set ADMIN_TOKEN=…`).');
+  process.exit(1);
+}
 const store = await createStore(config);
 const llm = new AnthropicLLM(config.anthropicApiKey, config.model);
 const geocoder = config.geocoderUrl ? new NominatimGeocoder(config.geocoderUrl, config.geocoderUserAgent) : new GazetteerGeocoder();
@@ -39,6 +45,18 @@ async function runIngest() {
       } catch (err) {
         logError('ingest', err, { source: `rss:${feed.sourceName}` });
         report[`rss:${feed.sourceName}`] = { error: (err as Error).message };
+      }
+    }
+    const nwsGet = nwsFetcher(config.nwsUserAgent);
+    for (const area of config.nwsAreas) {
+      try {
+        const { feedKey, items, listedIds } = await fetchNwsArea(area, seen('nws'), nwsGet);
+        const ingested = await pipeline.ingest(items);
+        // Only after a successful poll: alerts that vanished early get an all-clear.
+        report[`nws:${area}`] = { ...ingested, liftedEarly: await pipeline.reconcileFeed(feedKey, listedIds) };
+      } catch (err) {
+        logError('ingest', err, { source: `nws:${area}` });
+        report[`nws:${area}`] = { error: (err as Error).message };
       }
     }
   } finally {

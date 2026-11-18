@@ -25,6 +25,7 @@ export const DESK_HTML = `<!doctype html>
 <main>
   <section><h2>Last 7 days</h2><div class="metrics" id="metrics">Connect with your admin token.</div></section>
   <section><h2>Waiting for review</h2><p class="muted">Severity 4+ from non-official sources, and anything the AI was unsure about. Nothing here reaches users until approved.</p><div id="pending"></div></section>
+  <section><h2>Active events</h2><p class="muted">Released events that haven't ended. "End now" sends an all-clear to everyone who got the alert.</p><div id="active"></div></section>
   <section><h2>Send a curated alert (concierge pilot)</h2>
     <form id="manual" onsubmit="sendManual(event)">
       <div><label>Category</label><select name="category"><option>transit</option><option>crime</option><option>public_safety</option><option>weather</option><option>health</option><option>infrastructure</option></select></div>
@@ -37,6 +38,7 @@ export const DESK_HTML = `<!doctype html>
       <div><label>Latitude</label><input name="lat" type="number" step="any" value="52.5155" required></div>
       <div><label>Longitude</label><input name="lon" type="number" step="any" value="13.4549" required></div>
       <div><label>Radius (m)</label><input name="radiusM" type="number" value="1500" required></div>
+      <div><label>Language</label><select name="language"><option value="de">Deutsch</option><option value="en">English</option></select></div>
       <div style="align-self:end"><button>Send to affected users</button></div>
     </form><p class="muted" id="manualOut"></p>
   </section>
@@ -63,8 +65,14 @@ async function load(){
           <select id="s-\${e.id}">\${[1,2,3,4,5].map(n=>'<option '+(n===e.severity?'selected':'')+'>'+n+'</option>').join('')}</select>
           <button onclick="approve('\${e.id}')">Approve &amp; send</button><button class="reject" onclick="reject('\${e.id}')">Reject</button></div>
       </div>\`).join(''):'<p class="muted">Nothing waiting.</p>';
+    const act=(await api('/admin/api/active')).events.filter(e=>e.status==='auto'||e.status==='approved');
+    $('#active').innerHTML=act.length?act.map(e=>\`
+      <div class="ev"><div class="row"><span class="sev s\${e.severity}">\${e.severity}</span> <b>\${esc(e.copyTitle||e.title)}</b>
+        <span class="muted">· \${esc(e.category)} · \${esc((e.areaName||'').slice(0,60))}\${e.endsAt?' · until '+new Date(e.endsAt).toLocaleString():''}</span>
+        <button class="reject" onclick="endEvent('\${e.id}')">End now (all clear)</button></div></div>\`).join(''):'<p class="muted">No active events.</p>';
   }catch(e){$('#metrics').textContent='Could not load: '+e.message;}
 }
+async function endEvent(id){if(!confirm('End this event and send an all-clear?'))return;const r=await api('/admin/api/events/'+id+'/end',{method:'POST'});alert('All-clear: '+r.alerts+' alerts, '+r.pushes+' pushes');load();}
 async function approve(id){const t=$('#t-'+id).value,b=$('#b-'+id).value,s=Number($('#s-'+id).value);
   const r=await api('/admin/api/events/'+id+'/approve',{method:'POST',body:JSON.stringify({...(t&&{title:t}),...(b&&{body:b}),severity:s})});
   alert('Sent: '+r.alerts+' alerts, '+r.pushes+' pushes');load();}

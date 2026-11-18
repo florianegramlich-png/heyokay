@@ -120,7 +120,18 @@ export function buildApi({ store, pipeline, adminToken, runIngest, errorSink = s
   app.get('/v1/me/alerts', async (req, reply) => {
     const u = await authed(req, reply); if (!u) return;
     const limit = Math.min(Number((req.query as any)?.limit ?? 50), 200);
-    return { alerts: await store.alertsForUser(u.id, limit) };
+    // `ended`: the event is over (ran out or was lifted) — the app greys these out.
+    const now = Date.now();
+    const endedById = new Map<string, boolean>();
+    const alerts = [];
+    for (const a of await store.alertsForUser(u.id, limit)) {
+      if (!endedById.has(a.eventId)) {
+        const e = await store.getEvent(a.eventId);
+        endedById.set(a.eventId, !e || e.status === 'rejected' || (!!e.endsAt && Date.parse(e.endsAt) <= now));
+      }
+      alerts.push({ ...a, kind: a.kind ?? 'new', ended: endedById.get(a.eventId)! });
+    }
+    return { alerts };
   });
 
   app.get('/v1/alerts/:id', async (req, reply) => {
@@ -173,8 +184,17 @@ export function buildApi({ store, pipeline, adminToken, runIngest, errorSink = s
       title: z.string().min(3).max(50), body: z.string().min(3).max(100),
       sourceName: z.string().min(2), sourceUrl: z.string().url().optional(),
       ...Coord, radiusM: z.number().min(100).max(50000), areaName: z.string().min(2), endsAt: z.string().optional(),
+      language: z.enum(['de', 'en']).optional(),
     }).parse(req.body);
     return pipeline.manualAlert(b as any);
+  });
+
+  /** End an active event now and send the all-clear to everyone who got it. */
+  app.post('/admin/api/events/:id/end', async (req, reply) => {
+    if (!admin(req, reply)) return;
+    const out = await pipeline.endEvent((req.params as any).id);
+    if (!out) return reply.code(404).send({ error: 'not_found' });
+    return out;
   });
 
   app.post('/admin/api/ingest', async (req, reply) => {

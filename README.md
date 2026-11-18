@@ -44,6 +44,8 @@ npm start
 | `HEYOKAY_MODEL` | claude-haiku-5-5 | |
 | `NINA_CHANNELS` | mowas,katwarn,biwapp,dwd,lhp,police | Official BBK warnings |
 | `RSS_FEEDS` | [] | JSON list of police / transit feeds |
+| `NWS_AREAS` | – | US National Weather Service alerts for testing in the US: state codes (`CA`) or `lat,lon` points, separated by `;`. Off when empty |
+| `NWS_USER_AGENT` | `GEOCODER_USER_AGENT` | Contact string NWS requires, e.g. `HeyOkay (you@example.com)` |
 | `POLL_INTERVAL_SEC` | 120 | |
 | `GEOCODER_URL` | Nominatim | Use your own instance for volume; the built-in gazetteer is the fallback |
 | `MATCH_BUFFER_M` | 1500 | Extra distance around an event's area |
@@ -59,6 +61,38 @@ TEST_DATABASE_URL=postgres://heyokay:heyokay@localhost:5432/heyokay_test npm tes
 ```
 
 Schema changes are numbered migrations in `server/src/pg.ts` (`MIGRATIONS`), applied on start under an advisory lock, so several instances can start at once. Postgres needs the **PostGIS** extension: the server runs `CREATE EXTENSION IF NOT EXISTS postgis`, so on a managed database either enable it once as an admin or let the app's role create it. Finding the users affected by an event is a GIST index lookup on current locations and saved places.
+
+## Deploy (Fly.io)
+
+The server ships as a Docker image (`Dockerfile` at the repo root, building `server/`) with a Fly.io config (`fly.toml`, also at the root, where Fly's GitHub launcher looks): Frankfurt, one always-on machine, SQLite on a 1 GB persistent volume, health check on `/health`. In production the server refuses to start without `ADMIN_TOKEN`.
+
+**Easiest: Fly's "Deploy from GitHub".** Connect the repo, branch `main`. Fly finds `fly.toml` and the Dockerfile at the root. Before deploying, add the secrets below (`ADMIN_TOKEN`, `NWS_USER_AGENT`, `GEOCODER_USER_AGENT`) and keep it to one machine. Fly then redeploys on every push to `main`.
+
+**Automatic deploys on merge** (`.github/workflows/deploy.yml`): Fly's GitHub connection only deploys when you click Deploy in the dashboard, so a workflow deploys every merge to `main` that touches the server, after the tests pass. One-time setup:
+
+1. Fly dashboard → app `heyokay` → **Tokens** → create a deploy token (no expiry) and copy it.
+2. GitHub → the repo → Settings → Secrets and variables → Actions → **New repository secret**: name `FLY_API_TOKEN`, value the token.
+
+Without that secret the workflow skips the deploy instead of failing. "Run workflow" in the Actions tab deploys by hand.
+
+Or from the terminal, first time (from the repo root):
+
+```bash
+brew install flyctl && fly auth login
+fly launch --no-deploy --copy-config      # accept the config; pick a unique app name if asked
+fly volumes create heyokay_data --region fra --size 1 --yes
+fly secrets set ADMIN_TOKEN="$(openssl rand -hex 24)" \
+  NWS_USER_AGENT="HeyOkay (your contact email)" GEOCODER_USER_AGENT="HeyOkay (your contact email)"
+fly deploy --ha=false                     # SQLite = exactly one machine
+```
+
+Afterwards: `fly deploy --ha=false` for each update, `fly logs` for logs, `fly secrets list` to check secrets. The API is at `https://<app>.fly.dev` and the Alert Desk at `https://<app>.fly.dev/admin`. To see the admin token later, set a new one with `fly secrets set ADMIN_TOKEN=…` (Fly never shows secrets again).
+
+Point the app at it: `EXPO_PUBLIC_API_URL=https://<app>.fly.dev npx expo start --dev-client --tunnel`, or set `extra.apiUrl` in `app/app.json` for builds.
+
+`fly.toml` sets `NWS_AREAS=CA` for US testing; remove it for a Germany-only server.
+
+To move from SQLite to Postgres, set `DATABASE_URL` as a Fly secret (the database needs PostGIS, see Postgres above); the server then ignores the volume. Managed Postgres in production is still open on the roadmap.
 
 ## How an alert is made (PRD 6.2)
 

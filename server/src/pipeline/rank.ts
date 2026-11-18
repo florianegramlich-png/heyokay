@@ -1,5 +1,5 @@
 import type { Delivery, RiskEvent, SavedPlace, User } from '../types.js';
-import { distanceM, LOCATION_MAX_AGE_MS } from '../geo.js';
+import { distanceM, distanceToAreasM, LOCATION_MAX_AGE_MS } from '../geo.js';
 
 export interface Match {
   /** null = the user's current location; otherwise the saved place's label. */
@@ -13,13 +13,19 @@ export function match(user: User, places: SavedPlace[], event: RiskEvent, buffer
   if (user.lat != null && user.lon != null && user.locationUpdatedAt &&
       now.getTime() - Date.parse(user.locationUpdatedAt) < LOCATION_MAX_AGE_MS) {
     const d = distanceM(user.lat, user.lon, event.lat, event.lon);
-    if (d <= event.radiusM + bufferM) hits.push({ place: null, distanceM: d });
+    if (inZone(event, user.lat, user.lon, d, bufferM)) hits.push({ place: null, distanceM: d });
   }
   for (const p of places) {
     const d = distanceM(p.lat, p.lon, event.lat, event.lon);
-    if (d <= event.radiusM + p.radiusM) hits.push({ place: p.label, distanceM: d });
+    if (inZone(event, p.lat, p.lon, d, p.radiusM)) hits.push({ place: p.label, distanceM: d });
   }
   return hits.sort((a, b) => (a.place === null ? -1 : 0) - (b.place === null ? -1 : 0) || a.distanceM - b.distanceM)[0] ?? null;
+}
+
+/** Exact outlines when the source gave them (NWS zones); otherwise the event circle. */
+function inZone(event: RiskEvent, lat: number, lon: number, dCentre: number, marginM: number): boolean {
+  if (event.areas?.length) return distanceToAreasM(lat, lon, event.areas) <= marginM;
+  return dCentre <= event.radiusM + marginM;
 }
 
 export interface RankContext {

@@ -67,6 +67,11 @@ export const MIGRATIONS: { version: number; sql: string }[] = [
       ALTER TABLE saved_places ADD CONSTRAINT saved_places_radius CHECK (radius_m > 0 AND radius_m <= ${MAX_PLACE_RADIUS_M});
     `,
   },
+  {
+    // Event updates and all-clears look up everyone who got an alert for an event.
+    version: 3,
+    sql: `CREATE INDEX alerts_event ON alerts(event_id);`,
+  },
 ];
 
 /**
@@ -253,6 +258,15 @@ export class PgStore implements Store {
     await this.q(`UPDATE source_items SET event_id = $1 WHERE source = $2 AND external_id = $3`, [eventId, item.source, item.externalId]);
   }
 
+  async eventIdForSourceRefs(source: string, externalIds: string[]): Promise<string | null> {
+    if (!externalIds.length) return null;
+    const { rows } = await this.q(
+      `SELECT event_id FROM source_items WHERE source = $1 AND event_id IS NOT NULL AND external_id = ANY($2::text[])
+       ORDER BY first_seen_at DESC LIMIT 1`, [source, externalIds],
+    );
+    return rows[0]?.event_id ?? null;
+  }
+
   // ── events ───────────────────────────────────────────────────────────────
   async saveEvent(e: RiskEvent): Promise<void> {
     await this.q(`
@@ -299,10 +313,20 @@ export class PgStore implements Store {
     return rows.length > 0;
   }
 
+  async recipients(eventId: string): Promise<Array<{ userId: string; pushed: boolean }>> {
+    const { rows } = await this.q(
+      `SELECT user_id, bool_or(delivery = 'push') AS pushed FROM alerts
+       WHERE event_id = $1 AND delivery != 'suppressed' GROUP BY user_id`, [eventId],
+    );
+    return rows.map((r) => ({ userId: r.user_id, pushed: !!r.pushed }));
+  }
+
+  /** Updates and all-clears (kind != 'new') don't count toward the daily limit (PRD 5.4). */
   async pushCountSince(userId: string, sinceIso: string): Promise<number> {
     if (!isUuid(userId)) return 0;
     const { rows } = await this.q(
-      `SELECT COUNT(*) AS n FROM alerts WHERE user_id = $1 AND delivery = 'push' AND created_at >= $2`, [userId, sinceIso],
+      `SELECT COUNT(*) AS n FROM alerts WHERE user_id = $1 AND delivery = 'push' AND created_at >= $2
+         AND COALESCE(data->>'kind', 'new') = 'new'`, [userId, sinceIso],
     );
     return Number(rows[0].n);
   }

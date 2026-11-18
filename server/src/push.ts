@@ -20,7 +20,7 @@ export class ExpoPushSender implements PushSender {
         body: alert.body,
         sound: 'default',
         priority: alert.severity >= 4 ? 'high' : 'normal',
-        channelId: alert.severity >= 4 ? 'severe' : 'alerts',
+        channelId: alert.severity >= 4 ? 'urgent' : 'alerts', // channels defined in app/src/lib/notifications.ts
         // Severity 5 official warnings use iOS time-sensitive interruption; Critical Alerts need Apple's entitlement (Decision 16).
         interruptionLevel: alert.severity >= 4 ? 'time-sensitive' : 'active',
         data: { alertId: alert.id, url: `heyokay://alert/${alert.id}` },

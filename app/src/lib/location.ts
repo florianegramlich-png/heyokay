@@ -1,6 +1,7 @@
 import * as Location from 'expo-location';
 import * as TaskManager from 'expo-task-manager';
 import { api } from './api';
+import { getLanguage, translate } from './i18n';
 
 export const LOCATION_TASK = 'heyokay-location';
 
@@ -54,8 +55,8 @@ export async function startBackgroundUpdates() {
     activityType: Location.ActivityType.Other,
     showsBackgroundLocationIndicator: false,
     foregroundService: {
-      notificationTitle: 'Hey-Okay ist aktiv',
-      notificationBody: 'Warnungen für deine Umgebung',
+      notificationTitle: translate(getLanguage(), 'fgs.title'),
+      notificationBody: translate(getLanguage(), 'fgs.body'),
       notificationColor: '#0F766E',
     },
   });

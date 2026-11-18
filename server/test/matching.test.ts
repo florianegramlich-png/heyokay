@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { Store } from '../src/store.js';
 import { match } from '../src/pipeline/rank.js';
+import { distanceM } from '../src/geo.js';
 import { storeBackends } from './backends.js';
 
 const OSTKREUZ = { lat: 52.503, lon: 13.469, radiusM: 1000 };
@@ -75,6 +76,29 @@ describe.each(storeBackends())('usersNear ($name)', (backend) => {
     const matched = found.filter((f) => match(f.user, f.places, event, BUFFER, now)).map((f) => f.user.id).sort();
     expect(expected.length).toBeGreaterThan(5);
     expect(expected.length).toBeLessThan(all.length - 5);
+    expect(matched).toEqual(expected);
+  });
+
+  it('finds everyone `match` would alert for an event with exact warning outlines (NWS zones)', async () => {
+    // A triangle-ish zone; the event circle encloses its corners, as the NWS adapter computes it.
+    const ring: [number, number][] = [[13.40, 52.48], [13.52, 52.49], [13.47, 52.55], [13.40, 52.48]];
+    const lat = (52.48 + 52.49 + 52.55) / 3, lon = (13.40 + 13.52 + 13.47) / 3;
+    const radiusM = Math.max(...ring.map(([x, y]) => distanceM(lat, lon, y, x)));
+    const event = { lat, lon, radiusM, areas: [ring], endsAt: null } as any;
+    let seed = 7;
+    const rnd = () => ((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);
+    for (let i = 0; i < 80; i++) {
+      // Spread over a box a little larger than the circle + buffer, many near corners and edges.
+      await userAt(52.45 + rnd() * 0.13, 13.36 + rnd() * 0.2);
+    }
+    for (const [x, y] of ring.slice(0, 3)) await userAt(y + north(BUFFER - 20), x); // just inside the buffer at a corner
+    const now = new Date();
+    const all = await store.allUsers();
+    const expected = all.filter((u) => match(u, [], event, BUFFER, now)).map((u) => u.id).sort();
+    const found = await store.usersNear(event, BUFFER, now);
+    const matched = found.filter((f) => match(f.user, f.places, event, BUFFER, now)).map((f) => f.user.id).sort();
+    expect(expected.length).toBeGreaterThan(10);
+    expect(expected.length).toBeLessThan(all.length - 10);
     expect(matched).toEqual(expected);
   });
 });

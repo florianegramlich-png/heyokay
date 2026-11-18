@@ -50,6 +50,8 @@ export interface Store {
   recordSourceItem(item: SourceItem): Promise<boolean>;
   hasSourceItem(source: string, externalId: string): Promise<boolean>;
   linkSourceItem(item: SourceItem, eventId: string): Promise<void>;
+  /** The event an earlier source message belongs to (any age), for updates that reference it. */
+  eventIdForSourceRefs(source: string, externalIds: string[]): Promise<string | null>;
 
   // events
   saveEvent(e: RiskEvent): Promise<void>;
@@ -62,6 +64,9 @@ export interface Store {
   /** Returns null if this user already has an alert for this event revision. */
   insertAlert(a: Omit<Alert, 'id' | 'createdAt' | 'feedback'>): Promise<Alert | null>;
   hasAlertForEvent(userId: string, eventId: string): Promise<boolean>;
+  /** Everyone who was told about this event (feed or push), and whether any of it reached them as a push. */
+  recipients(eventId: string): Promise<Array<{ userId: string; pushed: boolean }>>;
+  /** Pushes that count toward the daily limit: updates and all-clears (kind != 'new') don't (PRD 5.4). */
   pushCountSince(userId: string, sinceIso: string): Promise<number>;
   alertsForUser(userId: string, limit?: number): Promise<Alert[]>;
   getAlert(userId: string, alertId: string): Promise<Alert | null>;

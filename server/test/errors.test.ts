@@ -21,7 +21,7 @@ describe('server error reporting', () => {
   it('logs an unexpected route error as one structured entry without query or token, and returns 500', async () => {
     const { app, logged } = api();
     app.get('/boom/:id', async () => { throw new Error('kaputt'); });
-    const res = await app.inject({ method: 'GET', url: '/boom/id-8f3c9a?token=secret-admin', headers: { authorization: 'Bearer device-token' } });
+    const res = await app.inject({ method: 'GET', url: '/boom/42?token=secret-admin', headers: { authorization: 'Bearer device-token' } });
     expect(res.statusCode).toBe(500);
     expect(res.json()).toEqual({ error: 'internal' });
     expect(logged).toHaveLength(1);
@@ -29,7 +29,10 @@ describe('server error reporting', () => {
     const line = JSON.stringify(logged[0]);
     expect(line).not.toContain('secret-admin');
     expect(line).not.toContain('device-token');
-    expect(line).not.toContain('id-8f3c9a');
+    // The concrete path (`/boom/42`) must not appear, only the route pattern. Checking for a bare "42"
+    // was flaky: timestamps like 01:13:42 contain it too.
+    expect(line).not.toContain('/boom/42');
+    expect(line).not.toContain('token=');
   });
 
   it('keeps client errors (malformed JSON) as 400 and does not log them as errors', async () => {

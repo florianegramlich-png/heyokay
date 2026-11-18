@@ -16,6 +16,15 @@ export function findCluster(ext: ExtractedEvent, item: SourceItem, active: RiskE
     const same = active.find((e) => e.sources.some((s) => ninaRootId(s.externalId) === root));
     if (same) return same;
   }
+  // CAP updates/cancellations name the message they replace (NWS does this for every update).
+  if (item.references?.length) {
+    const refs = new Set(item.references);
+    const same = active.find((e) => e.sources.some((s) => refs.has(s.externalId)));
+    if (same) return same;
+  }
+  // NWS gives every alert an id and names the alert it updates. Two different NWS alerts are two
+  // different warnings even when their wording is alike ("... until November 18 at ..."), so never fuzzy-merge.
+  if (item.source === 'nws') return null;
   let best: { e: RiskEvent; score: number } | null = null;
   for (const e of active) {
     if (e.category !== ext.category || ext.lat == null || ext.lon == null) continue;
@@ -35,20 +44,29 @@ export function newEvent(ext: ExtractedEvent, item: SourceItem, status: EventSta
     category: ext.category, severity: ext.severity, confidence: ext.confidence, official: item.official,
     title: ext.title, summary: ext.summary, areaName: ext.areaName,
     lat: ext.lat!, lon: ext.lon!, radiusM: ext.radiusM,
+    ...(item.areas?.length ? { areas: item.areas } : {}),
     startsAt: ext.startsAt, endsAt: ext.endsAt, status,
     facts: factText(item),
     sources: [{ sourceName: item.sourceName, externalId: item.externalId, url: item.url, title: item.title, official: item.official }],
     copyTitle: null, copyBody: null, copyAction: null, copyIsTemplate: false,
+    language: item.language ?? 'de',
+    ...(item.feedKey ? { feedKeys: [item.feedKey] } : {}),
     createdAt: now.toISOString(), updatedAt: now.toISOString(), revision: 1,
   };
 }
 
+/** End-time shifts smaller than this aren't worth telling anyone about. */
+const END_SHIFT_MS = 60 * 60_000;
+
 /**
- * Merge a new report into an existing event. Returns whether users should get an update
- * (severity went up). Official severity always wins over model severity.
+ * Merge a new report into an existing event. Official severity always wins over model severity.
+ * - escalated: severity went up → everyone affected gets a fresh alert (and may get a push).
+ * - changed: it went down or its official end time moved by an hour or more → people who already
+ *   got it get a calm update in their feed.
  */
-export function mergeInto(e: RiskEvent, ext: ExtractedEvent, item: SourceItem, now = new Date()): { escalated: boolean } {
+export function mergeInto(e: RiskEvent, ext: ExtractedEvent, item: SourceItem, now = new Date()): { escalated: boolean; changed: boolean } {
   const before = e.severity;
+  const endBefore = e.endsAt;
   if (item.official) {
     e.severity = ext.severity;
     e.official = true;
@@ -57,6 +75,11 @@ export function mergeInto(e: RiskEvent, ext: ExtractedEvent, item: SourceItem, n
     e.endsAt = ext.endsAt;
     e.title = ext.title;
     e.summary = ext.summary;
+    if (item.areas?.length) {
+      // The official area changed (e.g. an NWS update dropped zones): follow it.
+      e.areas = item.areas;
+      if (ext.lat != null && ext.lon != null) { e.lat = ext.lat; e.lon = ext.lon; e.radiusM = ext.radiusM; }
+    }
   } else if (!e.official) {
     e.severity = Math.max(e.severity, ext.severity) as RiskEvent['severity'];
     e.confidence = Math.max(e.confidence, ext.confidence);
@@ -66,13 +89,17 @@ export function mergeInto(e: RiskEvent, ext: ExtractedEvent, item: SourceItem, n
     e.sources.push({ sourceName: item.sourceName, externalId: item.externalId, url: item.url, title: item.title, official: item.official });
     e.facts = `${e.facts}\n---\n${factText(item)}`.slice(-20_000);
   }
+  if (item.feedKey && !(e.feedKeys ?? []).includes(item.feedKey)) e.feedKeys = [...(e.feedKeys ?? []), item.feedKey];
   e.updatedAt = now.toISOString();
   const escalated = e.severity > before;
-  if (escalated) {
+  const endShifted = endBefore !== e.endsAt && (
+    !endBefore || !e.endsAt || Math.abs(Date.parse(e.endsAt) - Date.parse(endBefore)) >= END_SHIFT_MS);
+  const changed = !escalated && (e.severity < before || (item.official && endShifted));
+  if (escalated || changed) {
     e.revision += 1;
-    e.copyTitle = e.copyBody = e.copyAction = null; // re-write the alert for the new severity
+    e.copyTitle = e.copyBody = e.copyAction = null; // re-write the alert for what changed
   }
-  return { escalated };
+  return { escalated, changed };
 }
 
 function factText(item: SourceItem): string {

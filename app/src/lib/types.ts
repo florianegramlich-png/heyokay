@@ -5,6 +5,8 @@ export type Category = (typeof CATEGORIES)[number];
 export type Severity = 1 | 2 | 3 | 4 | 5;
 export type Delivery = 'push' | 'feed' | 'suppressed';
 export type Feedback = 'relevant' | 'not_relevant';
+/** new = first alert; update = the event changed; all_clear = it was lifted early. */
+export type AlertKind = 'new' | 'update' | 'all_clear';
 
 export interface QuietHours { start: string; end: string }
 
@@ -46,26 +48,13 @@ export interface Alert {
   reason: string;
   feedback: Feedback | null;
   createdAt: string;
+  kind: AlertKind;
+  /** The event is over (ran out or was lifted). */
+  ended: boolean;
 }
 
 export interface SourceRef { sourceName: string; url?: string; title: string; official: boolean }
 
 export interface AlertDetail { alert: Alert; sources: SourceRef[]; summary: string; endsAt: string | null }
 
-export const CATEGORY_LABEL: Record<Category, string> = {
-  weather: 'Unwetter',
-  crime: 'Polizeilage',
-  transit: 'ÖPNV-Störung',
-  public_safety: 'Gefahrenlage',
-  health: 'Gesundheit',
-  infrastructure: 'Infrastruktur',
-};
-
-export const CATEGORY_HINT: Record<Category, string> = {
-  weather: 'Sturm, Gewitter, Hitze, Hochwasser',
-  crime: 'Polizeieinsätze und Sperrungen in deiner Nähe',
-  transit: 'Ausfälle und Sperrungen bei S-/U-Bahn',
-  public_safety: 'Brände, Bombenfunde, Gefahrstoffe',
-  health: 'Trinkwasser, Luftqualität',
-  infrastructure: 'Strom-, Wasser- und Netzausfälle',
-};
+// Category labels and hints live in lib/i18n.ts (German + English).

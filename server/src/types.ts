@@ -6,7 +6,9 @@ export type Category = (typeof CATEGORIES)[number];
 /** 1 = info, 2 = minor, 3 = moderate, 4 = severe, 5 = extreme. Same meaning across all sources. */
 export type Severity = 1 | 2 | 3 | 4 | 5;
 
-export type SourceKind = 'nina' | 'rss' | 'manual';
+export type SourceKind = 'nina' | 'nws' | 'rss' | 'manual';
+
+export type Language = 'de' | 'en';
 
 /** A raw item as it arrives from a source, before the AI pipeline touches it. */
 export interface SourceItem {
@@ -14,6 +16,12 @@ export interface SourceItem {
   /** Feed-level name shown to users, e.g. "NINA (BBK)", "Polizei Berlin". */
   sourceName: string;
   externalId: string;
+  /** Earlier messages this one updates or cancels (NWS/CAP `references`). Used to keep one event per incident. */
+  references?: string[];
+  /** Language of the source text, and so of the alert copy. Default 'de'. */
+  language?: Language;
+  /** The polled feed this item came from (e.g. 'nws:CA'); see RiskEvent.feedKeys. */
+  feedKey?: string;
   /** Official warning systems (NINA/MoWaS, DWD via NINA). Official levels override the model. */
   official: boolean;
   title: string;
@@ -28,6 +36,8 @@ export interface SourceItem {
   category?: Category;
   expiresAt?: string;
   areaName?: string;
+  /** Exact warning area as polygon outlines ([lon, lat] rings). When present, matching uses these, not the circle. */
+  areas?: [number, number][][];
 }
 
 /** What extraction produces from one source item. */
@@ -68,6 +78,8 @@ export interface RiskEvent {
   lat: number;
   lon: number;
   radiusM: number;
+  /** Exact warning area, when the source gives one. The circle above stays for the map and as the fallback. */
+  areas?: [number, number][][];
   startsAt: string;
   endsAt: string | null;
   status: EventStatus;
@@ -80,6 +92,11 @@ export interface RiskEvent {
   copyIsTemplate: boolean;
   createdAt: string;
   updatedAt: string;
+  /** Language the alert copy is written in. Missing = 'de' (events created before this field existed). */
+  language?: Language;
+  /** Source feeds that list this event while it is active, e.g. 'nws:CA'. When an event drops out of
+   *  its feed before its end time, it was lifted early (NWS removes cancelled alerts instead of announcing it). */
+  feedKeys?: string[];
   /** Bumped when severity rises or a new source changes the event, so users get an update. */
   revision: number;
 }
@@ -91,6 +108,9 @@ export interface AlertCopy {
 }
 
 export type Delivery = 'push' | 'feed' | 'suppressed';
+
+/** new = first alert for an event; update = it changed (downgrade, new end time); all_clear = it ended early. */
+export type AlertKind = 'new' | 'update' | 'all_clear';
 export type Feedback = 'relevant' | 'not_relevant';
 
 export interface QuietHours {
@@ -103,7 +123,7 @@ export interface UserPrefs {
   quietHours: QuietHours | null;
   dailyLimit: number;
   timezone: string;
-  language: 'de' | 'en';
+  language: Language;
 }
 
 export const DEFAULT_PREFS: UserPrefs = {
@@ -154,6 +174,8 @@ export interface Alert {
   matchedPlace: string | null;
   delivery: Delivery;
   reason: string;
+  /** Missing on alerts created before updates existed = 'new'. */
+  kind?: AlertKind;
   feedback: Feedback | null;
   createdAt: string;
 }
