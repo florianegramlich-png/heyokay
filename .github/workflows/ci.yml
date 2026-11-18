@@ -21,7 +21,9 @@ jobs:
     # The store contract and end-to-end tests also run against Postgres (with PostGIS and pgvector).
     services:
       postgres:
-        image: postgis/postgis:16-3.4
+        # Debian bookworm: the postgis/postgis 16 images are on bullseye, whose apt.postgresql.org
+        # repository has been archived, so nothing can be installed into them any more.
+        image: postgres:16-bookworm
         env:
           POSTGRES_USER: heyokay
           POSTGRES_PASSWORD: heyokay
@@ -42,9 +44,9 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: server/package-lock.json
-      # The PostGIS image has no pgvector; add it the same way server/docker/postgres/Dockerfile does.
-      - name: Add pgvector to the Postgres service
-        run: docker exec ${{ job.services.postgres.id }} sh -c 'apt-get update -qq && apt-get install -y -qq --no-install-recommends postgresql-16-pgvector'
+      # Add PostGIS and pgvector to the service, the same way server/docker/postgres/Dockerfile does.
+      - name: Add PostGIS and pgvector to the Postgres service
+        run: docker exec ${{ job.services.postgres.id }} sh -c 'apt-get update -qq && apt-get install -y -qq --no-install-recommends postgresql-16-postgis-3 postgresql-16-pgvector'
       - run: npm ci
       - run: npm test
       - run: npm run typecheck
