@@ -1,6 +1,7 @@
 import type { CountryCode } from '../countries.js';
 import { isCountry } from '../countries.js';
 import type { SourceStatus } from '../ingest.js';
+import { US_STATUS_PAGES } from './statuspage.js';
 
 /**
  * Source registry (PRD 11 "data source failure"; country packs, docs/ARCHITECTURE.md §8 step 4).
@@ -16,7 +17,7 @@ export interface SourceInfo {
   /** '*' = follows people's places (any country), e.g. heat forecasts. */
   country: CountryCode | '*';
   official: boolean;
-  category: 'warnings' | 'weather' | 'police' | 'fire' | 'transit' | 'news' | 'system';
+  category: 'warnings' | 'weather' | 'police' | 'fire' | 'transit' | 'technology' | 'news' | 'system';
   /** Key (prefix) of the source that covers this one's area when it fails. */
   fallback?: string;
   /** Where its terms and format are documented. */
@@ -45,6 +46,10 @@ export function describeSource(key: string): SourceInfo {
       return { key, name: 'OpenWeatherMap · Hitze', country: '*', official: false, category: 'weather', docs: 'https://openweathermap.org/forecast5' };
     case 'nws':
       return { key, name: `US National Weather Service · ${rest}`, country: 'US', official: true, category: 'warnings', docs: 'https://www.weather.gov/documentation/services-web-api' };
+    case 'statuspage': {
+      const page = US_STATUS_PAGES.find((p) => p.key === rest);
+      return { key, name: `Status page · ${page?.name ?? rest}`, country: page?.country ?? 'US', official: false, category: 'technology', docs: page?.url ?? 'https://developer.statuspage.io' };
+    }
     case 'rss':
       return { key, name: rest || 'RSS', country: 'DE', official: false, category: 'news' };
     case 'push':

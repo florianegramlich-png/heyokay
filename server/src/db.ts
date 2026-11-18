@@ -3,7 +3,7 @@ import { randomUUID, createHash, randomBytes } from 'node:crypto';
 import type {
   Alert, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
 } from './types.js';
-import { DEFAULT_PREFS } from './types.js';
+import { DEFAULT_PREFS, normalizePrefs, savedPrefs } from './types.js';
 import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob } from './store.js';
 import type { PushTicket } from './push.js';
 import type { SourceStatus } from './ingest.js';
@@ -115,7 +115,7 @@ export class SqliteStore implements Store {
   }
 
   async updatePrefs(userId: string, prefs: UserPrefs): Promise<void> {
-    this.db.prepare(`UPDATE users SET prefs = ? WHERE id = ?`).run(JSON.stringify(prefs), userId);
+    this.db.prepare(`UPDATE users SET prefs = ? WHERE id = ?`).run(JSON.stringify(savedPrefs(prefs)), userId);
   }
 
   async updatePushToken(userId: string, pushToken: string | null): Promise<void> {
@@ -491,7 +491,7 @@ function rowToAccount(r: any): Account {
 function rowToUser(r: any): User {
   return {
     id: r.id, tokenHash: r.token_hash, pushToken: r.push_token ?? null,
-    prefs: { ...DEFAULT_PREFS, ...JSON.parse(r.prefs) }, lat: r.lat ?? null, lon: r.lon ?? null,
+    prefs: normalizePrefs(JSON.parse(r.prefs)), lat: r.lat ?? null, lon: r.lon ?? null,
     locationUpdatedAt: r.location_updated_at ?? null, createdAt: r.created_at,
   };
 }

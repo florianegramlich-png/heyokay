@@ -11,6 +11,7 @@ import { fetchDwdSnapshot } from './sources/dwd.js';
 import { CELL_DEG, fetchHeat, owmFetcher } from './sources/heat.js';
 import { FEUERWEHR_BERLIN_AREA, fetchFeuerwehrBerlin } from './sources/feuerwehr-berlin.js';
 import { fetchNwsArea, nwsFetcher } from './sources/nws.js';
+import { fetchStatusPage } from './sources/statuspage.js';
 import { buildApi } from './api.js';
 import { createEmbedder } from './embeddings.js';
 import { installProcessHandlers, logError, sentrySink, setErrorSinks, stderrSink } from './errors.js';
@@ -94,6 +95,11 @@ const tasks: SourceTask[] = [
       return { cells: cells.length, checked: r.checked, ...(await ingest(r.items)) };
     },
   }] : []),
+  ...config.statusPages.map((page) => ({
+    key: `statuspage:${page.key}`,
+    // Resolved incidents leave the list: their alerts get an all-clear.
+    run: async () => ingestAndReconcile(await fetchStatusPage(page, seen('statuspage'))),
+  })),
   ...config.nwsAreas.map((area) => ({
     key: `nws:${area}`,
     // Only after a successful poll: alerts that vanished early get an all-clear.
