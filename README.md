@@ -1,5 +1,7 @@
 # Hey-Okay — MVP
 
+Architecture, data sources and every external integration: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
 Calm, location-aware safety alerts for Germany. One sentence on what's happening near you and what to do — only when it concerns you. Built to PRD v6.4 (sections 5–6).
 
 ```
