@@ -1,3 +1,4 @@
+import type { SourceStatus } from './ingest.js';
 import type { PushTicket } from './push.js';
 import type {
   Alert, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
@@ -157,6 +158,10 @@ export interface Store {
   /** Sent (or refused for good): remove from the queue. */
   completePushJobs(ids: string[]): Promise<void>;
   pushQueueDepth(): Promise<number>;
+
+  // source health, written by the worker after each poll, read by any API machine (Alert Desk)
+  saveSourceStatuses(statuses: Record<string, SourceStatus>): Promise<void>;
+  sourceStatuses(): Promise<Record<string, SourceStatus>>;
 
   // leases (one worker at a time across machines; see roles.ts)
   /**

@@ -51,7 +51,7 @@ Live URLs: API `https://heyokay.fly.dev` (health: `/health`, Alert Desk: `/admin
 ### Storage (`store.ts`, `db.ts`, `pg.ts`)
 
 - `Store` interface with two implementations: `SqliteStore` (tests, demo, production today on the Fly volume `/data/heyokay.db`) and `PgStore` (used when `DATABASE_URL` is set; numbered migrations under an advisory lock; PostGIS for matching, pgvector for embeddings).
-- Tables: `users` (a person's data: prefs, last location only, push token), `devices` (hashed bearer tokens; several per signed-in person), `accounts` (email, one per user), `email_codes` (hashed sign-in codes), `saved_places`, `source_items`, `events` (+ `event_embeddings`), `alerts`, `push_tickets` (delivery status per push), `leases` (which worker runs ingest and push), `push_jobs` (delivery queue).
+- Tables: `users` (a person's data: prefs, last location only, push token), `devices` (hashed bearer tokens; several per signed-in person), `accounts` (email, one per user), `email_codes` (hashed sign-in codes), `saved_places`, `source_items`, `events` (+ `event_embeddings`), `alerts`, `push_tickets` (delivery status per push), `leases` (which worker runs ingest and push), `push_jobs` (delivery queue), `source_status` (per-source health written by the worker).
 - Privacy by design: only the latest location (rounded ~100 m on the device), no history; device tokens hashed; `DELETE /v1/me` erases everything; the model never sees user data.
 
 ### Countries (`countries.ts`)
@@ -67,7 +67,7 @@ One pack per country (DE, AT, CH, US): language, emergency / police / medical-ad
 Sign-in: `POST /v1/auth/email/start`, `POST /v1/auth/email/verify`, `POST /v1/auth/signout`.
 Device: `POST /v1/devices`, `GET /v1/me`, `PUT /v1/me/prefs`, `PUT /v1/me/push-token`, `POST /v1/me/location`, `GET|POST|DELETE /v1/me/places`, `DELETE /v1/me`.
 Alerts: `GET /v1/me/alerts`, `GET /v1/alerts/:id`, `POST /v1/alerts/:id/feedback`.
-Admin (token): `/admin`, `/admin/api/pending|active|metrics|ingest|manual-alert|events/:id/approve|reject|end`.
+Admin (token): `/admin`, `/admin/api/pending|active|metrics|sources|ingest|manual-alert|events/:id/approve|reject|end`.
 Health: `GET /health` (per-source status, no error texts). CORS: any origin, bearer tokens only, no cookies.
 
 ## 3. Data sources
@@ -130,6 +130,7 @@ Health: `GET /health` (per-source status, no error texts). CORS: any origin, bea
 | `EXPO_PUSH_URL` | Expo | Push endpoint |
 | `EXPO_ACCESS_TOKEN` | – | Only if Expo "enhanced push security" is on |
 | `DATABASE_SCHEMA` | – | Postgres schema for our tables; `heyokay` on Supabase (keeps them off Supabase's public Data API) |
+| `COUNTRIES` | all | Countries whose sources run, e.g. `DE,AT` (registry in `sources/registry.ts`) |
 | `PUSH_CONCURRENCY` | `4` | Push sends in flight from the delivery queue |
 | `ROLE` | `all` | `api`, `worker` or `all` (see Roles). Separate roles need `DATABASE_URL` |
 | `MATCH_BUFFER_M` | 1500 | Buffer around an event for current locations |
@@ -147,7 +148,7 @@ Phone app: `EXPO_PUBLIC_API_URL` (else `app.json → extra.apiUrl`). Web app: `N
 
 - Tests: server (vitest) on SQLite and Postgres; web (Node test runner); app typecheck. Real fixtures from live sources.
 - Error logging: structured JSON lines on stderr (`errors.ts`); `fly logs -a heyokay`.
-- Health: `/health` per source (`ok`, `running`, `lastOkAt`).
+- Health: `/health` per source (`ok`, `running`, `lastOkAt`) on the worker; the Alert Desk **Sources** table (from `source_status`, any machine) shows ok / failing / stale / waiting with the fallback.
 - Build agent: runs daily on `agent/next`, rules in `AGENT.md`, work list in `ROADMAP.md`, history in `CHANGELOG.md`.
 
 ## 8. Scaling plan (Flori, 2026-11-18: "scalable infrastructure and a product that can expand fast")
@@ -161,7 +162,7 @@ Target, in this order (each is a roadmap item under "Scale foundation"):
 | 1 | 🟡 **Managed Postgres: Supabase** (project `Hey-Okay`, Frankfurt, created and migrated 2026-11-18; copy tool and runbook ready: `docs/runbooks/supabase-postgres.md`; switch pending) (PostGIS + pgvector) in Frankfurt; switch `DATABASE_URL`, migrate the SQLite data once | The code already runs on Postgres; the disk-bound SQLite is the one thing that keeps us on a single machine | Backups, point-in-time restore, more machines |
 | 2 | ✅ **API and worker roles** (built 2026-11-18) (`ROLE=api` / `worker`) plus a worker lease in the database, so exactly one worker polls and sends at a time, with automatic takeover | Several API machines behind Fly's load balancer; one worker never double-sends | Horizontal API scaling, zero-downtime deploys |
 | 3 | ✅ **Delivery queue** (built 2026-11-18; 20k pushes ≈ 1 s on Postgres) in Postgres (`FOR UPDATE SKIP LOCKED`): matching writes jobs, workers send pushes in parallel with retries | A severe warning for a big city means hundreds of thousands of pushes in minutes | Several workers sharing the load |
-| 4 | 🟡 **Country packs** (part 1 built 2026-11-18: packs, country tags, numbers in advice): sources, emergency numbers, advice, language and units per country (`COUNTRIES=DE,AT,CH`), source registry with health | Today Germany and the US test are wired in code (112/110, 911) | New country = config + source adapters |
+| 4 | 🟡 **Country packs** (built 2026-11-18: packs, country tags, numbers in advice, `COUNTRIES`, source registry + health; next: a second country's sources): sources, emergency numbers, advice, language and units per country (`COUNTRIES=DE,AT,CH`), source registry with health | Today Germany and the US test are wired in code (112/110, 911) | New country = config + source adapters |
 | 5 | **API hardening**: rate limits per token and IP, body limits, security headers; CDN caching for the web app | Public launch traffic and abuse | Safe public launch |
 | 6 | **Observability**: metrics (event-to-push p90, queue depth, source lag), error tracking, uptime alerts, `/health` per role | Know before users notice | On-call |
 | 7 | **Environments**: staging Fly app + Vercel preview against staging, EAS Update channels (preview/production), infrastructure as code (Fly config, secrets list) | Ship fast without breaking production | Daily releases |

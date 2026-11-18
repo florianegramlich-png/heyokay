@@ -16,6 +16,7 @@ import { createEmbedder } from './embeddings.js';
 import { installProcessHandlers, logError } from './errors.js';
 import { ResendMailer } from './auth.js';
 import { IngestScheduler, Mutex, type SourceTask } from './ingest.js';
+import { describeSource, sourceEnabled } from './sources/registry.js';
 import { LeaderElector, leaseTtlMs, runsApi, runsWorker } from './roles.js';
 import Fastify from 'fastify';
 
@@ -98,7 +99,9 @@ const tasks: SourceTask[] = [
   })),
 ];
 
-const scheduler = new IngestScheduler(tasks, (key, err) => logError('ingest', err, { source: key }));
+// Only sources of the configured countries (COUNTRIES); system tasks and place-following sources always.
+const enabledTasks = tasks.filter((t) => sourceEnabled(describeSource(t.key), config.countries));
+const scheduler = new IngestScheduler(enabledTasks, (key, err) => logError('ingest', err, { source: key }));
 const worker = runsWorker(config.role);
 const leader = new LeaderElector(store, config.instanceId, leaseTtlMs(config.pollIntervalSec), undefined, (leading) =>
   console.log(`[worker] ${config.instanceId} ${leading ? 'took over ingest and push' : 'stood down'}`));
@@ -106,7 +109,10 @@ const leader = new LeaderElector(store, config.instanceId, leaseTtlMs(config.pol
 const runIngest = async () => {
   if (!worker) return { skipped: 'this machine serves the API only (ROLE=api); the worker polls' };
   if (!(await leader.check())) return { skipped: 'another worker holds the lease' };
-  return scheduler.tick();
+  const report = await scheduler.tick();
+  // Shared with the API machines (Alert Desk → Sources), whichever machine they are.
+  await store.saveSourceStatuses(scheduler.snapshot()).catch((e) => logError('ingest', e, { step: 'source-status' }));
+  return report;
 };
 const roleStatus = async () => ({
   role: config.role,
@@ -116,7 +122,7 @@ const roleStatus = async () => ({
 const mailer = config.resendApiKey && config.mailFrom ? new ResendMailer(config.resendApiKey, config.mailFrom) : null;
 let app;
 if (runsApi(config.role)) {
-  app = buildApi({ store, pipeline, adminToken: config.adminToken, runIngest, ingestStatus: worker ? () => scheduler.snapshot() : undefined, roleStatus, mailer });
+  app = buildApi({ store, pipeline, adminToken: config.adminToken, runIngest, ingestStatus: worker ? () => scheduler.snapshot() : undefined, roleStatus, mailer, pollIntervalSec: config.pollIntervalSec });
 } else {
   // Worker only: no public routes, just the health check the platform polls.
   app = Fastify({ logger: false });

@@ -6,6 +6,7 @@ import type {
 import { DEFAULT_PREFS } from './types.js';
 import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob } from './store.js';
 import type { PushTicket } from './push.js';
+import type { SourceStatus } from './ingest.js';
 import { distanceM, LOCATION_MAX_AGE_MS } from './geo.js';
 import { cosine } from './embeddings.js';
 
@@ -77,6 +78,7 @@ export class SqliteStore implements Store {
         locked_by TEXT, locked_until TEXT
       );
       CREATE INDEX IF NOT EXISTS push_jobs_order ON push_jobs(created_at);
+      CREATE TABLE IF NOT EXISTS source_status (key TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS leases (name TEXT PRIMARY KEY, holder TEXT NOT NULL, expires_at TEXT NOT NULL);
       -- Users from before devices existed sign in with their original token.
       INSERT OR IGNORE INTO devices (token_hash, user_id, created_at) SELECT token_hash, id, created_at FROM users;
@@ -415,6 +417,17 @@ export class SqliteStore implements Store {
 
   async pushQueueDepth(): Promise<number> {
     return Number((this.db.prepare(`SELECT COUNT(*) AS n FROM push_jobs`).get() as any).n);
+  }
+
+  // ── source health ────────────────────────────────────────────────────────
+  async saveSourceStatuses(statuses: Record<string, SourceStatus>): Promise<void> {
+    const up = this.db.prepare(`INSERT INTO source_status (key, data, updated_at) VALUES (?,?,?) ON CONFLICT (key) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`);
+    const now = new Date().toISOString();
+    for (const [k, v] of Object.entries(statuses)) up.run(k, JSON.stringify({ ...v, running: false }), now);
+  }
+
+  async sourceStatuses(): Promise<Record<string, SourceStatus>> {
+    return Object.fromEntries((this.db.prepare(`SELECT key, data FROM source_status`).all() as any[]).map((r) => [r.key, JSON.parse(r.data)]));
   }
 
   // ── leases ───────────────────────────────────────────────────────────────
