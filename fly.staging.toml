@@ -1,0 +1,39 @@
+# Staging: same image as production, its own Fly app, and its own schema in the Supabase project
+# (DATABASE_SCHEMA=heyokay_staging), so tests never touch real users. Deployed from `agent/next`
+# by .github/workflows/deploy-staging.yml. Setup: docs/runbooks/staging.md.
+app = 'heyokay-staging'
+primary_region = 'fra'
+
+[build]
+  dockerfile = 'Dockerfile'
+
+[env]
+  NODE_ENV = 'production'
+  PORT = '8787'
+  DATABASE_SCHEMA = 'heyokay_staging'
+  NWS_AREAS = 'CA'
+  # Fewer polls than production; enough to see the pipeline work.
+  POLL_INTERVAL_SEC = '300'
+
+[http_service]
+  internal_port = 8787
+  force_https = true
+  # Staging may sleep when nobody uses it; the first request wakes it.
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    interval = '30s'
+    timeout = '5s'
+    grace_period = '15s'
+    method = 'GET'
+    path = '/health'
+
+[metrics]
+  port = 9091
+  path = '/metrics'
+
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '512mb'

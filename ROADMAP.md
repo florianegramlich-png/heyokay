@@ -19,7 +19,7 @@ Items that need accounts or keys (Firebase, RevenueCat or App Store products, Ap
 - [x] **Country packs, part 2** [8.1]: `COUNTRIES=DE,AT` setting that switches each country's sources on, plus the source registry below. (2026-11-18)
 - [ ] **Country packs, part 3** [8.1]: the first non-German sources (e.g. Austria's official warnings) once Flori picks the next country.
 - [x] **Observability** [13]: Prometheus metrics on an internal port (`METRICS_PORT` 9091, scraped by Fly via `[metrics]`, never public). The metrics are push latency, pushes sent/failed, queue depth, per-source polls, duration, up and last-OK age, HTTP requests by route pattern, errors by context, and worker lease. Server errors also go to Sentry when `SENTRY_DSN` is set (envelope API, no SDK, 30/min cap, no user data). (2026-11-18; Sentry project and uptime monitor are under "Needs a human".)
-- [ ] **Staging and release channels** [10.4]: staging Fly app and database, Vercel previews against staging, EAS Update channels (preview/production), documented secrets.
+- [x] **Staging and release channels** [10.4]: `fly.staging.toml` (app `heyokay-staging`, schema `heyokay_staging` in the same Supabase project), `.github/workflows/deploy-staging.yml` (deploys on push to `agent/next`, skipped until `FLY_STAGING_API_TOKEN` exists), EAS Update (`expo-updates`, `runtimeVersion: appVersion`, channels development/preview/production, `npm run update:preview|production`), and a secrets table in `docs/runbooks/staging.md`. (2026-11-18; one-time setup steps are under "Needs a human".)
 
 - [ ] **Sign-in: Apple + Google** [5.3, 7.1]: verify Sign in with Apple and Google identity tokens on the server (JWKS, audience, expiry), link to the same accounts as email; `apple_sub` / `google_sub` on accounts. Needs the Apple capability and Google client IDs (see "Needs a human"). *(Split from "Sign-in", 2026-11-18.)*
 - [ ] **Sign-in: screens in the app and the web** [5.3]: "Anmelden" in Settings (email → code → signed in; sign out), restore on a new phone, account shown in Settings; Apple/Google buttons once their part is done. *(Split from "Sign-in", 2026-11-18.)*
@@ -39,7 +39,7 @@ Items that need accounts or keys (Firebase, RevenueCat or App Store products, Ap
 - [ ] **API hardening** [11]: per-token and per-IP rate limits, body size limits, security headers and input fuzz tests.
 - [ ] **Data retention** [11 GDPR]: hourly job expiring ended events, alerts older than 30 days and source items older than 7 days, and clearing locations not updated in 30 days. Tests.
 - [ ] **App unit tests**: jest-expo with tests for `lib/api`, `lib/theme`, the onboarding steps and the paywall gating.
-- [ ] **Deploy config** [10.4]: ~~server Dockerfile, a `fly.toml` (EU region, Frankfurt), a health check and a deploy section in the README~~ (done 2026-11-17, SQLite on a volume for now). Still open: managed Postgres (the server is ready for it via `DATABASE_URL`, with PostGIS), EAS Update (Decision 6). EAS build profiles exist in `app/eas.json`.
+- [ ] **Deploy config** [10.4]: ~~server Dockerfile, a `fly.toml` (EU region, Frankfurt), a health check and a deploy section in the README~~ (done 2026-11-17, SQLite on a volume for now). Still open: managed Postgres switch (Supabase runbook). EAS Update configured 2026-11-18 (Decision 6). EAS build profiles exist in `app/eas.json`.
 
 ### Phase 2: growth
 
@@ -69,6 +69,7 @@ Items that need accounts or keys (Firebase, RevenueCat or App Store products, Ap
 ## Needs a human
 
 Operations
+- Staging (10 min, `docs/runbooks/staging.md`): `fly apps create heyokay-staging`, set its secrets, add `FLY_STAGING_API_TOKEN` to GitHub, and set `NEXT_PUBLIC_API_URL` for Vercel previews. Then one `preview` and one `production` EAS build, after which app updates go out with `npm run update:preview|production`.
 - Sentry: create a project in the **EU region** (de.sentry.io), then `fly secrets set SENTRY_DSN=… -a heyokay`.
 - Uptime monitor on `https://heyokay.fly.dev/health` (e.g. Better Stack or UptimeRobot, 1-minute checks, alert to your phone).
 - Charts: Fly dashboard → Metrics (Grafana at fly-metrics.net) shows the `heyokay_*` metrics after the next deploy.

@@ -2,7 +2,7 @@
 
 Living document. The build agent updates it whenever a component, source, integration or setting changes (see `AGENT.md`). A copy lives in the Claude project "Hey Okey" (`claude/architecture.md`).
 
-Last updated: 2026-11-18 (scaling plan; worker roles; country packs; Supabase; delivery queue).
+Last updated: 2026-11-18 (scaling plan; worker roles; country packs; Supabase; delivery queue; source registry; observability; staging + EAS Update).
 
 ## 1. System overview
 
@@ -144,6 +144,7 @@ Phone app: `EXPO_PUBLIC_API_URL` (else `app.json → extra.apiUrl`). Web app: `N
 
 - **Phone app** (`app/`): notification buttons "Relevant / Nicht relevant" (category `alert`, Android background task, iOS listener, offline queue); pushes stacked per incident (`threadId`); onboarding (value → location → always → notifications → topics → consent), main screen "In deiner Nähe" (current alerts by topic, earlier below), alert detail (map, what to do, sources, AI note, feedback), settings (language, topics, quiet hours, daily limit, location, places, crash reports, delete). Background location task, push token registration, deep links. Night-sky design shared with the web.
 - **Web app** (`web/`): same API and strings (copied from the phone app), "Jetzt", "Verlauf", detail dialog, settings, onboarding; no push or background location.
+- Environments: production `heyokay.fly.dev` (from `main`), staging `heyokay-staging.fly.dev` (from `agent/next`, schema `heyokay_staging`); web production → production API, Vercel previews → staging; app EAS Update channels `development` / `preview` / `production` (`runtimeVersion` policy `appVersion`). Runbook: `docs/runbooks/staging.md`.
 - Both register anonymously (device token). The server supports email sign-in (accounts shared across devices); the sign-in screens in the app and web are the next roadmap item.
 
 ## 7. Quality and operations
@@ -168,7 +169,7 @@ Target, in this order (each is a roadmap item under "Scale foundation"):
 | 4 | 🟡 **Country packs** (built 2026-11-18: packs, country tags, numbers in advice, `COUNTRIES`, source registry + health; next: a second country's sources): sources, emergency numbers, advice, language and units per country (`COUNTRIES=DE,AT,CH`), source registry with health | Today Germany and the US test are wired in code (112/110, 911) | New country = config + source adapters |
 | 5 | **API hardening**: rate limits per token and IP, body limits, security headers; CDN caching for the web app | Public launch traffic and abuse | Safe public launch |
 | 6 | ✅ **Observability** (built 2026-11-18: metrics, Sentry; uptime monitor = human step): metrics (event-to-push p90, queue depth, source lag), error tracking, uptime alerts, `/health` per role | Know before users notice | On-call |
-| 7 | **Environments**: staging Fly app + Vercel preview against staging, EAS Update channels (preview/production), infrastructure as code (Fly config, secrets list) | Ship fast without breaking production | Daily releases |
+| 7 | ✅ **Environments** (built 2026-11-18: staging config + workflow, EAS Update channels; setup steps in `docs/runbooks/staging.md`): staging Fly app + Vercel preview against staging, EAS Update channels (preview/production), infrastructure as code (Fly config, secrets list) | Ship fast without breaking production | Daily releases |
 | 8 | **Data retention** job and partitioning of alerts/source items by month | Tables grow with users × events | Stable performance and GDPR |
 
 Rough capacity after steps 1–3: millions of users on a few small machines. Matching is one index lookup per event (PostGIS), pushes go out through the queue, and the API stays stateless.
