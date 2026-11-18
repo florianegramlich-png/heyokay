@@ -140,6 +140,13 @@ export interface UserPrefs {
   dailyLimit: number;
   timezone: string;
   language: Language;
+  /**
+   * Optional consent to use their data for aggregated, anonymous safety insights (PRD 5.5,
+   * Decision 25). Off unless the person turns it on; nothing is shared until a partner programme exists.
+   */
+  insightsConsent?: boolean;
+  /** When insightsConsent last changed (set by the server, ISO). */
+  insightsConsentAt?: string | null;
   /** Categories this person has been offered; new ones not in here are switched on once (normalizePrefs). */
   knownCategories?: Category[];
 }
@@ -165,6 +172,14 @@ export function normalizePrefs(raw: Partial<UserPrefs>): UserPrefs {
 }
 
 /** A saved choice: the person has now seen every category, so nothing is switched on for them later. */
+/** Records when the insights consent changed (GDPR: we must be able to show when it was given). */
+export function stampConsent(prev: Partial<UserPrefs> | null, next: UserPrefs, now = new Date()): UserPrefs {
+  const before = prev?.insightsConsent ?? false;
+  const after = next.insightsConsent ?? false;
+  if (prev && before === after) return { ...next, insightsConsentAt: prev.insightsConsentAt ?? null };
+  return { ...next, insightsConsent: after, insightsConsentAt: !prev && !after ? null : now.toISOString() };
+}
+
 export function savedPrefs(p: UserPrefs): UserPrefs {
   return { ...p, knownCategories: [...CATEGORIES] };
 }

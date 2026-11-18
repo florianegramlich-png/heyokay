@@ -83,5 +83,7 @@ export const M = {
   workerLeading: registry.add(new Gauge('heyokay_worker_leading', '1 when this machine holds the worker lease.')),
   http: registry.add(new Counter('heyokay_http_requests_total', 'HTTP requests, by route pattern, method and status class.')),
   httpSeconds: registry.add(new Histogram('heyokay_http_request_seconds', 'HTTP request duration, by route pattern.', [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5])),
+  llmCalls: registry.add(new Counter('heyokay_llm_calls_total', 'Model calls, by result (ok|failed|over_budget).')),
+  llmSpendToday: registry.add(new Gauge('heyokay_llm_spend_eur_today', 'AI spend today in EUR, as known to this machine.')),
   errors: registry.add(new Counter('heyokay_errors_total', 'Unexpected errors, by context.')),
 };

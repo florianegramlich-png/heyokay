@@ -6,7 +6,7 @@ import type {
 import { DEFAULT_PREFS, normalizePrefs, savedPrefs } from './types.js';
 import { hashToken } from './db.js';
 import { LOCATION_MAX_AGE_MS, MAX_PLACE_RADIUS_M } from './geo.js';
-import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob } from './store.js';
+import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob, type LlmUsageDay } from './store.js';
 import type { PushTicket } from './push.js';
 import type { SourceStatus } from './ingest.js';
 
@@ -140,6 +140,11 @@ export const MIGRATIONS: { version: number; sql: string }[] = [
     version: 9,
     sql: `CREATE TABLE source_status (key text PRIMARY KEY, data jsonb NOT NULL, updated_at timestamptz NOT NULL);`,
   },
+  {
+    // AI spend per day, for the daily budget and the Alert Desk.
+    version: 10,
+    sql: `CREATE TABLE llm_usage (day date PRIMARY KEY, calls integer NOT NULL, input_tokens bigint NOT NULL, output_tokens bigint NOT NULL, eur double precision NOT NULL, skipped integer NOT NULL);`,
+  },
 ];
 
 /**
@@ -172,10 +177,10 @@ export class PgStore implements Store {
     const pool = new pg.Pool({
       connectionString: url,
       max: opts.max ?? 10,
-    });
-    // Per connection, not as a startup option: poolers like Supabase's Supavisor don't pass startup
-    // options through. node-postgres queues queries per client, so this runs before any other.
-    if (opts.schema) pool.on('connect', (client) => { client.query(`SET search_path = ${opts.schema}, public`).catch(() => {}); });
+      // Per connection, not as a startup option: poolers like Supabase's Supavisor don't pass startup
+      // options through. The pool waits for onConnect before handing the connection out.
+      ...(opts.schema ? { onConnect: async (client: pg.PoolClient) => { await client.query(`SET search_path = ${opts.schema}, public`); } } : {}),
+    } as pg.PoolConfig);
     const store = new PgStore(pool, opts);
     try {
       await store.migrate();
@@ -595,6 +600,20 @@ export class PgStore implements Store {
   async sourceStatuses(): Promise<Record<string, SourceStatus>> {
     const { rows } = await this.q(`SELECT key, data FROM source_status`);
     return Object.fromEntries(rows.map((r) => [r.key, r.data]));
+  }
+
+  // ── AI spend ─────────────────────────────────────────────────────────────
+  async addLlmUsage(day: string, u: { calls: number; inputTokens: number; outputTokens: number; eur: number; skipped: number }): Promise<void> {
+    await this.q(`
+      INSERT INTO llm_usage (day, calls, input_tokens, output_tokens, eur, skipped) VALUES ($1::date,$2,$3,$4,$5,$6)
+      ON CONFLICT (day) DO UPDATE SET calls = llm_usage.calls + excluded.calls, input_tokens = llm_usage.input_tokens + excluded.input_tokens,
+        output_tokens = llm_usage.output_tokens + excluded.output_tokens, eur = llm_usage.eur + excluded.eur, skipped = llm_usage.skipped + excluded.skipped`,
+      [day, u.calls, u.inputTokens, u.outputTokens, u.eur, u.skipped]);
+  }
+
+  async llmUsage(fromDay: string): Promise<LlmUsageDay[]> {
+    const { rows } = await this.q(`SELECT to_char(day, 'YYYY-MM-DD') AS day, calls, input_tokens, output_tokens, eur, skipped FROM llm_usage WHERE day >= $1::date ORDER BY day`, [fromDay]);
+    return rows.map((r) => ({ day: r.day, calls: r.calls, inputTokens: Number(r.input_tokens), outputTokens: Number(r.output_tokens), eur: r.eur, skipped: r.skipped }));
   }
 
   // ── leases ───────────────────────────────────────────────────────────────

@@ -161,6 +161,10 @@ export default function Settings() {
 
       <Section title={t('set.privacy')}>
         <p className="text-sm text-muted-foreground">{t('set.privacy.text')}</p>
+        <label className="flex cursor-pointer items-start gap-3">
+          <Switch checked={!!prefs.insightsConsent} onCheckedChange={(on) => save({ insightsConsent: on })} aria-label={t('consent.insights.label')} />
+          <span><span className="block text-sm font-medium">{t('consent.insights.label')}</span><span className="block text-xs text-muted-foreground">{t('consent.insights.hint')}</span></span>
+        </label>
         <Button variant="destructive" className="w-full" onClick={() => setConfirmDelete(true)}><Trash2 className="h-4 w-4" aria-hidden />{t('set.delete')}</Button>
       </Section>
 

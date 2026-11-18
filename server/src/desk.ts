@@ -57,6 +57,10 @@ async function load(){
     const m=await api('/admin/api/metrics');
     $('#metrics').innerHTML=[['Alerts',m.alerts],['Pushed',m.pushed],['Rated relevant',pct(m.relevantRate)],['Beyond-NINA rate',pct(m.beyondNinaRate)],['Pushes / user / day',m.pushesPerUserPerDay.toFixed(2)],['Waiting for review',m.pendingReview]]
       .map(([k,v])=>'<div class="metric"><b>'+v+'</b><span>'+k+'</span></div>').join('');
+    const ai=await api('/admin/api/ai-usage');
+    const eur=(x)=>'€'+(x??0).toFixed(2);
+    $('#metrics').innerHTML+=[['AI today',eur(ai.today.eur)+(ai.budgetEur?' / '+eur(ai.budgetEur):'')],['AI calls today',ai.today.calls+(ai.today.skipped?' ('+ai.today.skipped+' over budget → template)':'')],['AI last 30 days',eur(ai.last30Eur)],['AI per user (30 d)',ai.perUser30dEur==null?'—':'€'+ai.perUser30dEur.toFixed(4)]]
+      .map(([k,v])=>'<div class="metric"><b>'+v+'</b><span>'+k+'</span></div>').join('');
     const {events}=await api('/admin/api/pending');
     $('#pending').innerHTML=events.length?events.map(e=>\`
       <div class="ev" id="ev-\${e.id}">

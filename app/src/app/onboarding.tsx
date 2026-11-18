@@ -22,6 +22,7 @@ export default function Onboarding() {
   const [categories, setCategories] = useState<Category[]>(DEFAULT_PREFS.categories);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [insights, setInsights] = useState(false); // optional, off unless chosen
   const { t, lang, categoryLabel, categoryHint } = useI18n();
 
   const toggle = (c: Category, on: boolean) =>
@@ -33,7 +34,7 @@ export default function Onboarding() {
     try {
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || DEFAULT_PREFS.timezone;
       const pushToken = await getPushToken();
-      const { token } = await api.register({ ...DEFAULT_PREFS, categories, timezone, language: lang }, pushToken);
+      const { token } = await api.register({ ...DEFAULT_PREFS, categories, timezone, language: lang, insightsConsent: insights }, pushToken);
       await session.setToken(token);
       await session.setOnboarded();
       await startBackgroundUpdates();
@@ -105,6 +106,9 @@ export default function Onboarding() {
             <Text style={[s.muted, { color: colors.cyan, marginBottom: 8 }]} onPress={() => Linking.openURL('https://heyokay.de/datenschutz')}>
               {t('onb.consent.policy')}
             </Text>
+            <Card style={{ marginBottom: 12 }}>
+              <ToggleRow label={t('consent.insights.label')} hint={t('consent.insights.hint')} value={insights} onChange={setInsights} last />
+            </Card>
             {error ? <Text style={{ color: colors.danger, marginBottom: 8 }}>{error}</Text> : null}
             <Button title={busy ? t('onb.consent.busy') : t('onb.consent.cta')} disabled={busy} onPress={finish} />
           </Screen>

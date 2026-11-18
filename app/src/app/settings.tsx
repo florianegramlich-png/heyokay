@@ -154,6 +154,15 @@ export default function Settings() {
 
       <Section title={t('set.privacy')}>
         <Text style={s.p}>{t('set.privacy.text')}</Text>
+        {prefs ? (
+          <ToggleRow
+            label={t('consent.insights.label')}
+            hint={t('consent.insights.hint')}
+            value={!!prefs.insightsConsent}
+            onChange={(v) => void save({ insightsConsent: v })}
+            last={!showCrashToggle}
+          />
+        ) : null}
         {showCrashToggle ? (
           <ToggleRow
             label={t('set.crash')}
