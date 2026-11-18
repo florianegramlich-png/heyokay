@@ -6,6 +6,11 @@
 
 ## 2026-11-18
 
+- **Language dropdown, English by default** (Flori: "a better solution for language. A language dropdown, English default for now").
+  - App: new `LanguagePicker` (shows the current language; tapping opens a list with a checkmark) in onboarding and Settings, replacing the "Deutsch · English" switch and buttons. Web: `LanguageSelect`, a native `<select>`, in the header and Settings, replacing the toggle.
+  - One list of languages (`LANGUAGES`, each named in its own language) in app and web, so adding Hindi later is one entry plus its strings.
+  - Default is English everywhere (app, web, server `DEFAULT_PREFS`), whatever the device or browser language. A choice someone already made stays. Alert texts still come in the language of their source.
+  - Verified: app and web typecheck clean, web tests 10/10, server 233/233.
 - **Official alerts for India and more for the US** (roadmap: Country pack India; US sources part 1) [8.1, 5.4].
   - Shared CAP 1.2 parser `server/src/sources/cap.ts`: polygons and circles, several languages per alert, `references`, cancel → ends now, test/exercise/non-public skipped. Every official feed in the three launch markets uses CAP.
   - **India:** country pack `IN` (English, emergency 112, police 100). NDMA SACHET (`sources/sachet.ts`) reads the public RSS and fetches each new CAP file once, preferring the English info block (alerts often come in Hindi too). Alerts withdrawn from the RSS get an all-clear. IMD, CWC and INCOIS warnings arrive this way. `COUNTRIES` accepts `IN`.

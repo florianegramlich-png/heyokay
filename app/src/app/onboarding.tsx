@@ -1,11 +1,12 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Linking, Pressable, ScrollView, Text, View } from 'react-native';
+import { Linking, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Starfield } from '../components/Starfield';
 import { Button, Card, s, ToggleRow } from '../components/ui';
+import { LanguagePicker } from '../components/LanguagePicker';
 import { api } from '../lib/api';
-import { setLanguage, useI18n, type Lang } from '../lib/i18n';
+import { setLanguage, useI18n } from '../lib/i18n';
 import { requestBackground, requestForeground, startBackgroundUpdates, syncNow } from '../lib/location';
 import { getPushToken, requestPermission } from '../lib/notifications';
 import { session } from '../lib/session';
@@ -52,7 +53,7 @@ export default function Onboarding() {
         {step === 'value' && (
           <Screen title={t('onb.value.title')} text={t('onb.value.text')}>
             <Button title={t('onb.value.cta')} onPress={() => setStep('location')} />
-            <LanguageSwitch value={lang} onChange={(l) => { void setLanguage(l); }} />
+            <LanguagePicker compact value={lang} onChange={(l) => { void setLanguage(l); }} />
           </Screen>
         )}
 
@@ -127,18 +128,3 @@ function Screen({ title, text, children }: { title: string; text: string; childr
   );
 }
 
-/** "Deutsch · English" — shown before any permission is asked, so the rest of onboarding is readable. */
-export function LanguageSwitch({ value, onChange }: { value: Lang; onChange: (l: Lang) => void }) {
-  const opt = (l: Lang, label: string) => (
-    <Pressable key={l} onPress={() => onChange(l)} accessibilityRole="button" accessibilityState={{ selected: value === l }} hitSlop={8}>
-      <Text style={{ color: value === l ? colors.text : colors.muted, fontWeight: value === l ? '700' : '500', fontSize: 15 }}>{label}</Text>
-    </Pressable>
-  );
-  return (
-    <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 16, marginTop: 20 }}>
-      {opt('de', 'Deutsch')}
-      <Text style={{ color: colors.muted }}>·</Text>
-      {opt('en', 'English')}
-    </View>
-  );
-}

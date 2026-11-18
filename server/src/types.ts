@@ -149,7 +149,8 @@ export const DEFAULT_PREFS: UserPrefs = {
   quietHours: { start: '22:00', end: '07:00' },
   dailyLimit: 3,
   timezone: 'Europe/Berlin',
-  language: 'de',
+  // English default for now (Flori, 2026-11-18); clients send the person's choice.
+  language: 'en',
 };
 
 /**

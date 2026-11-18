@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import { browserLanguage, timeAgo, translate } from '../lib/i18n';
 import { APP_STRINGS, CATEGORY } from '../lib/app-strings';
 
-test('German first: German browsers and unknown get German, others English', () => {
-  assert.equal(browserLanguage(['de-DE', 'en']), 'de');
+test('English by default, whatever the browser prefers', () => {
+  // English by default for now, whatever the browser prefers (Flori, 2026-11-18).
+  assert.equal(browserLanguage(['de-DE', 'en']), 'en');
   assert.equal(browserLanguage(['en-US']), 'en');
-  assert.equal(browserLanguage(['fr-FR']), 'en');
-  assert.equal(browserLanguage([]), 'de');
+  assert.equal(browserLanguage([]), 'en');
 });
 
 test('both languages have every string, shared with the phone app', () => {

@@ -1,7 +1,8 @@
 'use client';
 
 import { useSyncExternalStore } from 'react';
-import { APP_STRINGS, CATEGORY, LOCALE, SEVERITY, type AppKey, type Lang } from './app-strings';
+import { APP_STRINGS, CATEGORY, DEFAULT_LANG, LANGUAGES, LOCALE, SEVERITY, type AppKey, type Lang } from './app-strings';
+export { LANGUAGES, DEFAULT_LANG };
 import type { Category, Severity } from './types';
 
 export type { Lang } from './app-strings';
@@ -29,7 +30,6 @@ const WEB = {
     'web.detail.open': 'Details',
     'web.detail.close': 'Schließen',
     'web.detail.source': 'Zur Quelle',
-    'web.lang.toggle': 'English',
     'web.about.title': 'Über Hey-Okay',
     'web.about.text': 'Hey-Okay sagt dir ruhig und in einem Satz, was in deiner Nähe los ist und was du tun kannst: Unwetter, Polizeilagen, Sperrungen, Brände. Die Meldungen kommen aus amtlichen Warnsystemen (NINA, DWD), von Polizei und Feuerwehr. Amtliche Warnungen werden nie umformuliert. Andere Meldungen fasst eine KI zusammen und prüft sie gegen die Quellen; Unsicheres sieht vorher ein Mensch.',
     'web.about.privacy': 'Kein Konto, kein Bewegungsverlauf, keine Werbung. Wir speichern nur deinen letzten Standort, deine Orte und Einstellungen. In einer Notlage: 112 (Feuerwehr, Rettung) oder 110 (Polizei).',
@@ -60,7 +60,6 @@ const WEB = {
     'web.detail.open': 'Details',
     'web.detail.close': 'Close',
     'web.detail.source': 'Open source',
-    'web.lang.toggle': 'Deutsch',
     'web.about.title': 'About Hey-Okay',
     'web.about.text': 'Hey-Okay tells you calmly, in one sentence, what’s happening near you and what you can do: severe weather, police activity, closures, fires. Reports come from official warning systems (NINA, DWD), the police and fire brigades. Official warnings are never reworded. Other reports are summarised by AI and checked against their sources; anything uncertain is seen by a person first.',
     'web.about.privacy': 'No account, no location history, no ads. We only keep your latest location, your places and settings. In an emergency: 112 (fire, ambulance) or 110 (police).',
@@ -79,17 +78,18 @@ const LANG_KEY = 'heyokay.language';
 const listeners = new Set<() => void>();
 let current: Lang | null = null;
 
-/** German unless the browser prefers English (or another non-German language). */
-export function browserLanguage(languages: readonly string[] = typeof navigator === 'undefined' ? [] : navigator.languages): Lang {
-  const first = (languages[0] ?? 'de').toLowerCase();
-  return first.startsWith('de') || languages.length === 0 ? 'de' : 'en';
+/** The starting language before any choice: English for now, whatever the browser prefers. */
+export function browserLanguage(_languages: readonly string[] = []): Lang {
+  return DEFAULT_LANG;
 }
+
+const isLang = (v: unknown): v is Lang => LANGUAGES.some((l) => l.code === v);
 
 export function getLanguage(): Lang {
   if (current) return current;
   try {
     const stored = typeof window === 'undefined' ? null : window.localStorage.getItem(LANG_KEY);
-    current = stored === 'de' || stored === 'en' ? stored : browserLanguage();
+    current = isLang(stored) ? stored : browserLanguage();
   } catch {
     current = browserLanguage();
   }
@@ -122,9 +122,9 @@ export function timeAgo(lang: Lang, iso: string, now = Date.now()) {
 
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l); }; };
 
-/** `const { t, lang } = useI18n();` — re-renders on language change. German on the server render. */
+/** `const { t, lang } = useI18n();` — re-renders on language change. English on the server render. */
 export function useI18n() {
-  const lang = useSyncExternalStore(subscribe, getLanguage, () => 'de' as Lang);
+  const lang = useSyncExternalStore(subscribe, getLanguage, () => DEFAULT_LANG);
   return {
     lang,
     t: (key: Key, vars?: Record<string, string | number>) => translate(lang, key, vars),
