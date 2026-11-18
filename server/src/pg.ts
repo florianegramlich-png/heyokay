@@ -154,8 +154,10 @@ export class PgStore implements Store {
     const pool = new pg.Pool({
       connectionString: url,
       max: opts.max ?? 10,
-      ...(opts.schema ? { options: `-c search_path=${opts.schema},public` } : {}),
     });
+    // Per connection, not as a startup option: poolers like Supabase's Supavisor don't pass startup
+    // options through. node-postgres queues queries per client, so this runs before any other.
+    if (opts.schema) pool.on('connect', (client) => { client.query(`SET search_path = ${opts.schema}, public`).catch(() => {}); });
     const store = new PgStore(pool, opts);
     try {
       await store.migrate();
