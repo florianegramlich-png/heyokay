@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Alert as RNAlert, Linking, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { SkyScreen } from '../components/Starfield';
 import { Button, s, Section, ToggleRow } from '../components/ui';
+import { LanguagePicker } from '../components/LanguagePicker';
 import { api } from '../lib/api';
 import { crashReportingAvailable, getCrashReportsOptIn, setCrashReportsOptIn } from '../lib/crash';
 import { setLanguage, useI18n, type Lang } from '../lib/i18n';
@@ -88,19 +89,7 @@ export default function Settings() {
     <SkyScreen>
     <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
       <Section title={t('set.language')}>
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          {(['de', 'en'] as Lang[]).map((l) => (
-            <Pressable
-              key={l}
-              onPress={() => changeLanguage(l)}
-              accessibilityRole="button"
-              accessibilityState={{ selected: lang === l }}
-              style={{ flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center', backgroundColor: lang === l ? colors.brand : 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: lang === l ? colors.brand : colors.line }}
-            >
-              <Text style={{ color: lang === l ? '#fff' : colors.muted, fontWeight: '600' }}>{l === 'de' ? 'Deutsch' : 'English'}</Text>
-            </Pressable>
-          ))}
-        </View>
+        <LanguagePicker value={lang} onChange={changeLanguage} />
       </Section>
 
       <Section title={t('set.topics')}>

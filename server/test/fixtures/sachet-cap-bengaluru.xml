@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+  <identifier>1763480000123456</identifier>
+  <sender>imd@imd.gov.in</sender>
+  <sent>2026-11-18T14:30:00+05:30</sent>
+  <status>Actual</status>
+  <msgType>Alert</msgType>
+  <scope>Public</scope>
+  <info>
+    <language>hi-IN</language>
+    <category>Met</category>
+    <event>भारी वर्षा</event>
+    <severity>Severe</severity>
+    <headline>बेंगलुरु शहरी: भारी वर्षा की चेतावनी</headline>
+    <area><areaDesc>बेंगलुरु शहरी</areaDesc><polygon>13.10,77.45 13.10,77.75 12.85,77.75 12.85,77.45 13.10,77.45</polygon></area>
+  </info>
+  <info>
+    <language>en-IN</language>
+    <category>Met</category>
+    <event>Heavy Rainfall</event>
+    <urgency>Expected</urgency>
+    <severity>Severe</severity>
+    <certainty>Likely</certainty>
+    <expires>2026-11-19T08:30:00+05:30</expires>
+    <senderName>India Meteorological Department</senderName>
+    <headline>Heavy rainfall warning for Bengaluru Urban</headline>
+    <description>Heavy to very heavy rainfall is likely at isolated places in Bengaluru Urban during the next 18 hours.</description>
+    <instruction>Avoid waterlogged roads and underpasses.</instruction>
+    <web>https://mausam.imd.gov.in</web>
+    <area><areaDesc>Bengaluru Urban</areaDesc><polygon>13.10,77.45 13.10,77.75 12.85,77.75 12.85,77.45 13.10,77.45</polygon></area>
+  </info>
+</alert>

@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ns1:alerts xmlns:ns1="http://gov.fema.ipaws.services/IPAWSOPEN_EAS_SERVICE/">
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+  <identifier>CA-MontereyCounty-2026-11-18-0001</identifier>
+  <sender>oes@co.monterey.ca.us</sender>
+  <sent>2026-11-18T18:20:00-08:00</sent>
+  <status>Actual</status>
+  <msgType>Alert</msgType>
+  <scope>Public</scope>
+  <info>
+    <language>en-US</language>
+    <category>Safety</category>
+    <event>Evacuation Warning</event>
+    <urgency>Expected</urgency>
+    <severity>Severe</severity>
+    <certainty>Likely</certainty>
+    <expires>2026-11-19T06:00:00-08:00</expires>
+    <senderName>Monterey County Office of Emergency Services</senderName>
+    <headline>Evacuation Warning for Carmel Valley Road area</headline>
+    <description>Due to a vegetation fire near Carmel Valley Road, residents between Laureles Grade and Robinson Canyon Road should be ready to leave.</description>
+    <instruction>Prepare to leave. Follow instructions from local officials. Information: www.montereycountyoes.org</instruction>
+    <web>https://www.montereycountyoes.org</web>
+    <area>
+      <areaDesc>Carmel Valley Road between Laureles Grade and Robinson Canyon Road</areaDesc>
+      <polygon>36.51,-121.80 36.51,-121.70 36.46,-121.70 36.46,-121.80 36.51,-121.80</polygon>
+    </area>
+  </info>
+</alert>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+  <identifier>urn:oid:2.49.0.1.840.0.fixture-nws</identifier>
+  <sender>w-nws.webmaster@noaa.gov</sender>
+  <sent>2026-11-18T17:00:00-08:00</sent>
+  <status>Actual</status>
+  <msgType>Alert</msgType>
+  <scope>Public</scope>
+  <info>
+    <language>en-US</language>
+    <category>Met</category>
+    <event>Wind Advisory</event>
+    <severity>Moderate</severity>
+    <senderName>NWS San Francisco CA</senderName>
+    <headline>Wind Advisory issued by NWS San Francisco CA</headline>
+    <area><areaDesc>Coastal North Bay</areaDesc><polygon>38.0,-123.0 38.0,-122.5 37.8,-122.5 37.8,-123.0 38.0,-123.0</polygon></area>
+  </info>
+</alert>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+  <identifier>CA-Test-2026-11-18</identifier>
+  <sender>oes@co.monterey.ca.us</sender>
+  <sent>2026-11-18T10:00:00-08:00</sent>
+  <status>Test</status>
+  <msgType>Alert</msgType>
+  <scope>Public</scope>
+  <info><language>en-US</language><category>Safety</category><event>Test</event><severity>Minor</severity><headline>Monthly test</headline>
+  <area><areaDesc>Monterey County</areaDesc><circle>36.6,-121.9 20</circle></area></info>
+</alert>
+</ns1:alerts>

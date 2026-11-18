@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+<channel>
+  <title>SACHET - CAP Alerts India</title>
+  <link>https://sachet.ndma.gov.in</link>
+  <item>
+    <title>Heavy rainfall warning: Bengaluru Urban</title>
+    <link>https://sachet.ndma.gov.in/cap_public_website/FetchXMLFile?identifier=1763480000123456</link>
+    <guid>https://sachet.ndma.gov.in/cap_public_website/FetchXMLFile?identifier=1763480000123456</guid>
+    <pubDate>Tue, 18 Nov 2026 14:30:00 +0530</pubDate>
+  </item>
+  <item>
+    <title>High wave alert: Tamil Nadu coast</title>
+    <link>https://sachet.ndma.gov.in/cap_public_website/FetchXMLFile?identifier=1763480000999999</link>
+    <guid>https://sachet.ndma.gov.in/cap_public_website/FetchXMLFile?identifier=1763480000999999</guid>
+  </item>
+</channel>
+</rss>

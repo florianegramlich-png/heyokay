@@ -6,9 +6,9 @@ import type { Language } from './types.js';
  *
  * Emergency numbers are what the recommended actions name; they come only from here, never from
  * the model. Sources: official national emergency-number pages (DE: 110/112, 116 117; AT: 133,
- * 112, 1450; CH: 117, 112; US: 911).
+ * 112, 1450; CH: 117, 112; US: 911; IN: 112 ERSS, police 100 — verify before the India launch).
  */
-export type CountryCode = 'DE' | 'AT' | 'CH' | 'US';
+export type CountryCode = 'DE' | 'AT' | 'CH' | 'US' | 'IN';
 
 export interface CountryPack {
   code: CountryCode;
@@ -30,6 +30,8 @@ export const COUNTRIES: Record<CountryCode, CountryPack> = {
   AT: { code: 'AT', name: { de: 'Österreich', en: 'Austria' }, language: 'de', numbers: { emergency: '112', police: '133', medical: '1450' }, units: 'metric' },
   CH: { code: 'CH', name: { de: 'Schweiz', en: 'Switzerland' }, language: 'de', numbers: { emergency: '112', police: '117', medical: null }, units: 'metric' },
   US: { code: 'US', name: { de: 'USA', en: 'United States' }, language: 'en', numbers: { emergency: '911', police: '911', medical: null }, units: 'us' },
+  // India: 112 is the national Emergency Response Support System number; 100 police, 108 ambulance.
+  IN: { code: 'IN', name: { de: 'Indien', en: 'India' }, language: 'en', numbers: { emergency: '112', police: '100', medical: null }, units: 'metric' },
 };
 
 export function isCountry(code: unknown): code is CountryCode {

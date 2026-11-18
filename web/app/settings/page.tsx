@@ -13,6 +13,7 @@ import { api } from '@/lib/api';
 import { session } from '@/lib/session';
 import { geocodeAddress } from '@/lib/location';
 import { setLanguage, useI18n, type Lang } from '@/lib/i18n';
+import { LanguageSelect } from '@/components/language-select';
 import { useDevice } from '@/lib/use-device';
 import { CATEGORIES, type Category, type SavedPlace, type UserPrefs } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -93,13 +94,7 @@ export default function Settings() {
       <h1 className="text-xl font-semibold">{t('web.nav.settings')}</h1>
 
       <Section title={t('set.language')}>
-        <div className="flex gap-2">
-          {(['de', 'en'] as const).map((l) => (
-            <Button key={l} variant={lang === l ? 'default' : 'outline'} size="sm" onClick={() => chooseLanguage(l)}>
-              {l === 'de' ? 'Deutsch' : 'English'}
-            </Button>
-          ))}
-        </div>
+        <LanguageSelect onChange={chooseLanguage} />
       </Section>
 
       <Section title={t('set.topics')}>

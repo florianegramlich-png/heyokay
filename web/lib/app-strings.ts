@@ -6,6 +6,15 @@ import type { Category, Severity } from './types';
  */
 export type Lang = 'de' | 'en';
 
+/** Languages in the picker, each named in its own language (same list as the phone app). */
+export const LANGUAGES: { code: Lang; name: string }[] = [
+  { code: 'en', name: 'English' },
+  { code: 'de', name: 'Deutsch' },
+];
+
+/** English unless the person picks another language (Flori, 2026-11-18: English default for now). */
+export const DEFAULT_LANG: Lang = 'en';
+
 const de = {
   // Navigation
   'nav.alert': 'Warnung',

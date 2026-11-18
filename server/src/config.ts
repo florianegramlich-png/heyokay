@@ -1,3 +1,5 @@
+import { IPAWS_URL } from './sources/ipaws.js';
+import { SACHET_RSS_URL } from './sources/sachet.js';
 import { parseStatusPages, type StatusPage } from './sources/statuspage.js';
 import type { CountryCode } from './countries.js';
 import { parseCountries } from './sources/registry.js';
@@ -53,6 +55,10 @@ export interface Config {
   expoAccessToken: string | null;
   /** api: HTTP only · worker: ingest + push only · all: both (default, one machine). */
   role: Role;
+  /** FEMA IPAWS public feed (US). "off" or a URL override via IPAWS_URL. */
+  ipaws: string | null;
+  /** NDMA SACHET RSS (India). "off" or a URL override via SACHET_RSS_URL. */
+  sachet: string | null;
   /** Status pages polled for technology outages (STATUS_PAGES JSON, or "off"). Default: US list. */
   statusPages: StatusPage[];
   /** Internal Prometheus port (Fly scrapes it; never public). 0 = off. */
@@ -106,6 +112,8 @@ export function loadConfig(env = process.env): Config {
     expoPushUrl: env.EXPO_PUSH_URL ?? 'https://exp.host/--/api/v2/push/send',
     expoAccessToken: env.EXPO_ACCESS_TOKEN || null,
     role: parseRole(env.ROLE),
+    ipaws: /^off$/i.test(env.IPAWS_URL ?? '') ? null : (env.IPAWS_URL || IPAWS_URL),
+    sachet: /^off$/i.test(env.SACHET_RSS_URL ?? '') ? null : (env.SACHET_RSS_URL || SACHET_RSS_URL),
     statusPages: parseStatusPages(env.STATUS_PAGES),
     metricsPort: Number(env.METRICS_PORT ?? 9091),
     sentryDsn: env.SENTRY_DSN || null,

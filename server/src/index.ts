@@ -12,6 +12,8 @@ import { CELL_DEG, fetchHeat, owmFetcher } from './sources/heat.js';
 import { FEUERWEHR_BERLIN_AREA, fetchFeuerwehrBerlin } from './sources/feuerwehr-berlin.js';
 import { fetchNwsArea, nwsFetcher } from './sources/nws.js';
 import { fetchStatusPage } from './sources/statuspage.js';
+import { fetchIpaws } from './sources/ipaws.js';
+import { fetchSachet } from './sources/sachet.js';
 import { buildApi } from './api.js';
 import { createEmbedder } from './embeddings.js';
 import { installProcessHandlers, logError, sentrySink, setErrorSinks, stderrSink } from './errors.js';
@@ -94,6 +96,15 @@ const tasks: SourceTask[] = [
       const r = await fetchHeat(cells, seen('owm'), owmFetcher(config.openWeatherApiKey!), { thresholdC: config.heatThresholdC, lastChecked: heatChecked });
       return { cells: cells.length, checked: r.checked, ...(await ingest(r.items)) };
     },
+  }] : []),
+  ...(config.ipaws ? [{
+    key: 'ipaws:US',
+    run: async () => ingest(await fetchIpaws(seen('ipaws'), undefined, { url: config.ipaws! })),
+  }] : []),
+  ...(config.sachet ? [{
+    key: 'sachet:IN',
+    // Withdrawn alerts leave the RSS: they get an all-clear.
+    run: async () => ingestAndReconcile(await fetchSachet(seen('sachet'), undefined, { url: config.sachet! })),
   }] : []),
   ...config.statusPages.map((page) => ({
     key: `statuspage:${page.key}`,

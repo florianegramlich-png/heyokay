@@ -10,7 +10,7 @@ export type Category = (typeof CATEGORIES)[number];
 /** 1 = info, 2 = minor, 3 = moderate, 4 = severe, 5 = extreme. Same meaning across all sources. */
 export type Severity = 1 | 2 | 3 | 4 | 5;
 
-export type SourceKind = 'nina' | 'dwd' | 'nws' | 'rss' | 'presseportal' | 'owm' | 'statuspage' | 'manual';
+export type SourceKind = 'nina' | 'dwd' | 'nws' | 'rss' | 'presseportal' | 'owm' | 'statuspage' | 'ipaws' | 'sachet' | 'manual';
 
 export type Language = 'de' | 'en';
 
@@ -149,7 +149,8 @@ export const DEFAULT_PREFS: UserPrefs = {
   quietHours: { start: '22:00', end: '07:00' },
   dailyLimit: 3,
   timezone: 'Europe/Berlin',
-  language: 'de',
+  // English default for now (Flori, 2026-11-18); clients send the person's choice.
+  language: 'en',
 };
 
 /**

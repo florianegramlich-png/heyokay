@@ -6,6 +6,17 @@
 
 ## 2026-11-18
 
+- **Language dropdown, English by default** (Flori: "a better solution for language. A language dropdown, English default for now").
+  - App: new `LanguagePicker` (shows the current language; tapping opens a list with a checkmark) in onboarding and Settings, replacing the "Deutsch · English" switch and buttons. Web: `LanguageSelect`, a native `<select>`, in the header and Settings, replacing the toggle.
+  - One list of languages (`LANGUAGES`, each named in its own language) in app and web, so adding Hindi later is one entry plus its strings.
+  - Default is English everywhere (app, web, server `DEFAULT_PREFS`), whatever the device or browser language. A choice someone already made stays. Alert texts still come in the language of their source.
+  - Verified: app and web typecheck clean, web tests 10/10, server 233/233.
+- **Official alerts for India and more for the US** (roadmap: Country pack India; US sources part 1) [8.1, 5.4].
+  - Shared CAP 1.2 parser `server/src/sources/cap.ts`: polygons and circles, several languages per alert, `references`, cancel → ends now, test/exercise/non-public skipped. Every official feed in the three launch markets uses CAP.
+  - **India:** country pack `IN` (English, emergency 112, police 100). NDMA SACHET (`sources/sachet.ts`) reads the public RSS and fetches each new CAP file once, preferring the English info block (alerts often come in Hindi too). Alerts withdrawn from the RSS get an all-clear. IMD, CWC and INCOIS warnings arrive this way. `COUNTRIES` accepts `IN`.
+  - **US:** FEMA IPAWS public feed (`sources/ipaws.ts`): alerts from state and local authorities, such as evacuation warnings, shelter-in-place and civil emergencies, polled for the last 6 hours. NWS messages are skipped there because NWS has its own adapter with zone outlines.
+  - Official CAP alerts never fuzzy-merge (ids and references decide), like NWS. Both feed URLs (`SACHET_RSS_URL`, `IPAWS_URL`) are confirmed on the first live poll, since this sandbox can't reach them. A wrong one shows as failing on the Alert Desk.
+  - Verified: 233 tests on SQLite + Postgres (7 new, fixtures in CAP 1.2 format). Bengaluru gets the IMD rain warning in English, Chennai the wave alert, and the withdrawn one gets an all-clear. A Carmel Valley evacuation warning reaches Carmel Valley but not Marina, and NWS and test messages are skipped.
 - **Technology outages, starting with the US** (Flori: "I would like to see the technology outages as part of the alerts. Now start with US") [PRD v6.5 §1, §5.4].
   - New category `technology` across server, app and web: "Technik" / "Tech outages", fuchsia, a server icon on the web, a settings toggle. Existing people get it switched on once (`normalizePrefs` with `knownCategories`); after they save their settings, their choice stands.
   - New source `server/src/sources/statuspage.ts`: the public Atlassian Statuspage API of Cloudflare, Square, Zoom, Discord, Reddit and Dropbox. The URLs need checking on the first live poll, since this sandbox can't reach them; a wrong one shows as failing in the Alert Desk Sources table. `STATUS_PAGES` can replace the list or turn it off.

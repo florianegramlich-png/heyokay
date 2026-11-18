@@ -2,21 +2,13 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { Info, Languages, Menu, Settings, X } from 'lucide-react';
-import { setLanguage, useI18n } from '@/lib/i18n';
-import { api } from '@/lib/api';
-import { session } from '@/lib/session';
+import { Info, Menu, Settings, X } from 'lucide-react';
+import { useI18n } from '@/lib/i18n';
+import { LanguageSelect } from '@/components/language-select';
 
 export function Header() {
-  const { t, lang } = useI18n();
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
-
-  const toggleLanguage = () => {
-    const next = lang === 'de' ? 'en' : 'de';
-    setLanguage(next);
-    // Alert texts are written in this language from now on.
-    if (session.getToken()) api.updatePrefs({ language: next }).catch(() => {});
-  };
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-border/40 bg-background/70 backdrop-blur-sm">
@@ -29,10 +21,7 @@ export function Header() {
             Hey-Okay
           </Link>
         </div>
-        <button onClick={toggleLanguage} className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground">
-          <Languages className="h-4 w-4" aria-hidden />
-          {t('web.lang.toggle')}
-        </button>
+        <LanguageSelect compact />
       </div>
       {open && (
         <nav className="mx-auto max-w-md px-4 pb-3" onClick={() => setOpen(false)}>

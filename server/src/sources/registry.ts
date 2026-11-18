@@ -50,6 +50,10 @@ export function describeSource(key: string): SourceInfo {
       const page = US_STATUS_PAGES.find((p) => p.key === rest);
       return { key, name: `Status page · ${page?.name ?? rest}`, country: page?.country ?? 'US', official: false, category: 'technology', docs: page?.url ?? 'https://developer.statuspage.io' };
     }
+    case 'ipaws':
+      return { key, name: 'FEMA IPAWS (US public alerts)', country: 'US', official: true, category: 'warnings', fallback: 'nws', docs: 'https://www.fema.gov/emergency-managers/practitioners/integrated-public-alert-warning-system' };
+    case 'sachet':
+      return { key, name: 'NDMA SACHET (India public alerts)', country: 'IN', official: true, category: 'warnings', docs: 'https://sachet.ndma.gov.in' };
     case 'rss':
       return { key, name: rest || 'RSS', country: 'DE', official: false, category: 'news' };
     case 'push':
@@ -64,7 +68,7 @@ export function parseCountries(raw: string | undefined): CountryCode[] | null {
   const list = (raw ?? '').split(',').map((s) => s.trim().toUpperCase()).filter(Boolean);
   if (!list.length) return null;
   const bad = list.filter((c) => !isCountry(c));
-  if (bad.length) throw new Error(`COUNTRIES: unknown ${bad.join(', ')} (known: DE, AT, CH, US)`);
+  if (bad.length) throw new Error(`COUNTRIES: unknown ${bad.join(', ')} (known: DE, AT, CH, US, IN)`);
   return list as CountryCode[];
 }
 

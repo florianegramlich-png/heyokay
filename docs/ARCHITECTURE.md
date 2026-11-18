@@ -2,7 +2,7 @@
 
 Living document. The build agent updates it whenever a component, source, integration or setting changes (see `AGENT.md`). A copy lives in the Claude project "Hey Okey" (`claude/architecture.md`).
 
-Last updated: 2026-11-18 (technology outages US; scaling plan; worker roles; country packs; Supabase; delivery queue; source registry; observability; staging + EAS Update).
+Last updated: 2026-11-18 (India pack + SACHET, FEMA IPAWS; technology outages US; scaling plan; worker roles; country packs; Supabase; delivery queue; source registry; observability; staging + EAS Update).
 
 ## 1. System overview
 
@@ -56,7 +56,7 @@ Live URLs: API `https://heyokay.fly.dev` (health: `/health`, Alert Desk: `/admin
 
 ### Countries (`countries.ts`)
 
-One pack per country (DE, AT, CH, US): language, emergency / police / medical-advice numbers, units. Source adapters tag items with `country`; events keep it; `guidance.ts` fills the numbers into the fixed advice texts. Items and events without a tag fall back by language (de → DE, en → US). New country = a pack + source adapters (+ app/web strings if a new language).
+One pack per country (DE, AT, CH, US, IN): language, emergency / police / medical-advice numbers, units. Source adapters tag items with `country`; events keep it; `guidance.ts` fills the numbers into the fixed advice texts. Items and events without a tag fall back by language (de → DE, en → US). New country = a pack + source adapters (+ app/web strings if a new language).
 
 ### Roles (`roles.ts`)
 
@@ -82,6 +82,8 @@ Health: `GET /health` (per-source status, no error texts). CORS: any origin, bea
 | Generic RSS/Atom | e.g. Polizei Berlin (berlin.de) | `sources/rss.ts` | Public | `RSS_FEEDS` (JSON) | |
 | Manual (Alert Desk) | Curated alerts | `pipeline/run.ts` | Admin token | — | Concierge pilot |
 | BVG / VBB | Transit disruptions | — | Not built | — | Needs VBB API access or BVG permission |
+| FEMA IPAWS (US) | Public alerts from state and local authorities (evacuations, shelter-in-place, civil emergencies, AMBER) — CAP 1.2 | `sources/ipaws.ts`, `cap.ts` | Public, no key | On (`IPAWS_URL`, or `off`) | NWS messages skipped (own adapter); last 6 h polled; URL to confirm on first live poll |
+| NDMA SACHET (India) | Official alerts from IMD, CWC, INCOIS and state disaster authorities — CAP 1.2 via RSS | `sources/sachet.ts`, `cap.ts` | Public, no key | On (`SACHET_RSS_URL`, or `off`) | English info block preferred; withdrawn → all-clear; URL to confirm on first live poll |
 | Status pages (US) | Technology outages: Cloudflare, Square, Zoom, Discord, Reddit, Dropbox (Atlassian Statuspage public API, `/api/v2/incidents/unresolved.json`) | `sources/statuspage.ts` | Public, no key | On (`STATUS_PAGES`, JSON or `off`) | Category `technology`, hazard `outage`; major → feed (sev. 1), critical → may push (sev. 3); whole-country outline; resolved → all-clear |
 | OpenWeatherMap | Heat at saved places and current locations (5-day forecast) | `sources/heat.ts` | Free key | Off until `OPENWEATHER_API_KEY` | Grid cells (0.1°) only; felt ≥ 32/35/38 °C → 1/2/3 |
 
@@ -131,6 +133,7 @@ Health: `GET /health` (per-source status, no error texts). CORS: any origin, bea
 | `EXPO_PUSH_URL` | Expo | Push endpoint |
 | `EXPO_ACCESS_TOKEN` | – | Only if Expo "enhanced push security" is on |
 | `DATABASE_SCHEMA` | – | Postgres schema for our tables; `heyokay` on Supabase (keeps them off Supabase's public Data API) |
+| `IPAWS_URL` / `SACHET_RSS_URL` | built-in | Override or `off` for the US and India official feeds |
 | `STATUS_PAGES` | US list | Status pages for technology outages (JSON array of `{key,name,url,country,kind}`) or `off` |
 | `COUNTRIES` | all | Countries whose sources run, e.g. `DE,AT` (registry in `sources/registry.ts`) |
 | `METRICS_PORT` | `9091` | Internal Prometheus port (0 = off) |

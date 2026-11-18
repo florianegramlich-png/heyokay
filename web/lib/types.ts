@@ -23,7 +23,7 @@ export const DEFAULT_PREFS: UserPrefs = {
   quietHours: { start: '22:00', end: '07:00' },
   dailyLimit: 3,
   timezone: 'Europe/Berlin',
-  language: 'de',
+  language: 'en',
 };
 
 export interface SavedPlace { id: string; label: string; lat: number; lon: number; radiusM: number }

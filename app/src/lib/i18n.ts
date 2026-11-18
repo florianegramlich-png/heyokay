@@ -9,6 +9,20 @@ import type { Category, Severity } from './types';
  */
 export type Lang = 'de' | 'en';
 
+/**
+ * Languages offered in the picker, each named in its own language. Order = order in the dropdown.
+ * Adding one (e.g. Hindi) = an entry here + its strings below + server support for alert texts.
+ */
+export const LANGUAGES: { code: Lang; name: string }[] = [
+  { code: 'en', name: 'English' },
+  { code: 'de', name: 'Deutsch' },
+];
+
+/** English unless the person picks another language (Flori, 2026-11-18: English default for now). */
+export const DEFAULT_LANG: Lang = 'en';
+
+const isLang = (v: unknown): v is Lang => LANGUAGES.some((l) => l.code === v);
+
 const de = {
   // Navigation
   'nav.alert': 'Warnung',
@@ -271,13 +285,9 @@ const KEY = 'heyokay.language';
 let current: Lang = deviceLanguage();
 const listeners = new Set<() => void>();
 
-/** German for German-language devices, English otherwise. */
+/** The starting language before any choice: English for now, whatever the device language. */
 export function deviceLanguage(): Lang {
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().locale.toLowerCase().startsWith('de') ? 'de' : 'en';
-  } catch {
-    return 'de';
-  }
+  return DEFAULT_LANG;
 }
 
 export function getLanguage(): Lang {
@@ -294,7 +304,7 @@ export async function setLanguage(lang: Lang) {
 /** Call once at startup: restores the stored choice. */
 export async function loadLanguage() {
   const stored = await AsyncStorage.getItem(KEY).catch(() => null);
-  if (stored === 'de' || stored === 'en') await setLanguage(stored);
+  if (isLang(stored)) await setLanguage(stored);
 }
 
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l); }; };
