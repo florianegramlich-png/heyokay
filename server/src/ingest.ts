@@ -1,3 +1,5 @@
+import { M } from './metrics.js';
+
 /**
  * Polls every source on its own, so one slow or broken source can't hold up the others.
  *
@@ -56,13 +58,16 @@ export class IngestScheduler {
         report[t.key] = await t.run();
         s.ok = true;
         s.lastOkAt = new Date(this.now()).toISOString();
+        M.sourcePolls.inc({ source: t.key, result: 'ok' });
       } catch (err) {
         s.ok = false;
         s.lastErrorAt = new Date(this.now()).toISOString();
+        M.sourcePolls.inc({ source: t.key, result: 'error' });
         this.onError(t.key, err);
         report[t.key] = { error: (err as Error)?.message ?? String(err) };
       } finally {
         s.lastDurationMs = this.now() - started;
+        M.sourcePollSeconds.observe({ source: t.key }, s.lastDurationMs / 1000);
         s.running = false;
       }
     }));

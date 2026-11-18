@@ -20,11 +20,14 @@ export const DESK_HTML = `<!doctype html>
   button.reject{background:#8B1E1E} .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
   form{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
   label{font-size:13px;color:var(--muted)} .count{font-size:12px;color:var(--muted)}
+  table{border-collapse:collapse;width:100%;font-size:13px} td,th{text-align:left;padding:6px 8px;border-top:1px solid var(--line)}
+  .h-ok{color:var(--teal)} .h-failing{color:#8B1E1E;font-weight:700} .h-stale{color:var(--orange);font-weight:700} .h-waiting{color:var(--muted)}
 </style></head><body>
 <header><h1>Hey-Okay · Alert Desk</h1><input id="token" type="password" placeholder="Admin token"><button onclick="saveToken()">Connect</button><button onclick="ingest()">Run ingest now</button></header>
 <main>
   <section><h2>Last 7 days</h2><div class="metrics" id="metrics">Connect with your admin token.</div></section>
   <section><h2>Waiting for review</h2><p class="muted">Severity 4+ from non-official sources, and anything the AI was unsure about. Nothing here reaches users until approved.</p><div id="pending"></div></section>
+  <section><h2>Sources</h2><p class="muted">Every feed the worker polls, by country. Failing = the last poll failed; stale = no successful poll for 3 intervals. A fallback takes over where one is listed.</p><div id="sources"></div></section>
   <section><h2>Active events</h2><p class="muted">Released events that haven't ended. "End now" sends an all-clear to everyone who got the alert.</p><div id="active"></div></section>
   <section><h2>Send a curated alert (concierge pilot)</h2>
     <form id="manual" onsubmit="sendManual(event)">
@@ -65,6 +68,11 @@ async function load(){
           <select id="s-\${e.id}">\${[1,2,3,4,5].map(n=>'<option '+(n===e.severity?'selected':'')+'>'+n+'</option>').join('')}</select>
           <button onclick="approve('\${e.id}')">Approve &amp; send</button><button class="reject" onclick="reject('\${e.id}')">Reject</button></div>
       </div>\`).join(''):'<p class="muted">Nothing waiting.</p>';
+    const {sources}=await api('/admin/api/sources');
+    const ago=(t)=>{if(!t)return '—';const m=Math.round((Date.now()-Date.parse(t))/60000);return m<1?'just now':m<60?m+' min ago':Math.round(m/60)+' h ago';};
+    $('#sources').innerHTML=sources.length?'<table><tr><th>Source</th><th>Country</th><th>Official</th><th>Health</th><th>Last OK</th><th>Last error</th><th>Fallback</th></tr>'+sources.map(s=>
+      '<tr><td>'+(s.docs?'<a href="'+esc(s.docs)+'" target="_blank">'+esc(s.name)+'</a>':esc(s.name))+'<div class="muted">'+esc(s.key)+'</div></td><td>'+esc(s.country==='*'?'all':s.country)+'</td><td>'+(s.official?'yes':'—')+'</td><td class="h-'+s.health+'">'+s.health+'</td><td>'+ago(s.lastOkAt)+'</td><td>'+ago(s.lastErrorAt)+'</td><td>'+esc(s.fallback||'—')+'</td></tr>').join('')+'</table>'
+      :'<p class="muted">No status yet. The worker reports after its first poll.</p>';
     const act=(await api('/admin/api/active')).events.filter(e=>e.status==='auto'||e.status==='approved');
     $('#active').innerHTML=act.length?act.map(e=>\`
       <div class="ev"><div class="row"><span class="sev s\${e.severity}">\${e.severity}</span> <b>\${esc(e.copyTitle||e.title)}</b>

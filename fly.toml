@@ -33,6 +33,11 @@ primary_region = 'fra'
     method = 'GET'
     path = '/health'
 
+# Prometheus metrics on an internal port, scraped by Fly (Dashboard → Metrics). Never public.
+[metrics]
+  port = 9091
+  path = '/metrics'
+
 [[vm]]
   size = 'shared-cpu-1x'
   memory = '512mb'

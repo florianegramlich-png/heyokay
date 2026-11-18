@@ -5,9 +5,11 @@ import type { Store } from './store.js';
 import type { Pipeline } from './pipeline/run.js';
 import { CATEGORIES, DEFAULT_PREFS, type User } from './types.js';
 import { DESK_HTML } from './desk.js';
+import { sourceReport } from './sources/registry.js';
 import { MAX_PLACE_RADIUS_M } from './geo.js';
 import { AuthError, checkEmailCode, signIn, signOut, startEmailSignIn, type Mailer } from './auth.js';
-import { logError, stderrSink, type ErrorSink } from './errors.js';
+import { logError, defaultSink, type ErrorSink } from './errors.js';
+import { M } from './metrics.js';
 
 const PrefsSchema = z.object({
   categories: z.array(z.enum(CATEGORIES)),
@@ -29,13 +31,21 @@ export interface ApiDeps {
   ingestStatus?: () => Record<string, { ok: boolean; running: boolean; lastOkAt: string | null }>;
   runIngest: () => Promise<unknown>;
   /** Role and worker-lease state for /health (multi-machine setups). */
+  /** For source health on the Alert Desk (stale after 3 intervals). */
+  pollIntervalSec?: number;
   roleStatus?: () => Record<string, unknown> | Promise<Record<string, unknown>>;
   /** Where unexpected errors are logged (default: JSON lines on stderr). */
   errorSink?: ErrorSink;
 }
 
-export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus, roleStatus, mailer = null, errorSink = stderrSink }: ApiDeps) {
+export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus, roleStatus, pollIntervalSec = 120, mailer = null, errorSink = defaultSink }: ApiDeps) {
   const app = Fastify({ logger: false });
+  // Request metrics by route pattern (never the URL itself: no ids or tokens in labels).
+  app.addHook('onResponse', async (req, reply) => {
+    const route = req.routeOptions.url ?? 'unmatched';
+    M.http.inc({ route, method: req.method, status: `${Math.floor(reply.statusCode / 100)}xx` });
+    M.httpSeconds.observe({ route }, reply.elapsedTime / 1000);
+  });
   // Any origin may call the API: it uses bearer tokens, never cookies. The web app needs PUT and DELETE too.
   app.register(cors, { origin: true, methods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE'] });
 
@@ -249,6 +259,11 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
   app.post('/admin/api/ingest', async (req, reply) => {
     if (!admin(req, reply)) return;
     return runIngest();
+  });
+
+  app.get('/admin/api/sources', async (req, reply) => {
+    if (!admin(req, reply)) return;
+    return { sources: sourceReport(await store.sourceStatuses(), pollIntervalSec) };
   });
 
   app.get('/admin/api/metrics', async (req, reply) => {

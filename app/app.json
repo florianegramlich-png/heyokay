@@ -69,6 +69,12 @@
         "projectId": "48b6164f-ab15-4bd1-b348-b4bab0e7f8ea"
       }
     },
-    "owner": "florigramlich"
+    "owner": "florigramlich",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/48b6164f-ab15-4bd1-b348-b4bab0e7f8ea"
+    }
   }
 }

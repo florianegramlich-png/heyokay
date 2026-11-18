@@ -11,6 +11,7 @@ import { compose } from './compose.js';
 import { decide, inQuietHours, match } from './rank.js';
 import { LIFECYCLE, recommendedAction } from './guidance.js';
 import { packFor } from '../countries.js';
+import { M } from '../metrics.js';
 
 export interface PipelineDeps {
   store: Store;
@@ -303,6 +304,10 @@ export class Pipeline {
           await this.forgetUninstalled(res.tickets.filter((t) => t.error === 'DeviceNotRegistered'));
           out.sent += res.sent;
           out.errors += res.errors;
+          M.pushes.inc({ result: 'sent' }, res.sent);
+          M.pushes.inc({ result: 'error' }, res.errors);
+          const sentAt = this.now().getTime();
+          for (const j of group) M.pushLatency.observe({}, Math.max(0, (sentAt - Date.parse(j.alert.createdAt)) / 1000));
         }
         await this.d.store.completePushJobs(jobs.map((j) => j.id));
         out.jobs += jobs.length;

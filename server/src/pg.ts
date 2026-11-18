@@ -8,6 +8,7 @@ import { hashToken } from './db.js';
 import { LOCATION_MAX_AGE_MS, MAX_PLACE_RADIUS_M } from './geo.js';
 import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob } from './store.js';
 import type { PushTicket } from './push.js';
+import type { SourceStatus } from './ingest.js';
 
 /**
  * Schema migrations, applied in order and recorded in `schema_migrations`. Append new entries;
@@ -133,6 +134,11 @@ export const MIGRATIONS: { version: number; sql: string }[] = [
       );
       CREATE INDEX push_jobs_order ON push_jobs(created_at);
     `,
+  },
+  {
+    // Source health, so any API machine can show what the worker sees.
+    version: 9,
+    sql: `CREATE TABLE source_status (key text PRIMARY KEY, data jsonb NOT NULL, updated_at timestamptz NOT NULL);`,
   },
 ];
 
@@ -573,6 +579,22 @@ export class PgStore implements Store {
 
   async pushQueueDepth(): Promise<number> {
     return Number((await this.q(`SELECT COUNT(*)::int AS n FROM push_jobs`)).rows[0].n);
+  }
+
+  // ── source health ────────────────────────────────────────────────────────
+  async saveSourceStatuses(statuses: Record<string, SourceStatus>): Promise<void> {
+    const entries = Object.entries(statuses);
+    if (!entries.length) return;
+    await this.q(`
+      INSERT INTO source_status (key, data, updated_at)
+      SELECT k, d, now() FROM unnest($1::text[], $2::jsonb[]) AS t(k, d)
+      ON CONFLICT (key) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at`,
+      [entries.map(([k]) => k), entries.map(([, v]) => JSON.stringify({ ...v, running: false }))]);
+  }
+
+  async sourceStatuses(): Promise<Record<string, SourceStatus>> {
+    const { rows } = await this.q(`SELECT key, data FROM source_status`);
+    return Object.fromEntries(rows.map((r) => [r.key, r.data]));
   }
 
   // ── leases ───────────────────────────────────────────────────────────────
