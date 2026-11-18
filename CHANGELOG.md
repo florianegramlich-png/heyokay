@@ -6,6 +6,7 @@
 
 ## 2026-11-18
 
+- **Scaling plan** (Flori: "a scalable infrastructure and a scalable product that allows for expansion fast"): new section 8 in `docs/ARCHITECTURE.md` and a "Scale foundation" block at the top of the roadmap. In order: managed Postgres, API/worker roles with a leader, a delivery queue, country packs, API hardening, observability, staging and release channels, data retention. Step 1 needs a decision (Open questions).
 - **Sign-in, part 1: accounts and email codes (server)** [5.3, 7.1]. "Sign-in" was too big for one go, so it's now three items: this one, Apple + Google, and the screens in the app and web.
   - Model: a *user* is a person's data (settings, places, alerts); a *device* is one sign-in (bearer token). Anonymous users have one device, as before; an account can have several. New tables `devices`, `accounts`, `email_codes` (SQLite; Postgres migration 6). Existing tokens keep working: they're copied into `devices` on start.
   - `server/src/auth.ts` + routes: `POST /v1/auth/email/start` sends a 6-digit code (stored hashed, valid 15 minutes, 5 tries, at most 5 codes per address per hour; the same answer whether or not the address has an account). `POST /v1/auth/email/verify` checks it and signs the device in. `POST /v1/auth/signout` gives the device a fresh anonymous identity (new token); the account keeps its data. `GET /v1/me` now includes `account: { email }` or null.

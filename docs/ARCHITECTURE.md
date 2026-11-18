@@ -2,7 +2,7 @@
 
 Living document. The build agent updates it whenever a component, source, integration or setting changes (see `AGENT.md`). A copy lives in the Claude project "Hey Okey" (`claude/architecture.md`).
 
-Last updated: 2026-11-18.
+Last updated: 2026-11-18 (scaling plan added).
 
 ## 1. System overview
 
@@ -138,3 +138,24 @@ Phone app: `EXPO_PUBLIC_API_URL` (else `app.json → extra.apiUrl`). Web app: `N
 - Error logging: structured JSON lines on stderr (`errors.ts`); `fly logs -a heyokay`.
 - Health: `/health` per source (`ok`, `running`, `lastOkAt`).
 - Build agent: runs daily on `agent/next`, rules in `AGENT.md`, work list in `ROADMAP.md`, history in `CHANGELOG.md`.
+
+## 8. Scaling plan (Flori, 2026-11-18: "scalable infrastructure and a product that can expand fast")
+
+Where we are: one Fly machine runs everything (API, all source polling, push), with SQLite on its disk. Good for the pilot. It can't add a second machine (two schedulers would both send pushes), can't fail over, and one busy poll slows the API.
+
+Target, in this order (each is a roadmap item under "Scale foundation"):
+
+| # | Step | Why | Unlocks |
+|---|---|---|---|
+| 1 | **Managed Postgres** (PostGIS + pgvector) in Frankfurt; switch `DATABASE_URL`, migrate the SQLite data once | The code already runs on Postgres; the disk-bound SQLite is the one thing that keeps us on a single machine | Backups, point-in-time restore, more machines |
+| 2 | **API and worker roles** (`ROLE=api` / `worker`) plus a Postgres advisory-lock leader, so exactly one worker polls and sends at a time, with automatic takeover | Several API machines behind Fly's load balancer; one worker never double-sends | Horizontal API scaling, zero-downtime deploys |
+| 3 | **Delivery queue** in Postgres (`FOR UPDATE SKIP LOCKED`): matching writes jobs, workers send pushes in parallel with retries | A severe warning for a big city means hundreds of thousands of pushes in minutes | Several workers sharing the load |
+| 4 | **Country packs**: sources, emergency numbers, advice, language and units per country (`COUNTRIES=DE,AT,CH`), source registry with health | Today Germany and the US test are wired in code (112/110, 911) | New country = config + source adapters |
+| 5 | **API hardening**: rate limits per token and IP, body limits, security headers; CDN caching for the web app | Public launch traffic and abuse | Safe public launch |
+| 6 | **Observability**: metrics (event-to-push p90, queue depth, source lag), error tracking, uptime alerts, `/health` per role | Know before users notice | On-call |
+| 7 | **Environments**: staging Fly app + Vercel preview against staging, EAS Update channels (preview/production), infrastructure as code (Fly config, secrets list) | Ship fast without breaking production | Daily releases |
+| 8 | **Data retention** job and partitioning of alerts/source items by month | Tables grow with users × events | Stable performance and GDPR |
+
+Rough capacity after steps 1–3: millions of users on a few small machines. Matching is one index lookup per event (PostGIS), pushes go out through the queue, and the API stays stateless.
+
+Product side, already in place for fast expansion: a `Store` interface (swap storage), a pluggable source adapter per feed, an LLM and embeddings provider behind interfaces (`StructuredLLM`, `Embedder`), shared strings in German and English, and the web and phone apps on one API. Missing pieces, also on the roadmap: a second LLM provider for failover, the country packs above, the B2B API (Phase 2) and analytics.

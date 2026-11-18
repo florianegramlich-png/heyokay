@@ -10,6 +10,15 @@ Items that need accounts or keys (Firebase, RevenueCat or App Store products, Ap
 
 ### Phase 1: launch blockers
 
+#### Scale foundation (Flori, 2026-11-18; see docs/ARCHITECTURE.md §8)
+
+- [ ] **Managed Postgres in production** [10.4]: a one-off SQLite → Postgres copy script (users, devices, accounts, places, events, alerts, tickets), a runbook, and `DATABASE_URL` on Fly. Needs Flori's choice of provider (see CHANGELOG → Open questions).
+- [ ] **API and worker roles + leader** [10.4]: `ROLE=api|worker|all` (default `all`), a Postgres advisory-lock leader for the worker (takeover when it dies), Fly process groups in `fly.toml`. Tests with two workers: only one polls.
+- [ ] **Delivery queue** [6.2 step 9]: a Postgres job table (`FOR UPDATE SKIP LOCKED`) between matching and push; workers send in parallel with retries; queue depth on `/health`. Load test: 100k matched users for one event.
+- [ ] **Country packs** [8.1]: per-country config (sources, emergency numbers, advice, language, units) instead of hard-coded DE/US; `COUNTRIES` setting; together with "Source registry + health".
+- [ ] **Observability** [13]: Prometheus-style metrics endpoint (event-to-push latency, source lag, queue depth, push delivery), error tracking (Sentry, EU), uptime checks.
+- [ ] **Staging and release channels** [10.4]: staging Fly app and database, Vercel previews against staging, EAS Update channels (preview/production), documented secrets.
+
 - [ ] **Sign-in: Apple + Google** [5.3, 7.1]: verify Sign in with Apple and Google identity tokens on the server (JWKS, audience, expiry), link to the same accounts as email; `apple_sub` / `google_sub` on accounts. Needs the Apple capability and Google client IDs (see "Needs a human"). *(Split from "Sign-in", 2026-11-18.)*
 - [ ] **Sign-in: screens in the app and the web** [5.3]: "Anmelden" in Settings (email → code → signed in; sign out), restore on a new phone, account shown in Settings; Apple/Google buttons once their part is done. *(Split from "Sign-in", 2026-11-18.)*
 - [ ] **Source: BVG/VBB disruptions** [5.4]: VBB/HAFAS disruption messages mapped to `transit` events, with stations geocoded. Fixtures and tests.
