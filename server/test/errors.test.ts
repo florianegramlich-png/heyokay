@@ -64,3 +64,19 @@ describe('server error reporting', () => {
     expect(errorEntry('x', { code: 7 }).message).toBe('{"code":7}');
   });
 });
+
+describe('CORS for the web app', () => {
+  it('allows PUT and DELETE from a browser (settings, places, delete all data)', async () => {
+    const { app } = api();
+    for (const method of ['PUT', 'DELETE']) {
+      const res = await app.inject({
+        method: 'OPTIONS', url: '/v1/me/prefs',
+        headers: { origin: 'https://hokdemo.vercel.app', 'access-control-request-method': method, 'access-control-request-headers': 'authorization,content-type' },
+      });
+      expect(res.statusCode).toBe(204);
+      expect(String(res.headers['access-control-allow-methods'])).toContain(method);
+      expect(res.headers['access-control-allow-origin']).toBe('https://hokdemo.vercel.app');
+      expect(res.headers['access-control-allow-credentials']).toBeUndefined();
+    }
+  });
+});
