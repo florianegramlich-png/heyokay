@@ -6,6 +6,7 @@ import type {
 import { DEFAULT_PREFS } from './types.js';
 import { computeMetrics, type Area, type Metrics, type Store, type UserWithPlaces } from './store.js';
 import { distanceM, LOCATION_MAX_AGE_MS } from './geo.js';
+import { cosine } from './embeddings.js';
 
 export type { Store } from './store.js';
 
@@ -46,6 +47,10 @@ export class SqliteStore implements Store {
         UNIQUE (user_id, event_id, event_revision)
       );
       CREATE INDEX IF NOT EXISTS alerts_user ON alerts(user_id, created_at);
+      CREATE TABLE IF NOT EXISTS event_embeddings (
+        event_id TEXT PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
+        model TEXT NOT NULL, vector TEXT NOT NULL, updated_at TEXT NOT NULL
+      );
       PRAGMA foreign_keys = ON;
     `);
   }
@@ -182,6 +187,27 @@ export class SqliteStore implements Store {
   async eventsByStatus(status: EventStatus): Promise<RiskEvent[]> {
     return this.db.prepare(`SELECT data FROM events WHERE status = ? ORDER BY updated_at DESC`)
       .all(status).map((r: any) => JSON.parse(r.data));
+  }
+
+  async saveEventEmbedding(eventId: string, model: string, vector: number[]): Promise<void> {
+    this.db.prepare(`
+      INSERT INTO event_embeddings (event_id, model, vector, updated_at) VALUES (?,?,?,?)
+      ON CONFLICT(event_id) DO UPDATE SET model=excluded.model, vector=excluded.vector, updated_at=excluded.updated_at
+    `).run(eventId, model, JSON.stringify(vector), new Date().toISOString());
+  }
+
+  /** Cosine in JS; SQLite only holds the few active events of a test or demo. */
+  async eventSimilarities(eventIds: string[], model: string, vector: number[]): Promise<Map<string, number>> {
+    const out = new Map<string, number>();
+    if (!eventIds.length) return out;
+    const rows = this.db.prepare(
+      `SELECT event_id, vector FROM event_embeddings WHERE model = ? AND event_id IN (${eventIds.map(() => '?').join(',')})`,
+    ).all(model, ...eventIds) as any[];
+    for (const r of rows) {
+      const v = JSON.parse(r.vector) as number[];
+      if (v.length === vector.length) out.set(r.event_id, cosine(v, vector));
+    }
+    return out;
   }
 
   // ── alerts ───────────────────────────────────────────────────────────────

@@ -50,6 +50,9 @@ npm start
 | `GEOCODER_URL` | Nominatim | Use your own instance for volume; the built-in gazetteer is the fallback |
 | `MATCH_BUFFER_M` | 1500 | Extra distance around an event's area |
 | `REVIEW_CONFIDENCE` / `REVIEW_SEVERITY` | 0.6 / 4 | Below/at these, non-official items go to the Alert Desk |
+| `EMBEDDINGS_URL` / `EMBEDDINGS_API_KEY` / `EMBEDDINGS_MODEL` | – | Dedup embeddings from any OpenAI-style `/embeddings` endpoint, e.g. Mistral (EU) `https://api.mistral.ai/v1/embeddings` + `mistral-embed`, or OpenAI `https://api.openai.com/v1/embeddings` + `text-embedding-3-small`. Only public source text is sent. Off unless all three are set; then word overlap is used |
+| `EMBEDDINGS_DIMENSIONS` | – | Ask for shorter vectors, for providers that support it (OpenAI `text-embedding-3-*`) |
+| `EMBEDDINGS_MIN_SIMILARITY` | 0.8 | Cosine similarity at which two nearby reports count as the same incident. Depends on the model: calibrate with the eval set |
 
 ### Postgres
 
@@ -60,7 +63,7 @@ DATABASE_URL=postgres://heyokay:heyokay@localhost:5432/heyokay npm run dev
 TEST_DATABASE_URL=postgres://heyokay:heyokay@localhost:5432/heyokay_test npm test   # runs the store and pipeline suites on SQLite and Postgres
 ```
 
-Schema changes are numbered migrations in `server/src/pg.ts` (`MIGRATIONS`), applied on start under an advisory lock, so several instances can start at once. Postgres needs the **PostGIS** extension: the server runs `CREATE EXTENSION IF NOT EXISTS postgis`, so on a managed database either enable it once as an admin or let the app's role create it. Finding the users affected by an event is a GIST index lookup on current locations and saved places.
+Schema changes are numbered migrations in `server/src/pg.ts` (`MIGRATIONS`), applied on start under an advisory lock, so several instances can start at once. Postgres needs the **PostGIS** and **pgvector** (`vector`, for dedup embeddings) extensions: the server runs `CREATE EXTENSION IF NOT EXISTS` for both, so on a managed database either enable them once as an admin or let the app's role create it. Finding the users affected by an event is a GIST index lookup on current locations and saved places.
 
 ## Deploy (Fly.io)
 
@@ -92,7 +95,7 @@ Point the app at it: `EXPO_PUBLIC_API_URL=https://<app>.fly.dev npx expo start -
 
 `fly.toml` sets `NWS_AREAS=CA` for US testing; remove it for a Germany-only server.
 
-To move from SQLite to Postgres, set `DATABASE_URL` as a Fly secret (the database needs PostGIS, see Postgres above); the server then ignores the volume. Managed Postgres in production is still open on the roadmap.
+To move from SQLite to Postgres, set `DATABASE_URL` as a Fly secret (the database needs PostGIS and pgvector, see Postgres above); the server then ignores the volume. Managed Postgres in production is still open on the roadmap.
 
 ## How an alert is made (PRD 6.2)
 

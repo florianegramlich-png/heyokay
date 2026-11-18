@@ -59,6 +59,13 @@ export interface Store {
   /** Events that are not over yet (no end, or end in the future) and started within the lookback. */
   activeEvents(now: Date, lookbackHours?: number): Promise<RiskEvent[]>;
   eventsByStatus(status: EventStatus): Promise<RiskEvent[]>;
+  /** Store (or replace) the dedup embedding of an event. Postgres: pgvector. */
+  saveEventEmbedding(eventId: string, model: string, vector: number[]): Promise<void>;
+  /**
+   * Cosine similarity between `vector` and the stored embeddings of these events. Only events with
+   * an embedding from the same model and of the same length are returned.
+   */
+  eventSimilarities(eventIds: string[], model: string, vector: number[]): Promise<Map<string, number>>;
 
   // alerts
   /** Returns null if this user already has an alert for this event revision. */

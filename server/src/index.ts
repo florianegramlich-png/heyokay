@@ -8,6 +8,7 @@ import { fetchNinaChannel } from './sources/nina.js';
 import { fetchFeed } from './sources/rss.js';
 import { fetchNwsArea, nwsFetcher } from './sources/nws.js';
 import { buildApi } from './api.js';
+import { createEmbedder } from './embeddings.js';
 import { installProcessHandlers, logError } from './errors.js';
 
 installProcessHandlers();
@@ -21,7 +22,8 @@ if (process.env.NODE_ENV === 'production' && config.adminToken === 'change-me') 
 const store = await createStore(config);
 const llm = new AnthropicLLM(config.anthropicApiKey, config.model);
 const geocoder = config.geocoderUrl ? new NominatimGeocoder(config.geocoderUrl, config.geocoderUserAgent) : new GazetteerGeocoder();
-const pipeline = new Pipeline({ store, llm, geocoder, push: new ExpoPushSender(config.expoPushUrl), config });
+const embedder = createEmbedder(config);
+const pipeline = new Pipeline({ store, llm, geocoder, embedder, push: new ExpoPushSender(config.expoPushUrl), config });
 
 const seen = (source: string) => async (externalId: string) => !(await store.hasSourceItem(source, externalId));
 
@@ -67,7 +69,7 @@ async function runIngest() {
 
 const app = buildApi({ store, pipeline, adminToken: config.adminToken, runIngest });
 await app.listen({ port: config.port, host: '0.0.0.0' });
-console.log(`Hey-Okay server on :${config.port} · ${storeKind(config)} · AI ${llm.enabled ? `on (${config.model})` : 'off — rules + templates'} · Alert Desk at /admin`);
+console.log(`Hey-Okay server on :${config.port} · ${storeKind(config)} · AI ${llm.enabled ? `on (${config.model})` : 'off — rules + templates'} · dedup ${embedder.enabled ? `embeddings (${embedder.model})` : 'word overlap'} · Alert Desk at /admin`);
 if (config.adminToken === 'change-me') console.warn('⚠ Set ADMIN_TOKEN before exposing this server.');
 
 if (config.pollIntervalSec > 0) {

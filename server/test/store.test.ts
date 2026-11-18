@@ -89,6 +89,22 @@ describe.each(storeBackends())('store contract ($name)', (backend) => {
     expect(await store.getEvent('nope')).toBeNull();
   });
 
+  it('stores event embeddings and returns cosine similarity per event, same model and length only', async () => {
+    for (const id of ['e1', 'e2', 'e3', 'e4']) await store.saveEvent(event(id));
+    await store.saveEventEmbedding('e1', 'm1', [1, 0, 0]);
+    await store.saveEventEmbedding('e2', 'm1', [0.6, 0.8, 0]);
+    await store.saveEventEmbedding('e3', 'other-model', [1, 0, 0]);
+    await store.saveEventEmbedding('e4', 'm1', [1, 0]); // different length: ignored, not an error
+    const sims = await store.eventSimilarities(['e1', 'e2', 'e3', 'e4', 'missing'], 'm1', [1, 0, 0]);
+    expect([...sims.keys()].sort()).toEqual(['e1', 'e2']);
+    expect(sims.get('e1')).toBeCloseTo(1, 6);
+    expect(sims.get('e2')).toBeCloseTo(0.6, 6);
+    // Replacing a vector (e.g. a later model) overwrites the old one.
+    await store.saveEventEmbedding('e1', 'm1', [0, 1, 0]);
+    expect((await store.eventSimilarities(['e1'], 'm1', [1, 0, 0])).get('e1')).toBeCloseTo(0, 6);
+    expect((await store.eventSimilarities([], 'm1', [1, 0, 0])).size).toBe(0);
+  });
+
   it('alerts: one per user and revision, feedback, counts, metrics, GDPR delete', async () => {
     const { user } = await store.createUser('ExponentPushToken[c]');
     const base = {

@@ -33,6 +33,13 @@ export interface Config {
   reviewConfidence: number;
   /** Non-official events at or above this severity go to the Alert Desk (MVP). */
   reviewSeverity: number;
+  /** OpenAI-style embeddings endpoint for dedup (e.g. Mistral, OpenAI, Voyage). All three unset = word overlap only. */
+  embeddingsUrl: string | null;
+  embeddingsApiKey: string | null;
+  embeddingsModel: string | null;
+  embeddingsDimensions: number | null;
+  /** Cosine similarity at or above which two nearby reports count as the same incident. Model-specific. */
+  embeddingsMinSimilarity: number;
 }
 
 export function loadConfig(env = process.env): Config {
@@ -54,5 +61,10 @@ export function loadConfig(env = process.env): Config {
     matchBufferM: Number(env.MATCH_BUFFER_M ?? 1500),
     reviewConfidence: Number(env.REVIEW_CONFIDENCE ?? 0.6),
     reviewSeverity: Number(env.REVIEW_SEVERITY ?? 4),
+    embeddingsUrl: env.EMBEDDINGS_URL || null,
+    embeddingsApiKey: env.EMBEDDINGS_API_KEY || null,
+    embeddingsModel: env.EMBEDDINGS_MODEL || null,
+    embeddingsDimensions: env.EMBEDDINGS_DIMENSIONS ? Number(env.EMBEDDINGS_DIMENSIONS) : null,
+    embeddingsMinSimilarity: Number(env.EMBEDDINGS_MIN_SIMILARITY ?? 0.8),
   };
 }

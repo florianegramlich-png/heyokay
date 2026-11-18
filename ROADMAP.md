@@ -10,7 +10,6 @@ Items that need accounts or keys (Firebase, RevenueCat or App Store products, Ap
 
 ### Phase 1: launch blockers
 
-- [ ] **Embedding-based dedup** [6.1 #3]: an embeddings interface (provider plus a deterministic fake for tests), stored in pgvector (the pgvector part of the original Postgres item lives here), with clustering on embedding similarity plus geo and time. Keep word overlap as the fallback. Tests showing that differently-worded reports of the same incident merge.
 - [ ] **Sign-in** [5.3, 7.1]: Sign in with Apple, Google sign-in and email (magic link) on top of the anonymous device token. Link the existing device user to the account, and restore it on a new phone. Server: account table, verification of identity tokens, session tokens. Tests.
 - [ ] **Freemium + subscriptions** [5.3, 5.5]: free tier = weather + public safety; paid tier (€2.50/month) = all categories and saved places. App: StoreKit 2 / Play Billing via RevenueCat (`react-native-purchases`), a paywall screen, restore purchases. Server: entitlement from store webhooks, enforced in ranking and the places API. Leave room for the €4.99 family plan test (Decision 17). Tests.
 - [ ] **OS geofencing** [5.3, 11]: register saved places and the current area as OS geofences (`Location.startGeofencingAsync`; iOS max 20 regions). Re-centre the home region on exit, so continuous updates become a fallback, not the main mechanism. Server hint endpoint for active-event regions.
@@ -71,7 +70,7 @@ Accounts and keys
 - Firebase project (Crashlytics, FCM): put `GoogleService-Info.plist` and `google-services.json` in `app/firebase/` (see its README), then make a new development build and confirm a test crash shows up in the console.
 - RevenueCat plus App Store / Play subscription products (€2.50; €4.99 family test).
 - Sign in with Apple capability, Google OAuth client IDs, an email sender for magic links.
-- Anthropic and OpenAI keys with EU residency and zero-retention terms and DPAs (Decision 12); OpenWeatherMap and VBB API access.
+- Anthropic and OpenAI keys with EU residency and zero-retention terms and DPAs (Decision 12); an embeddings provider key and DPA (Mistral EU suggested, see CHANGELOG open questions); OpenWeatherMap and VBB API access.
 - Hosting account (Fly.io or AWS in Frankfurt), managed Postgres, admin token.
 
 Decisions (PRD section 12) that the agent needs before the related item is final
@@ -90,6 +89,7 @@ Legal and partners
 
 ## Done
 
+- [x] 2026-11-18 **Embedding-based dedup** [6.1 #3]: `Embedder` interface with an OpenAI-style HTTP provider (Mistral EU / OpenAI / Voyage, set by env) and a deterministic fake; one vector per event in pgvector (migration 4) or SQLite; clustering compares embedding similarity among nearby, same-category, same-time candidates and falls back to word overlap. 12 tests (pipeline and store tests run per backend). Provider choice open (see CHANGELOG).
 - [x] 2026-11-17 **PostGIS matching** [6.4] (split from "Postgres + PostGIS + pgvector"): `Store.usersNear()` returns only users near an event; Postgres uses generated geography columns with GIST indexes (migration 2); SQLite applies the same rule in JS; delivery no longer loops over all users. 3 tests per backend, including a boundary test that both backends agree with `match`.
 - [x] 2026-11-17 **Postgres store** [6.4, 10.4] (split from "Postgres + PostGIS + pgvector"): `PgStore` (`pg`) selected by `DATABASE_URL`, numbered migrations under an advisory lock, `server/docker-compose.yml` with PostGIS + pgvector, store contract and end-to-end suites run on Postgres when `TEST_DATABASE_URL` is set; CI has a Postgres service. 2 Postgres-only tests + 1 factory test.
 - [x] 2026-11-17 **Async Store interface** [6.4] (split from "Postgres + PostGIS + pgvector"): `Store` is now an async interface in `server/src/store.ts`; SQLite is `SqliteStore`; pipeline, API, server and demo await it; shared store contract tests (7) run per backend via `test/backends.ts`.

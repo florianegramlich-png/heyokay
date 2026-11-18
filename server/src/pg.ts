@@ -72,6 +72,19 @@ export const MIGRATIONS: { version: number; sql: string }[] = [
     version: 3,
     sql: `CREATE INDEX alerts_event ON alerts(event_id);`,
   },
+  {
+    // Embedding-based dedup: one vector per event, compared with pgvector's cosine distance.
+    // No fixed dimension (it depends on the provider), so no ANN index: candidates are already
+    // narrowed to the few active events nearby before similarity is computed.
+    version: 4,
+    sql: `
+      CREATE EXTENSION IF NOT EXISTS vector SCHEMA public;
+      CREATE TABLE event_embeddings (
+        event_id text PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
+        model text NOT NULL, embedding public.vector NOT NULL, updated_at timestamptz NOT NULL
+      );
+    `,
+  },
 ];
 
 /**
@@ -120,8 +133,9 @@ export class PgStore implements Store {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
-      // One migrator at a time, even with several server instances starting together.
-      await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`heyokay_migrations:${this.opts.schema ?? ''}`]);
+      // One migrator at a time per database, even with several server instances starting together.
+      // Database-wide (not per schema) because extensions (PostGIS, pgvector) are database-wide too.
+      await client.query(`SELECT pg_advisory_xact_lock(hashtext('heyokay_migrations'))`);
       if (this.opts.schema) await client.query(`CREATE SCHEMA IF NOT EXISTS ${this.opts.schema}`);
       await client.query(`CREATE TABLE IF NOT EXISTS schema_migrations (version integer PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`);
       const { rows } = await client.query<{ version: number }>(`SELECT version FROM schema_migrations`);
@@ -297,6 +311,26 @@ export class PgStore implements Store {
     return rows.map((r) => r.data);
   }
 
+  async saveEventEmbedding(eventId: string, model: string, vector: number[]): Promise<void> {
+    await this.q(`
+      INSERT INTO event_embeddings (event_id, model, embedding, updated_at) VALUES ($1,$2,$3::public.vector,$4)
+      ON CONFLICT (event_id) DO UPDATE SET model = EXCLUDED.model, embedding = EXCLUDED.embedding, updated_at = EXCLUDED.updated_at
+    `, [eventId, model, toVector(vector), new Date().toISOString()]);
+  }
+
+  async eventSimilarities(eventIds: string[], model: string, vector: number[]): Promise<Map<string, number>> {
+    const out = new Map<string, number>();
+    if (!eventIds.length || !vector.length) return out;
+    const { rows } = await this.q(`
+      SELECT event_id, 1 - (embedding OPERATOR(public.<=>) $3::public.vector) AS sim
+      FROM event_embeddings
+      WHERE event_id = ANY($1::text[]) AND model = $2 AND public.vector_dims(embedding) = $4
+    `, [eventIds, model, toVector(vector), vector.length]);
+    // A zero vector has no direction: pgvector returns NaN; treat it as unrelated.
+    for (const r of rows) out.set(r.event_id, Number.isFinite(Number(r.sim)) ? Number(r.sim) : 0);
+    return out;
+  }
+
   // ── alerts ───────────────────────────────────────────────────────────────
   async insertAlert(a: Omit<Alert, 'id' | 'createdAt' | 'feedback'>): Promise<Alert | null> {
     const alert: Alert = { ...a, id: randomUUID(), createdAt: new Date().toISOString(), feedback: null };
@@ -411,4 +445,10 @@ function rowToUser(r: any): User {
     prefs: { ...DEFAULT_PREFS, ...r.prefs }, lat: r.lat ?? null, lon: r.lon ?? null,
     locationUpdatedAt: iso(r.location_updated_at), createdAt: iso(r.created_at)!,
   };
+}
+
+/** pgvector's text input format. */
+function toVector(v: number[]): string {
+  if (!v.every((x) => Number.isFinite(x))) throw new Error('embedding contains a non-finite value');
+  return `[${v.join(',')}]`;
 }

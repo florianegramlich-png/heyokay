@@ -5,7 +5,8 @@ import type { StructuredLLM } from '../llm.js';
 import type { PushSender } from '../push.js';
 import type { Alert, AlertKind, Category, RiskEvent, Severity, SourceItem, User } from '../types.js';
 import { extract } from './extract.js';
-import { findCluster, mergeInto, newEvent } from './cluster.js';
+import { DEFAULT_EMBEDDING_MIN_SIMILARITY, findCluster, mergeInto, newEvent, type EmbeddingMatch } from './cluster.js';
+import { embeddingText, type Embedder } from '../embeddings.js';
 import { compose } from './compose.js';
 import { decide, inQuietHours, match } from './rank.js';
 import { LIFECYCLE, recommendedAction } from './guidance.js';
@@ -15,7 +16,9 @@ export interface PipelineDeps {
   llm: StructuredLLM;
   geocoder: Geocoder;
   push: PushSender;
-  config: Pick<Config, 'matchBufferM' | 'reviewConfidence' | 'reviewSeverity'>;
+  config: Pick<Config, 'matchBufferM' | 'reviewConfidence' | 'reviewSeverity'> & Partial<Pick<Config, 'embeddingsMinSimilarity'>>;
+  /** Dedup embeddings. Missing or disabled = word overlap only. */
+  embedder?: Embedder;
   now?: () => Date;
 }
 
@@ -61,7 +64,17 @@ export class Pipeline {
       // An update names the message it replaces; find that event even if it started days ago.
       const referencedId = item.references?.length ? await this.d.store.eventIdForSourceRefs(item.source, item.references) : null;
       const referenced = referencedId ? (touched.get(referencedId) ?? await this.d.store.getEvent(referencedId)) : null;
-      const existing = referenced && referenced.status !== 'rejected' ? referenced : findCluster(ext, item, active);
+      const byReference = referenced && referenced.status !== 'rejected' ? referenced : null;
+      // Embedding for dedup. Not for NWS (it never fuzzy-merges) or reports already tied to an event by id.
+      const embedder = this.d.embedder;
+      const vector = embedder?.enabled && !byReference && item.source !== 'nws'
+        ? (await embedder.embed([embeddingText(ext)]))?.[0] ?? null
+        : null;
+      const emb: EmbeddingMatch | undefined = vector ? {
+        similarity: await this.d.store.eventSimilarities(active.map((e) => e.id), embedder!.model, vector),
+        minSimilarity: this.d.config.embeddingsMinSimilarity ?? DEFAULT_EMBEDDING_MIN_SIMILARITY,
+      } : undefined;
+      const existing = byReference ?? findCluster(ext, item, active, emb);
       let event: RiskEvent;
       if (existing) {
         event = touched.get(existing.id) ?? existing;
@@ -84,6 +97,8 @@ export class Pipeline {
       }
       await this.d.store.saveEvent(event);
       await this.d.store.linkSourceItem(item, event.id);
+      // A new event keeps its first report's vector; an older event without one (provider was down) gets this one.
+      if (vector && !emb!.similarity.has(event.id)) await this.d.store.saveEventEmbedding(event.id, embedder!.model, vector);
       touched.set(event.id, event);
     }
 

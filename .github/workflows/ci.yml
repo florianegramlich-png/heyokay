@@ -18,7 +18,7 @@ jobs:
     defaults:
       run:
         working-directory: server
-    # The store contract and end-to-end tests also run against Postgres (with PostGIS).
+    # The store contract and end-to-end tests also run against Postgres (with PostGIS and pgvector).
     services:
       postgres:
         image: postgis/postgis:16-3.4
@@ -42,6 +42,9 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: server/package-lock.json
+      # The PostGIS image has no pgvector; add it the same way server/docker/postgres/Dockerfile does.
+      - name: Add pgvector to the Postgres service
+        run: docker exec ${{ job.services.postgres.id }} sh -c 'apt-get update -qq && apt-get install -y -qq --no-install-recommends postgresql-16-pgvector'
       - run: npm ci
       - run: npm test
       - run: npm run typecheck
