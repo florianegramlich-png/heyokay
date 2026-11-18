@@ -21,7 +21,12 @@ export interface PipelineDeps {
   /** Dedup embeddings. Missing or disabled = word overlap only. */
   embedder?: Embedder;
   now?: () => Date;
+  /** Delivery queue: who claims jobs (machine id), sends in flight, jobs per send. */
+  delivery?: { holder?: string; concurrency?: number; batch?: number };
 }
+
+/** A claimed job not finished in this time (sender died) goes back to the queue. */
+export const PUSH_JOB_LOCK_MS = 5 * 60_000;
 
 export interface IngestReport {
   received: number;
@@ -267,13 +272,44 @@ export class Pipeline {
     return { alerts, pushes: res.sent };
   }
 
-  /** Send, keep the tickets for the receipt check, and forget tokens of uninstalled apps right away. */
+  /**
+   * Queue the pushes, then send right away. The queue (PRD 6.2 step 9) makes delivery survive a
+   * crash between matching and sending, and lets several senders share a big fan-out.
+   */
   private async sendPush(outbox: PushMessage[], attempt = 0): Promise<number> {
     if (!outbox.length) return 0;
-    const res = await this.d.push.send(outbox);
-    await this.d.store.recordPushTickets(res.tickets, attempt, this.now().toISOString());
-    await this.forgetUninstalled(res.tickets.filter((t) => t.error === 'DeviceNotRegistered'));
-    return res.sent;
+    await this.d.store.enqueuePushJobs(outbox.map((m) => ({ token: m.token, alert: m.alert, attempt })), this.now().toISOString());
+    return (await this.drainPushQueue()).sent;
+  }
+
+  /**
+   * Sends everything in the delivery queue: `concurrency` senders, each claiming `batch` jobs at a
+   * time (Expo takes 100 per request; ExpoPushSender splits). Keeps the tickets for the receipt
+   * check and forgets tokens of uninstalled apps right away. Jobs whose send throws stay claimed
+   * until their lock runs out, then the next drain retries them.
+   */
+  async drainPushQueue(): Promise<{ sent: number; errors: number; jobs: number }> {
+    const { holder = 'pipeline', concurrency = 4, batch = 500 } = this.d.delivery ?? {};
+    const out = { sent: 0, errors: 0, jobs: 0 };
+    const sender = async () => {
+      for (;;) {
+        const now = this.now();
+        const jobs = await this.d.store.claimPushJobs(holder, batch, now.toISOString(), new Date(now.getTime() + PUSH_JOB_LOCK_MS).toISOString());
+        if (!jobs.length) return;
+        for (const attempt of new Set(jobs.map((j) => j.attempt))) {
+          const group = jobs.filter((j) => j.attempt === attempt);
+          const res = await this.d.push.send(group.map((j) => ({ token: j.token, alert: j.alert })));
+          await this.d.store.recordPushTickets(res.tickets, attempt, this.now().toISOString());
+          await this.forgetUninstalled(res.tickets.filter((t) => t.error === 'DeviceNotRegistered'));
+          out.sent += res.sent;
+          out.errors += res.errors;
+        }
+        await this.d.store.completePushJobs(jobs.map((j) => j.id));
+        out.jobs += jobs.length;
+      }
+    };
+    await Promise.all(Array.from({ length: Math.max(1, concurrency) }, sender));
+    return out;
   }
 
   private async forgetUninstalled(tickets: Array<Pick<PushTicket, 'token'>>) {

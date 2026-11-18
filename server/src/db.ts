@@ -4,7 +4,7 @@ import type {
   Alert, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
 } from './types.js';
 import { DEFAULT_PREFS } from './types.js';
-import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces } from './store.js';
+import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob } from './store.js';
 import type { PushTicket } from './push.js';
 import { distanceM, LOCATION_MAX_AGE_MS } from './geo.js';
 import { cosine } from './embeddings.js';
@@ -71,6 +71,12 @@ export class SqliteStore implements Store {
         email TEXT PRIMARY KEY, code_hash TEXT NOT NULL, expires_at TEXT NOT NULL,
         attempts INTEGER NOT NULL, sends INTEGER NOT NULL, window_start TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS push_jobs (
+        id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        token TEXT NOT NULL, alert TEXT NOT NULL, attempt INTEGER NOT NULL, created_at TEXT NOT NULL,
+        locked_by TEXT, locked_until TEXT
+      );
+      CREATE INDEX IF NOT EXISTS push_jobs_order ON push_jobs(created_at);
       CREATE TABLE IF NOT EXISTS leases (name TEXT PRIMARY KEY, holder TEXT NOT NULL, expires_at TEXT NOT NULL);
       -- Users from before devices existed sign in with their original token.
       INSERT OR IGNORE INTO devices (token_hash, user_id, created_at) SELECT token_hash, id, created_at FROM users;
@@ -380,6 +386,35 @@ export class SqliteStore implements Store {
 
   async deleteEmailCode(email: string): Promise<void> {
     this.db.prepare(`DELETE FROM email_codes WHERE email = ?`).run(email);
+  }
+
+  // ── delivery queue ───────────────────────────────────────────────────────
+  async enqueuePushJobs(jobs: Array<{ token: string; alert: Alert; attempt: number }>, atIso: string): Promise<void> {
+    const ins = this.db.prepare(`INSERT INTO push_jobs (id, user_id, token, alert, attempt, created_at) VALUES (?,?,?,?,?,?)`);
+    this.db.exec('BEGIN');
+    try {
+      for (const j of jobs) ins.run(randomUUID(), j.alert.userId, j.token, JSON.stringify(j.alert), j.attempt, atIso);
+      this.db.exec('COMMIT');
+    } catch (err) { this.db.exec('ROLLBACK'); throw err; }
+  }
+
+  async claimPushJobs(holder: string, limit: number, nowIso: string, lockUntilIso: string): Promise<PushJob[]> {
+    // One process per SQLite file, and this runs synchronously: no other claim can interleave.
+    const rows = this.db.prepare(`
+      UPDATE push_jobs SET locked_by = ?, locked_until = ?
+      WHERE id IN (SELECT id FROM push_jobs WHERE locked_until IS NULL OR locked_until < ? ORDER BY created_at, id LIMIT ?)
+      RETURNING id, token, alert, attempt, created_at`).all(holder, lockUntilIso, nowIso, limit) as any[];
+    return rows.map((r) => ({ id: r.id, token: r.token, alert: JSON.parse(r.alert), attempt: r.attempt, createdAt: r.created_at }))
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+
+  async completePushJobs(ids: string[]): Promise<void> {
+    const del = this.db.prepare(`DELETE FROM push_jobs WHERE id = ?`);
+    for (const id of ids) del.run(id);
+  }
+
+  async pushQueueDepth(): Promise<number> {
+    return Number((this.db.prepare(`SELECT COUNT(*) AS n FROM push_jobs`).get() as any).n);
   }
 
   // ── leases ───────────────────────────────────────────────────────────────

@@ -29,7 +29,7 @@ export interface ApiDeps {
   ingestStatus?: () => Record<string, { ok: boolean; running: boolean; lastOkAt: string | null }>;
   runIngest: () => Promise<unknown>;
   /** Role and worker-lease state for /health (multi-machine setups). */
-  roleStatus?: () => Record<string, unknown>;
+  roleStatus?: () => Record<string, unknown> | Promise<Record<string, unknown>>;
   /** Where unexpected errors are logged (default: JSON lines on stderr). */
   errorSink?: ErrorSink;
 }
@@ -64,7 +64,7 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
 
   // Always 200 while the process is up (Fly's health check). `sources` shows which feeds last worked when.
   app.get('/health', async () => {
-    const role = roleStatus?.() ?? {};
+    const role = (await roleStatus?.()) ?? {};
     if (!ingestStatus) return { ok: true, ...role };
     const sources = Object.fromEntries(Object.entries(ingestStatus()).map(([k, v]) => [k, { ok: v.ok, running: v.running, lastOkAt: v.lastOkAt }]));
     return { ok: true, ...role, sources };

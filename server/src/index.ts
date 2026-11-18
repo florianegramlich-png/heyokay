@@ -31,7 +31,8 @@ const store = await createStore(config);
 const llm = new AnthropicLLM(config.anthropicApiKey, config.model);
 const geocoder = config.geocoderUrl ? new NominatimGeocoder(config.geocoderUrl, config.geocoderUserAgent) : new GazetteerGeocoder();
 const embedder = createEmbedder(config);
-const pipeline = new Pipeline({ store, llm, geocoder, embedder, push: new ExpoPushSender(config.expoPushUrl, { accessToken: config.expoAccessToken }), config });
+const pipeline = new Pipeline({ store, llm, geocoder, embedder, push: new ExpoPushSender(config.expoPushUrl, { accessToken: config.expoAccessToken }), config,
+  delivery: { holder: config.instanceId, concurrency: config.pushConcurrency } });
 
 const seen = (source: string) => async (externalId: string) => !(await store.hasSourceItem(source, externalId));
 
@@ -56,6 +57,8 @@ const heatChecked = new Map<string, number>();
 const tasks: SourceTask[] = [
   // Not a source, but runs on the same clock: delivery receipts for pushes sent 15+ minutes ago.
   { key: 'push:receipts', run: () => ingestLock.run(() => pipeline.checkPushReceipts()) },
+  // Leftovers in the delivery queue (a sender that died mid-batch); normally empty.
+  { key: 'push:queue', run: () => pipeline.drainPushQueue() },
   ...config.ninaChannels.map((channel) => ({
     key: `nina:${channel}`,
     run: async () => ingest(await fetchNinaChannel(channel, seen('nina'))),
@@ -105,7 +108,10 @@ const runIngest = async () => {
   if (!(await leader.check())) return { skipped: 'another worker holds the lease' };
   return scheduler.tick();
 };
-const roleStatus = () => ({ role: config.role, ...(worker ? { worker: leader.status() } : {}) });
+const roleStatus = async () => ({
+  role: config.role,
+  ...(worker ? { worker: leader.status(), pushQueue: await store.pushQueueDepth().catch(() => null) } : {}),
+});
 
 const mailer = config.resendApiKey && config.mailFrom ? new ResendMailer(config.resendApiKey, config.mailFrom) : null;
 let app;
@@ -114,7 +120,7 @@ if (runsApi(config.role)) {
 } else {
   // Worker only: no public routes, just the health check the platform polls.
   app = Fastify({ logger: false });
-  app.get('/health', async () => ({ ok: true, ...roleStatus(), sources: scheduler.snapshot() }));
+  app.get('/health', async () => ({ ok: true, ...(await roleStatus()), sources: scheduler.snapshot() }));
 }
 await app.listen({ port: config.port, host: '0.0.0.0' });
 console.log(`Hey-Okay server on :${config.port} · role ${config.role} · ${storeKind(config)} · AI ${llm.enabled ? `on (${config.model})` : 'off — rules + templates'} · dedup ${embedder.enabled ? `embeddings (${embedder.model})` : 'word overlap'}${runsApi(config.role) ? ' · Alert Desk at /admin' : ''}`);

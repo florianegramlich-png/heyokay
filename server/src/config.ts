@@ -50,6 +50,8 @@ export interface Config {
   expoAccessToken: string | null;
   /** api: HTTP only · worker: ingest + push only · all: both (default, one machine). */
   role: Role;
+  /** Push sends in flight at once from the delivery queue (each up to 500 pushes). */
+  pushConcurrency: number;
   /** This process's name in the worker lease (Fly sets FLY_MACHINE_ID). */
   instanceId: string;
   /** Matching buffer added to an event's radius when deciding who is affected. */
@@ -93,6 +95,7 @@ export function loadConfig(env = process.env): Config {
     expoPushUrl: env.EXPO_PUSH_URL ?? 'https://exp.host/--/api/v2/push/send',
     expoAccessToken: env.EXPO_ACCESS_TOKEN || null,
     role: parseRole(env.ROLE),
+    pushConcurrency: Math.max(1, Number(env.PUSH_CONCURRENCY ?? 4)),
     instanceId: env.FLY_MACHINE_ID || env.HOSTNAME || `local-${process.pid}`,
     matchBufferM: Number(env.MATCH_BUFFER_M ?? 1500),
     reviewConfidence: Number(env.REVIEW_CONFIDENCE ?? 0.6),

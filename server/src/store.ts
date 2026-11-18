@@ -9,6 +9,9 @@ export const SCHEDULED_LOOKBACK_H = 24 * 14;
 export interface Area { lat: number; lon: number; radiusM: number }
 export interface UserWithPlaces { user: User; places: SavedPlace[] }
 
+/** One push waiting in the delivery queue: the message itself, so sending needs no lookups. */
+export interface PushJob { id: string; token: string; alert: Alert; attempt: number; createdAt: string }
+
 /** A push ticket as stored: status of one push to one device. */
 export interface StoredPushTicket {
   ticketId: string;
@@ -142,6 +145,18 @@ export interface Store {
   saveEmailCode(c: EmailCode): Promise<void>;
   emailCode(email: string): Promise<EmailCode | null>;
   deleteEmailCode(email: string): Promise<void>;
+
+  // delivery queue (pipeline/run.ts → drainPushQueue). Matching writes jobs; senders claim batches.
+  enqueuePushJobs(jobs: Array<{ token: string; alert: Alert; attempt: number }>, atIso: string): Promise<void>;
+  /**
+   * Claims up to `limit` jobs, oldest first, for `holder` until `lockUntilIso`. Jobs claimed by a
+   * sender that died become claimable again once their lock runs out. Two concurrent claims never
+   * get the same job (Postgres: FOR UPDATE SKIP LOCKED).
+   */
+  claimPushJobs(holder: string, limit: number, nowIso: string, lockUntilIso: string): Promise<PushJob[]>;
+  /** Sent (or refused for good): remove from the queue. */
+  completePushJobs(ids: string[]): Promise<void>;
+  pushQueueDepth(): Promise<number>;
 
   // leases (one worker at a time across machines; see roles.ts)
   /**

@@ -6,7 +6,7 @@ import type {
 import { DEFAULT_PREFS } from './types.js';
 import { hashToken } from './db.js';
 import { LOCATION_MAX_AGE_MS, MAX_PLACE_RADIUS_M } from './geo.js';
-import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces } from './store.js';
+import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob } from './store.js';
 import type { PushTicket } from './push.js';
 
 /**
@@ -121,6 +121,18 @@ export const MIGRATIONS: { version: number; sql: string }[] = [
     // Leases: exactly one worker runs ingest and push at a time, across machines (roles.ts).
     version: 7,
     sql: `CREATE TABLE leases (name text PRIMARY KEY, holder text NOT NULL, expires_at timestamptz NOT NULL);`,
+  },
+  {
+    // Delivery queue: matching writes one job per push; senders claim batches with SKIP LOCKED.
+    version: 8,
+    sql: `
+      CREATE TABLE push_jobs (
+        id uuid PRIMARY KEY, user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        token text NOT NULL, alert jsonb NOT NULL, attempt integer NOT NULL, created_at timestamptz NOT NULL,
+        locked_by text, locked_until timestamptz
+      );
+      CREATE INDEX push_jobs_order ON push_jobs(created_at);
+    `,
   },
 ];
 
@@ -528,6 +540,41 @@ export class PgStore implements Store {
     await this.q(`DELETE FROM email_codes WHERE email = $1`, [email]);
   }
 
+  // ── delivery queue ───────────────────────────────────────────────────────
+  async enqueuePushJobs(jobs: Array<{ token: string; alert: Alert; attempt: number }>, atIso: string): Promise<void> {
+    const ok = jobs.filter((j) => isUuid(j.alert.userId));
+    // Batches of 1000 rows per statement: 100k jobs are 100 round trips, not 100k.
+    for (let i = 0; i < ok.length; i += 1000) {
+      const chunk = ok.slice(i, i + 1000);
+      await this.q(`
+        INSERT INTO push_jobs (id, user_id, token, alert, attempt, created_at)
+        SELECT * FROM unnest($1::uuid[], $2::uuid[], $3::text[], $4::jsonb[], $5::int[], $6::timestamptz[])`, [
+        chunk.map(() => randomUUID()), chunk.map((j) => j.alert.userId), chunk.map((j) => j.token),
+        chunk.map((j) => JSON.stringify(j.alert)), chunk.map((j) => j.attempt), chunk.map(() => atIso),
+      ]);
+    }
+  }
+
+  async claimPushJobs(holder: string, limit: number, nowIso: string, lockUntilIso: string): Promise<PushJob[]> {
+    const { rows } = await this.q(`
+      UPDATE push_jobs SET locked_by = $1, locked_until = $2::timestamptz
+      WHERE id IN (
+        SELECT id FROM push_jobs WHERE locked_until IS NULL OR locked_until < $3::timestamptz
+        ORDER BY created_at, id LIMIT $4 FOR UPDATE SKIP LOCKED
+      )
+      RETURNING id, token, alert, attempt, created_at`, [holder, lockUntilIso, nowIso, limit]);
+    return rows.map((r) => ({ id: r.id, token: r.token, alert: r.alert, attempt: r.attempt, createdAt: iso(r.created_at)! }))
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+
+  async completePushJobs(ids: string[]): Promise<void> {
+    if (ids.length) await this.q(`DELETE FROM push_jobs WHERE id = ANY($1::uuid[])`, [ids]);
+  }
+
+  async pushQueueDepth(): Promise<number> {
+    return Number((await this.q(`SELECT COUNT(*)::int AS n FROM push_jobs`)).rows[0].n);
+  }
+
   // ── leases ───────────────────────────────────────────────────────────────
   async acquireLease(name: string, holder: string, ttlMs: number, now = new Date()): Promise<boolean> {
     // One statement: the row lock makes concurrent takeovers safe; RETURNING tells us if we won.
@@ -545,13 +592,17 @@ export class PgStore implements Store {
 
   // ── push delivery ────────────────────────────────────────────────────────
   async recordPushTickets(tickets: PushTicket[], attempt: number, atIso: string): Promise<void> {
-    const now = atIso;
-    for (const t of tickets) {
-      if (!isUuid(t.userId) || !isUuid(t.alertId)) continue;
+    const ok = tickets.filter((t) => isUuid(t.userId) && isUuid(t.alertId));
+    for (let i = 0; i < ok.length; i += 1000) {
+      const c = ok.slice(i, i + 1000);
       await this.q(
         `INSERT INTO push_tickets (id, ticket_id, alert_id, user_id, token, status, error, attempt, created_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT DO NOTHING`,
-        [randomUUID(), t.ticketId, t.alertId, t.userId, t.token, t.status, t.error, attempt, now],
+         SELECT id, ticket_id, alert_id, user_id, token, status, error, $8, $9::timestamptz
+         FROM unnest($1::uuid[], $2::text[], $3::uuid[], $4::uuid[], $5::text[], $6::text[], $7::text[])
+           AS t(id, ticket_id, alert_id, user_id, token, status, error)
+         ON CONFLICT DO NOTHING`,
+        [c.map(() => randomUUID()), c.map((t) => t.ticketId), c.map((t) => t.alertId), c.map((t) => t.userId),
+          c.map((t) => t.token), c.map((t) => t.status), c.map((t) => t.error), attempt, atIso],
       );
     }
   }

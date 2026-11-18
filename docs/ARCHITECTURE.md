@@ -2,7 +2,7 @@
 
 Living document. The build agent updates it whenever a component, source, integration or setting changes (see `AGENT.md`). A copy lives in the Claude project "Hey Okey" (`claude/architecture.md`).
 
-Last updated: 2026-11-18 (scaling plan; worker roles; country packs).
+Last updated: 2026-11-18 (scaling plan; worker roles; country packs; Supabase; delivery queue).
 
 ## 1. System overview
 
@@ -46,12 +46,12 @@ Live URLs: API `https://heyokay.fly.dev` (health: `/health`, Alert Desk: `/admin
 5. **Compose + verify** (`compose.ts`): Claude writes title (≤ 50) and body (≤ 100); a verifier rejects numbers not in the sources, alarm words and area stigma; two failures → template. The recommended action comes from a fixed library (`guidance.ts`).
 6. **Match** (`rank.ts`, `Store.usersNear`): users whose last location (≤ 24 h old) or saved places are inside the event's exact outlines (or circle + buffer). PostGIS index in Postgres.
 7. **Rank** (`rank.ts`): push / feed / suppress (official extreme always pushes; categories off; quiet hours; daily limit; learned relevance).
-8. **Deliver** (`push.ts`): Expo push with retries (429/5xx/network); updates and all-clears ("Entwarnung") to people who got the original. Every push is stored as a ticket (`push_tickets`); 15 minutes later the receipt is checked (`checkPushReceipts`): delivered, token of an uninstalled app forgotten, transient errors resent up to twice.
+8. **Deliver** (`push.ts`, delivery queue): matching writes one job per push into `push_jobs`; `PUSH_CONCURRENCY` senders claim 500 at a time (`SKIP LOCKED`; a dead sender's jobs return after 5 min). Expo push with retries (429/5xx/network); updates and all-clears ("Entwarnung") to people who got the original. Every push is stored as a ticket (`push_tickets`); 15 minutes later the receipt is checked (`checkPushReceipts`): delivered, token of an uninstalled app forgotten, transient errors resent up to twice.
 
 ### Storage (`store.ts`, `db.ts`, `pg.ts`)
 
 - `Store` interface with two implementations: `SqliteStore` (tests, demo, production today on the Fly volume `/data/heyokay.db`) and `PgStore` (used when `DATABASE_URL` is set; numbered migrations under an advisory lock; PostGIS for matching, pgvector for embeddings).
-- Tables: `users` (a person's data: prefs, last location only, push token), `devices` (hashed bearer tokens; several per signed-in person), `accounts` (email, one per user), `email_codes` (hashed sign-in codes), `saved_places`, `source_items`, `events` (+ `event_embeddings`), `alerts`, `push_tickets` (delivery status per push), `leases` (which worker runs ingest and push).
+- Tables: `users` (a person's data: prefs, last location only, push token), `devices` (hashed bearer tokens; several per signed-in person), `accounts` (email, one per user), `email_codes` (hashed sign-in codes), `saved_places`, `source_items`, `events` (+ `event_embeddings`), `alerts`, `push_tickets` (delivery status per push), `leases` (which worker runs ingest and push), `push_jobs` (delivery queue).
 - Privacy by design: only the latest location (rounded ~100 m on the device), no history; device tokens hashed; `DELETE /v1/me` erases everything; the model never sees user data.
 
 ### Countries (`countries.ts`)
@@ -130,6 +130,7 @@ Health: `GET /health` (per-source status, no error texts). CORS: any origin, bea
 | `EXPO_PUSH_URL` | Expo | Push endpoint |
 | `EXPO_ACCESS_TOKEN` | – | Only if Expo "enhanced push security" is on |
 | `DATABASE_SCHEMA` | – | Postgres schema for our tables; `heyokay` on Supabase (keeps them off Supabase's public Data API) |
+| `PUSH_CONCURRENCY` | `4` | Push sends in flight from the delivery queue |
 | `ROLE` | `all` | `api`, `worker` or `all` (see Roles). Separate roles need `DATABASE_URL` |
 | `MATCH_BUFFER_M` | 1500 | Buffer around an event for current locations |
 | `REVIEW_CONFIDENCE`, `REVIEW_SEVERITY` | 0.6, 4 | Alert Desk thresholds |
@@ -159,7 +160,7 @@ Target, in this order (each is a roadmap item under "Scale foundation"):
 |---|---|---|---|
 | 1 | 🟡 **Managed Postgres: Supabase** (project `Hey-Okay`, Frankfurt, created and migrated 2026-11-18; copy tool and runbook ready: `docs/runbooks/supabase-postgres.md`; switch pending) (PostGIS + pgvector) in Frankfurt; switch `DATABASE_URL`, migrate the SQLite data once | The code already runs on Postgres; the disk-bound SQLite is the one thing that keeps us on a single machine | Backups, point-in-time restore, more machines |
 | 2 | ✅ **API and worker roles** (built 2026-11-18) (`ROLE=api` / `worker`) plus a worker lease in the database, so exactly one worker polls and sends at a time, with automatic takeover | Several API machines behind Fly's load balancer; one worker never double-sends | Horizontal API scaling, zero-downtime deploys |
-| 3 | **Delivery queue** in Postgres (`FOR UPDATE SKIP LOCKED`): matching writes jobs, workers send pushes in parallel with retries | A severe warning for a big city means hundreds of thousands of pushes in minutes | Several workers sharing the load |
+| 3 | ✅ **Delivery queue** (built 2026-11-18; 20k pushes ≈ 1 s on Postgres) in Postgres (`FOR UPDATE SKIP LOCKED`): matching writes jobs, workers send pushes in parallel with retries | A severe warning for a big city means hundreds of thousands of pushes in minutes | Several workers sharing the load |
 | 4 | 🟡 **Country packs** (part 1 built 2026-11-18: packs, country tags, numbers in advice): sources, emergency numbers, advice, language and units per country (`COUNTRIES=DE,AT,CH`), source registry with health | Today Germany and the US test are wired in code (112/110, 911) | New country = config + source adapters |
 | 5 | **API hardening**: rate limits per token and IP, body limits, security headers; CDN caching for the web app | Public launch traffic and abuse | Safe public launch |
 | 6 | **Observability**: metrics (event-to-push p90, queue depth, source lag), error tracking, uptime alerts, `/health` per role | Know before users notice | On-call |
