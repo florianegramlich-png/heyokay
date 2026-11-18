@@ -24,6 +24,9 @@ export interface Config {
   rssFeeds: RssFeedConfig[];
   /** Berliner Feuerwehr incident reports (FEUERWEHR_BERLIN=off to disable). */
   feuerwehrBerlin: boolean;
+  /** Email sign-in codes via Resend; both unset = email sign-in off. */
+  resendApiKey: string | null;
+  mailFrom: string | null;
   /** OpenWeatherMap key for heat at people's places; unset = off. */
   openWeatherApiKey: string | null;
   /** Felt temperature (°C) from which heat is reported; +3 and +6 raise the level. */
@@ -70,6 +73,8 @@ export function loadConfig(env = process.env): Config {
     presseportalAgencies: selectAgencies(env.PRESSEPORTAL_AGENCIES),
     dwdDirect: parseDwdMode(env.DWD_DIRECT),
     openWeatherApiKey: env.OPENWEATHER_API_KEY || null,
+    resendApiKey: env.RESEND_API_KEY || null,
+    mailFrom: env.MAIL_FROM || null,
     heatThresholdC: Number(env.HEAT_THRESHOLD_C ?? 32),
     feuerwehrBerlin: !/^(off|false|0|no)$/i.test(env.FEUERWEHR_BERLIN ?? 'on'),
     nwsAreas: (env.NWS_AREAS ?? '').split(';').flatMap((a) => (a.includes(',') && /\d/.test(a) ? [a] : a.split(','))).map((s) => s.trim()).filter(Boolean),

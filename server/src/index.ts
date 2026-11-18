@@ -14,6 +14,7 @@ import { fetchNwsArea, nwsFetcher } from './sources/nws.js';
 import { buildApi } from './api.js';
 import { createEmbedder } from './embeddings.js';
 import { installProcessHandlers, logError } from './errors.js';
+import { ResendMailer } from './auth.js';
 import { IngestScheduler, Mutex, type SourceTask } from './ingest.js';
 
 installProcessHandlers();
@@ -95,7 +96,8 @@ const tasks: SourceTask[] = [
 const scheduler = new IngestScheduler(tasks, (key, err) => logError('ingest', err, { source: key }));
 const runIngest = () => scheduler.tick();
 
-const app = buildApi({ store, pipeline, adminToken: config.adminToken, runIngest, ingestStatus: () => scheduler.snapshot() });
+const mailer = config.resendApiKey && config.mailFrom ? new ResendMailer(config.resendApiKey, config.mailFrom) : null;
+const app = buildApi({ store, pipeline, adminToken: config.adminToken, runIngest, ingestStatus: () => scheduler.snapshot(), mailer });
 await app.listen({ port: config.port, host: '0.0.0.0' });
 console.log(`Hey-Okay server on :${config.port} · ${storeKind(config)} · AI ${llm.enabled ? `on (${config.model})` : 'off — rules + templates'} · dedup ${embedder.enabled ? `embeddings (${embedder.model})` : 'word overlap'} · Alert Desk at /admin`);
 if (config.adminToken === 'change-me') console.warn('⚠ Set ADMIN_TOKEN before exposing this server.');

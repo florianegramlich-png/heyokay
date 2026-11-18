@@ -23,6 +23,10 @@ export interface StoredPushTicket {
 /** pending = accepted by Expo, receipt not checked yet; retried = resent after a transient error. */
 export type PushStatus = 'pending' | 'delivered' | 'error' | 'retried' | 'unknown';
 
+export interface Account { id: string; email: string; userId: string; createdAt: string }
+
+export interface EmailCode { email: string; codeHash: string; expiresAt: string; attempts: number; sends: number; windowStart: string }
+
 export interface Metrics {
   alerts: number;
   pushed: number;
@@ -122,6 +126,22 @@ export interface Store {
   setPushStatus(ticketId: string, status: PushStatus, error?: string | null): Promise<void>;
   /** A device that uninstalled the app: forget its push token. Returns how many users had it. */
   clearPushToken(token: string): Promise<number>;
+
+  // accounts (sign-in). A user is the person's data (prefs, places, alerts); devices are the
+  // sign-ins (bearer tokens). An anonymous user has one device; an account can have several.
+  accountForUser(userId: string): Promise<Account | null>;
+  accountByEmail(email: string): Promise<Account | null>;
+  createAccount(email: string, userId: string): Promise<Account>;
+  /** Points this device token at another user (signing in on a phone that already has an account elsewhere). */
+  moveDevice(token: string, toUserId: string): Promise<void>;
+  /** Removes one device token (signing out); the user and other devices stay. */
+  removeDevice(token: string): Promise<void>;
+  deviceCount(userId: string): Promise<number>;
+  /** Moves saved places (skipping duplicates) from one user to another, then deletes the first. */
+  mergeUserInto(fromUserId: string, toUserId: string): Promise<void>;
+  saveEmailCode(c: EmailCode): Promise<void>;
+  emailCode(email: string): Promise<EmailCode | null>;
+  deleteEmailCode(email: string): Promise<void>;
 
   close(): Promise<void>;
 }

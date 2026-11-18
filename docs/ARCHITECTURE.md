@@ -51,11 +51,12 @@ Live URLs: API `https://heyokay.fly.dev` (health: `/health`, Alert Desk: `/admin
 ### Storage (`store.ts`, `db.ts`, `pg.ts`)
 
 - `Store` interface with two implementations: `SqliteStore` (tests, demo, production today on the Fly volume `/data/heyokay.db`) and `PgStore` (used when `DATABASE_URL` is set; numbered migrations under an advisory lock; PostGIS for matching, pgvector for embeddings).
-- Tables: `users` (hashed device token, prefs, last location only), `saved_places`, `source_items`, `events` (+ `event_embeddings`), `alerts`, `push_tickets` (delivery status per push).
+- Tables: `users` (a person's data: prefs, last location only, push token), `devices` (hashed bearer tokens; several per signed-in person), `accounts` (email, one per user), `email_codes` (hashed sign-in codes), `saved_places`, `source_items`, `events` (+ `event_embeddings`), `alerts`, `push_tickets` (delivery status per push).
 - Privacy by design: only the latest location (rounded ~100 m on the device), no history; device tokens hashed; `DELETE /v1/me` erases everything; the model never sees user data.
 
 ### API (`api.ts`)
 
+Sign-in: `POST /v1/auth/email/start`, `POST /v1/auth/email/verify`, `POST /v1/auth/signout`.
 Device: `POST /v1/devices`, `GET /v1/me`, `PUT /v1/me/prefs`, `PUT /v1/me/push-token`, `POST /v1/me/location`, `GET|POST|DELETE /v1/me/places`, `DELETE /v1/me`.
 Alerts: `GET /v1/me/alerts`, `GET /v1/alerts/:id`, `POST /v1/alerts/:id/feedback`.
 Admin (token): `/admin`, `/admin/api/pending|active|metrics|ingest|manual-alert|events/:id/approve|reject|end`.
@@ -90,8 +91,10 @@ Health: `GET /health` (per-source status, no error texts). CORS: any origin, bea
 | OS geocoder | Addresses for saved places (phone) | expo-location | Live | Address, on the device's provider |
 | Apple Maps / Google Maps | Map in alert detail | react-native-maps | Live | Map tiles |
 | Postgres + PostGIS + pgvector | Production DB option | `DATABASE_URL`, `server/docker-compose.yml` | Ready, not switched on | — |
-| OpenWeatherMap | Heat forecast | `OPENWEATHER_API_KEY`, `HEAT_THRESHOLD_C` | Built, waits for key | Grid-cell centres only (no person's place) |
-| Sign in with Apple, Google, email | Accounts | planned | Roadmap | — |
+| OpenWeatherMap | Heat forecast | `RESEND_API_KEY`, `MAIL_FROM` | – | Email sign-in codes (off without both) |
+| `OPENWEATHER_API_KEY`, `HEAT_THRESHOLD_C` | Built, waits for key | Grid-cell centres only (no person's place) |
+| Resend (email) | Sign-in codes | `RESEND_API_KEY`, `MAIL_FROM` | Built, waits for key and sender domain | Email address, code |
+| Sign in with Apple, Google | Accounts | planned | Roadmap | — |
 | RevenueCat / App Store / Play | Subscriptions | planned | Decision 5 open | — |
 | OpenAI | Second LLM, failover | planned | Roadmap | — |
 | Analytics (Mixpanel/Amplitude) | Product KPIs | planned | Decision 9 open | — |
@@ -112,6 +115,7 @@ Health: `GET /health` (per-source status, no error texts). CORS: any origin, bea
 | `PRESSEPORTAL_AGENCIES` | all | `all` / `off` / agency keys |
 | `FEUERWEHR_BERLIN` | on | `off` to disable |
 | `RSS_FEEDS` | [] | JSON list of feeds |
+| `RESEND_API_KEY`, `MAIL_FROM` | – | Email sign-in codes (off without both) |
 | `OPENWEATHER_API_KEY`, `HEAT_THRESHOLD_C` | –, 32 | Heat at people's places (off without key) |
 | `POLL_INTERVAL_SEC` | 120 | Ingest interval |
 | `GEOCODER_URL`, `GEOCODER_USER_AGENT` | Nominatim | Geocoding |
@@ -126,7 +130,7 @@ Phone app: `EXPO_PUBLIC_API_URL` (else `app.json → extra.apiUrl`). Web app: `N
 
 - **Phone app** (`app/`): notification buttons "Relevant / Nicht relevant" (category `alert`, Android background task, iOS listener, offline queue); pushes stacked per incident (`threadId`); onboarding (value → location → always → notifications → topics → consent), main screen "In deiner Nähe" (current alerts by topic, earlier below), alert detail (map, what to do, sources, AI note, feedback), settings (language, topics, quiet hours, daily limit, location, places, crash reports, delete). Background location task, push token registration, deep links. Night-sky design shared with the web.
 - **Web app** (`web/`): same API and strings (copied from the phone app), "Jetzt", "Verlauf", detail dialog, settings, onboarding; no push or background location.
-- Both register anonymously (device token); there are no accounts yet, so phone and web are separate devices until sign-in lands.
+- Both register anonymously (device token). The server supports email sign-in (accounts shared across devices); the sign-in screens in the app and web are the next roadmap item.
 
 ## 7. Quality and operations
 

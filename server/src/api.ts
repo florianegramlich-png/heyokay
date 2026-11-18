@@ -6,6 +6,7 @@ import type { Pipeline } from './pipeline/run.js';
 import { CATEGORIES, DEFAULT_PREFS, type User } from './types.js';
 import { DESK_HTML } from './desk.js';
 import { MAX_PLACE_RADIUS_M } from './geo.js';
+import { AuthError, checkEmailCode, signIn, signOut, startEmailSignIn, type Mailer } from './auth.js';
 import { logError, stderrSink, type ErrorSink } from './errors.js';
 
 const PrefsSchema = z.object({
@@ -22,6 +23,8 @@ export interface ApiDeps {
   store: Store;
   pipeline: Pipeline;
   adminToken: string;
+  /** Sends sign-in codes; null = email sign-in not configured. */
+  mailer?: Mailer | null;
   /** Per-source ingest health for /health (no error texts). */
   ingestStatus?: () => Record<string, { ok: boolean; running: boolean; lastOkAt: string | null }>;
   runIngest: () => Promise<unknown>;
@@ -29,7 +32,7 @@ export interface ApiDeps {
   errorSink?: ErrorSink;
 }
 
-export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus, errorSink = stderrSink }: ApiDeps) {
+export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus, mailer = null, errorSink = stderrSink }: ApiDeps) {
   const app = Fastify({ logger: false });
   // Any origin may call the API: it uses bearer tokens, never cookies. The web app needs PUT and DELETE too.
   app.register(cors, { origin: true, methods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE'] });
@@ -44,8 +47,9 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
     return reply.code(500).send({ error: 'internal' });
   });
 
+  const bearer = (req: FastifyRequest) => (req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
   const authed = async (req: FastifyRequest, reply: FastifyReply): Promise<User | null> => {
-    const token = (req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
+    const token = bearer(req);
     const user = token ? await store.userByToken(token) : null;
     if (!user) reply.code(401).send({ error: 'unauthorized' });
     return user;
@@ -72,7 +76,8 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
 
   app.get('/v1/me', async (req, reply) => {
     const u = await authed(req, reply); if (!u) return;
-    return { userId: u.id, prefs: u.prefs, places: await store.places(u.id), hasLocation: u.lat != null };
+    const account = await store.accountForUser(u.id);
+    return { userId: u.id, prefs: u.prefs, places: await store.places(u.id), hasLocation: u.lat != null, account: account ? { email: account.email } : null };
   });
 
   app.put('/v1/me/prefs', async (req, reply) => {
@@ -122,6 +127,39 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
     const u = await authed(req, reply); if (!u) return;
     await store.deleteUser(u.id);
     return { ok: true };
+  });
+
+  // ── sign-in (email code) ───────────────────────────────────────────────
+  const Email = z.string().trim().email().max(254);
+  const authError = (reply: FastifyReply, err: unknown) => {
+    if (err instanceof AuthError) return reply.code(err.status).send({ error: err.code });
+    throw err;
+  };
+
+  /** Sends a 6-digit code. Same answer whether or not the address has an account. */
+  app.post('/v1/auth/email/start', async (req, reply) => {
+    const u = await authed(req, reply); if (!u) return;
+    const { email } = z.object({ email: Email }).parse(req.body);
+    try { await startEmailSignIn(store, mailer, email, u.prefs.language); } catch (err) { return authError(reply, err); }
+    return reply.code(202).send({ ok: true });
+  });
+
+  /** Checks the code and attaches this device to the account (creating it, or restoring its data). */
+  app.post('/v1/auth/email/verify', async (req, reply) => {
+    const u = await authed(req, reply); if (!u) return;
+    const { email, code } = z.object({ email: Email, code: z.string().trim().regex(/^\d{6}$/) }).parse(req.body);
+    if (!(await checkEmailCode(store, email, code))) return reply.code(400).send({ error: 'invalid_code' });
+    const { user, account } = await signIn(store, bearer(req), u, email);
+    return { userId: user.id, prefs: user.prefs, places: await store.places(user.id), account: { email: account.email } };
+  });
+
+  /** This device gets a fresh anonymous identity; the account keeps its data. Returns the new token. */
+  app.post('/v1/auth/signout', async (req, reply) => {
+    const u = await authed(req, reply); if (!u) return;
+    try {
+      const { user, token } = await signOut(store, bearer(req), u);
+      return { userId: user.id, token, prefs: user.prefs };
+    } catch (err) { return authError(reply, err); }
   });
 
   // ── alerts ───────────────────────────────────────────────────────────────

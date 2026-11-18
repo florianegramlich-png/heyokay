@@ -6,6 +6,15 @@
 
 ## 2026-11-18
 
+- **Sign-in, part 1: accounts and email codes (server)** [5.3, 7.1]. "Sign-in" was too big for one go, so it's now three items: this one, Apple + Google, and the screens in the app and web.
+  - Model: a *user* is a person's data (settings, places, alerts); a *device* is one sign-in (bearer token). Anonymous users have one device, as before; an account can have several. New tables `devices`, `accounts`, `email_codes` (SQLite; Postgres migration 6). Existing tokens keep working: they're copied into `devices` on start.
+  - `server/src/auth.ts` + routes: `POST /v1/auth/email/start` sends a 6-digit code (stored hashed, valid 15 minutes, 5 tries, at most 5 codes per address per hour; the same answer whether or not the address has an account). `POST /v1/auth/email/verify` checks it and signs the device in. `POST /v1/auth/signout` gives the device a fresh anonymous identity (new token); the account keeps its data. `GET /v1/me` now includes `account: { email }` or null.
+  - Signing in: with no account yet, the device's current data becomes the account. On a new phone (anonymous device, existing account), its places join the account's (duplicates skipped), the account's settings win, and the phone sees the same data as the first one. A device already signed in to another account switches; the old account stays. `DELETE /v1/me` deletes the account and signs out every device.
+  - Push: still one push token per person (the latest device that registered one), so after "restore on a new phone" the new phone gets the pushes. Several phones pushing at once is a follow-up if needed.
+  - Mail: built for Resend (`RESEND_API_KEY`, `MAIL_FROM`); any provider with a send API fits the `Mailer` interface. Without them, email sign-in answers 503 `email_not_configured`. German or English mail by the device's language.
+  - Privacy: the email address is stored to send codes and is deleted with the account; codes are only stored as hashes.
+  - Tests: `server/test/auth.test.ts` (7 per backend, through the API: code in the right language and one use; new phone restores places and settings; sign-out; switching accounts; GDPR delete signs out all devices; limits for wrong codes, expiry and sends per hour; not configured). Migration 6 also checked on an existing Postgres database with data. Server 128 passed + 2 skipped on SQLite, 179/179 on Postgres.
+  - For Flori: pick the mail sender (Resend is EU-hosted on request and has a free tier; Postmark or AWS SES would also work), verify a sender domain such as heyokay.de, then `fly secrets set RESEND_API_KEY=… MAIL_FROM="Hey-Okay <hallo@heyokay.de>" -a heyokay`.
 - **Source: heat at saved places** [5.4]: "38 °C at your mother's address".
   - `server/src/sources/heat.ts`: OpenWeatherMap's free 5-day / 3-hour forecast. For each 0.1° grid cell (about 11 × 7 km) that holds a saved place or a location from the last 24 hours, every 3 hours, it looks at the highest felt temperature in the next 24 hours.
   - Privacy: OpenWeatherMap is only ever asked about cell centres, each cell once, never about a person's place. The cells come from the new `Store.locationCells()` (both backends).

@@ -10,7 +10,8 @@ Items that need accounts or keys (Firebase, RevenueCat or App Store products, Ap
 
 ### Phase 1: launch blockers
 
-- [ ] **Sign-in** [5.3, 7.1]: Sign in with Apple, Google sign-in and email (magic link) on top of the anonymous device token. Link the existing device user to the account, and restore it on a new phone. Server: account table, verification of identity tokens, session tokens. Tests.
+- [ ] **Sign-in: Apple + Google** [5.3, 7.1]: verify Sign in with Apple and Google identity tokens on the server (JWKS, audience, expiry), link to the same accounts as email; `apple_sub` / `google_sub` on accounts. Needs the Apple capability and Google client IDs (see "Needs a human"). *(Split from "Sign-in", 2026-11-18.)*
+- [ ] **Sign-in: screens in the app and the web** [5.3]: "Anmelden" in Settings (email → code → signed in; sign out), restore on a new phone, account shown in Settings; Apple/Google buttons once their part is done. *(Split from "Sign-in", 2026-11-18.)*
 - [ ] **Source: BVG/VBB disruptions** [5.4]: VBB/HAFAS disruption messages mapped to `transit` events, with stations geocoded. Fixtures and tests.
   - *Blocked 2026-11-18, needs Flori:* VBB's official API (HAFAS with disruption messages) needs an access agreement, and BVG's website uses an internal disruptions endpoint with no published terms, which the agent won't build on without permission. See CHANGELOG → Open questions.
 - [ ] **Freemium + subscriptions** [5.3, 5.5]: free tier = weather + public safety; paid tier (€2.50/month) = all categories and saved places. App: StoreKit 2 / Play Billing via RevenueCat (`react-native-purchases`), a paywall screen, restore purchases. Server: entitlement from store webhooks, enforced in ranking and the places API. Leave room for the €4.99 family plan test (Decision 17). Tests.
@@ -65,7 +66,7 @@ Real devices and stores
 Accounts and keys
 - Firebase project (Crashlytics, FCM): put `GoogleService-Info.plist` and `google-services.json` in `app/firebase/` (see its README), then make a new development build and confirm a test crash shows up in the console.
 - RevenueCat plus App Store / Play subscription products (€2.50; €4.99 family test).
-- Sign in with Apple capability, Google OAuth client IDs, an email sender for magic links.
+- Sign in with Apple capability, Google OAuth client IDs; a mail provider for sign-in codes (built for Resend: `RESEND_API_KEY`, `MAIL_FROM` with a verified sender domain).
 - Anthropic and OpenAI keys with EU residency and zero-retention terms and DPAs (Decision 12); Mistral data-retention settings for the embeddings key (key is set on Fly and the DPA applies automatically, 2026-11-18); OpenWeatherMap key (free plan; `fly secrets set OPENWEATHER_API_KEY=…`) and VBB API access.
 - Hosting account (Fly.io or AWS in Frankfurt), managed Postgres, admin token.
 
@@ -85,6 +86,7 @@ Legal and partners
 
 ## Done
 
+- [x] 2026-11-18 **Sign-in: accounts + email code (server)** [5.3, 7.1] (split from "Sign-in"): devices table (several sign-ins per person), accounts, 6-digit email codes (hashed, 15 min, 5 tries, 5 per hour), restore on a new phone (places merged, settings kept), switching accounts, sign-out with a fresh anonymous identity, GDPR delete of account and all devices; Resend as mail provider. Postgres migration 6. 7 tests per backend.
 - [x] 2026-11-18 **Source: heat at saved places** [5.4]: OpenWeatherMap 5-day forecast per 0.1° grid cell holding a saved place or current location (never an exact place), every 3 h; felt ≥ 32 / 35 / 38 °C → severity 1 / 2 / 3, same-day escalation merges; heat-specific advice; titles name the place ("Mama: Hitze: bis 37 °C gefühlt"). Off until `OPENWEATHER_API_KEY` is set. 10 tests (end to end per backend).
 - [x] 2026-11-18 **Notification actions** [5.3]: "👍 Relevant" / "👎 Nicht relevant" buttons on every alert push (category `alert`, not on all-clears), recorded without opening the app; Android background task, iOS response listener, offline queue; pushes grouped per incident (`threadId`). Needs a new development build to show the buttons.
 - [x] 2026-11-18 **Push receipts + retry** [5.4, 6.2 step 9]: Expo tickets stored per push (`push_tickets`), receipts checked 15 min later; `DeviceNotRegistered` clears the token (at send time too); transient errors resent up to twice; sends retry 429/5xx/network with backoff; delivery counts in the Alert Desk metrics. 7 tests per backend.

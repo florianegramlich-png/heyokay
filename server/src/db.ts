@@ -4,7 +4,7 @@ import type {
   Alert, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
 } from './types.js';
 import { DEFAULT_PREFS } from './types.js';
-import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces } from './store.js';
+import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces } from './store.js';
 import type { PushTicket } from './push.js';
 import { distanceM, LOCATION_MAX_AGE_MS } from './geo.js';
 import { cosine } from './embeddings.js';
@@ -58,6 +58,21 @@ export class SqliteStore implements Store {
         status TEXT NOT NULL, error TEXT, attempt INTEGER NOT NULL, created_at TEXT NOT NULL, checked_at TEXT
       );
       CREATE INDEX IF NOT EXISTS push_tickets_pending ON push_tickets(status, created_at);
+      CREATE TABLE IF NOT EXISTS devices (
+        token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS devices_user ON devices(user_id);
+      CREATE TABLE IF NOT EXISTS accounts (
+        id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, user_id TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS email_codes (
+        email TEXT PRIMARY KEY, code_hash TEXT NOT NULL, expires_at TEXT NOT NULL,
+        attempts INTEGER NOT NULL, sends INTEGER NOT NULL, window_start TEXT NOT NULL
+      );
+      -- Users from before devices existed sign in with their original token.
+      INSERT OR IGNORE INTO devices (token_hash, user_id, created_at) SELECT token_hash, id, created_at FROM users;
       PRAGMA foreign_keys = ON;
     `);
   }
@@ -72,11 +87,12 @@ export class SqliteStore implements Store {
     };
     this.db.prepare(`INSERT INTO users (id, token_hash, push_token, prefs, created_at) VALUES (?,?,?,?,?)`)
       .run(user.id, user.tokenHash, pushToken, JSON.stringify(user.prefs), user.createdAt);
+    this.db.prepare(`INSERT INTO devices (token_hash, user_id, created_at) VALUES (?,?,?)`).run(user.tokenHash, user.id, user.createdAt);
     return { user, token };
   }
 
   async userByToken(token: string): Promise<User | null> {
-    const row = this.db.prepare(`SELECT * FROM users WHERE token_hash = ?`).get(hashToken(token));
+    const row = this.db.prepare(`SELECT u.* FROM devices d JOIN users u ON u.id = d.user_id WHERE d.token_hash = ?`).get(hashToken(token));
     return row ? rowToUser(row) : null;
   }
 
@@ -105,6 +121,8 @@ export class SqliteStore implements Store {
   /** GDPR erasure: user, places and alerts (cascade). */
   async deleteUser(userId: string): Promise<void> {
     this.db.prepare(`DELETE FROM push_tickets WHERE user_id = ?`).run(userId);
+    this.db.prepare(`DELETE FROM accounts WHERE user_id = ?`).run(userId);
+    this.db.prepare(`DELETE FROM devices WHERE user_id = ?`).run(userId);
     this.db.prepare(`DELETE FROM alerts WHERE user_id = ?`).run(userId);
     this.db.prepare(`DELETE FROM saved_places WHERE user_id = ?`).run(userId);
     this.db.prepare(`DELETE FROM users WHERE id = ?`).run(userId);
@@ -310,6 +328,59 @@ export class SqliteStore implements Store {
     return { ...m, pushDelivery: { delivered: Number(d?.delivered ?? 0), failed: Number(d?.failed ?? 0), pending: Number(d?.pending ?? 0) } };
   }
 
+  // ── accounts ───────────────────────────────────────────────────────────────
+  async accountForUser(userId: string): Promise<Account | null> {
+    const r: any = this.db.prepare(`SELECT * FROM accounts WHERE user_id = ?`).get(userId);
+    return r ? rowToAccount(r) : null;
+  }
+
+  async accountByEmail(email: string): Promise<Account | null> {
+    const r: any = this.db.prepare(`SELECT * FROM accounts WHERE email = ?`).get(email);
+    return r ? rowToAccount(r) : null;
+  }
+
+  async createAccount(email: string, userId: string): Promise<Account> {
+    const a: Account = { id: randomUUID(), email, userId, createdAt: new Date().toISOString() };
+    this.db.prepare(`INSERT INTO accounts (id, email, user_id, created_at) VALUES (?,?,?,?)`).run(a.id, email, userId, a.createdAt);
+    return a;
+  }
+
+  async moveDevice(token: string, toUserId: string): Promise<void> {
+    this.db.prepare(`UPDATE devices SET user_id = ? WHERE token_hash = ?`).run(toUserId, hashToken(token));
+  }
+
+  async removeDevice(token: string): Promise<void> {
+    this.db.prepare(`DELETE FROM devices WHERE token_hash = ?`).run(hashToken(token));
+  }
+
+  async deviceCount(userId: string): Promise<number> {
+    return Number((this.db.prepare(`SELECT COUNT(*) AS n FROM devices WHERE user_id = ?`).get(userId) as any).n);
+  }
+
+  async mergeUserInto(fromUserId: string, toUserId: string): Promise<void> {
+    const existing = await this.places(toUserId);
+    for (const p of await this.places(fromUserId)) {
+      const dup = existing.some((e) => e.label === p.label && Math.abs(e.lat - p.lat) < 1e-4 && Math.abs(e.lon - p.lon) < 1e-4);
+      if (!dup && existing.length < 10) { await this.addPlace(toUserId, p.label, p.lat, p.lon, p.radiusM); existing.push(p); }
+    }
+    this.db.prepare(`UPDATE devices SET user_id = ? WHERE user_id = ?`).run(toUserId, fromUserId);
+    await this.deleteUser(fromUserId);
+  }
+
+  async saveEmailCode(c: EmailCode): Promise<void> {
+    this.db.prepare(`INSERT OR REPLACE INTO email_codes (email, code_hash, expires_at, attempts, sends, window_start) VALUES (?,?,?,?,?,?)`)
+      .run(c.email, c.codeHash, c.expiresAt, c.attempts, c.sends, c.windowStart);
+  }
+
+  async emailCode(email: string): Promise<EmailCode | null> {
+    const r: any = this.db.prepare(`SELECT * FROM email_codes WHERE email = ?`).get(email);
+    return r ? { email: r.email, codeHash: r.code_hash, expiresAt: r.expires_at, attempts: r.attempts, sends: r.sends, windowStart: r.window_start } : null;
+  }
+
+  async deleteEmailCode(email: string): Promise<void> {
+    this.db.prepare(`DELETE FROM email_codes WHERE email = ?`).run(email);
+  }
+
   // ── push delivery ────────────────────────────────────────────────────────
   async recordPushTickets(tickets: PushTicket[], attempt: number, atIso: string): Promise<void> {
     const now = atIso;
@@ -347,6 +418,10 @@ function iso(t: string): string {
 
 export function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
+}
+
+function rowToAccount(r: any): Account {
+  return { id: r.id, email: r.email, userId: r.user_id, createdAt: r.created_at };
 }
 
 function rowToUser(r: any): User {

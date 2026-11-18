@@ -6,7 +6,7 @@ import type {
 import { DEFAULT_PREFS } from './types.js';
 import { hashToken } from './db.js';
 import { LOCATION_MAX_AGE_MS, MAX_PLACE_RADIUS_M } from './geo.js';
-import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces } from './store.js';
+import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces } from './store.js';
 import type { PushTicket } from './push.js';
 
 /**
@@ -98,6 +98,25 @@ export const MIGRATIONS: { version: number; sql: string }[] = [
       CREATE INDEX push_tickets_pending ON push_tickets(status, created_at);
     `,
   },
+  {
+    // Sign-in: devices (bearer tokens) per user, accounts, email codes.
+    version: 6,
+    sql: `
+      CREATE TABLE devices (
+        token_hash text PRIMARY KEY, user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE, created_at timestamptz NOT NULL
+      );
+      CREATE INDEX devices_user ON devices(user_id);
+      INSERT INTO devices (token_hash, user_id, created_at) SELECT token_hash, id, created_at FROM users;
+      CREATE TABLE accounts (
+        id uuid PRIMARY KEY, email text NOT NULL UNIQUE,
+        user_id uuid NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE, created_at timestamptz NOT NULL
+      );
+      CREATE TABLE email_codes (
+        email text PRIMARY KEY, code_hash text NOT NULL, expires_at timestamptz NOT NULL,
+        attempts integer NOT NULL, sends integer NOT NULL, window_start timestamptz NOT NULL
+      );
+    `,
+  },
 ];
 
 /**
@@ -179,13 +198,16 @@ export class PgStore implements Store {
       prefs: { ...DEFAULT_PREFS, ...prefs }, lat: null, lon: null,
       locationUpdatedAt: null, createdAt: new Date().toISOString(),
     };
-    await this.q(`INSERT INTO users (id, token_hash, push_token, prefs, created_at) VALUES ($1,$2,$3,$4,$5)`,
-      [user.id, user.tokenHash, pushToken, JSON.stringify(user.prefs), user.createdAt]);
+    await this.tx(async (c) => {
+      await c.query(`INSERT INTO users (id, token_hash, push_token, prefs, created_at) VALUES ($1,$2,$3,$4,$5)`,
+        [user.id, user.tokenHash, pushToken, JSON.stringify(user.prefs), user.createdAt]);
+      await c.query(`INSERT INTO devices (token_hash, user_id, created_at) VALUES ($1,$2,$3)`, [user.tokenHash, user.id, user.createdAt]);
+    });
     return { user, token };
   }
 
   async userByToken(token: string): Promise<User | null> {
-    const { rows } = await this.q(`SELECT * FROM users WHERE token_hash = $1`, [hashToken(token)]);
+    const { rows } = await this.q(`SELECT u.* FROM devices d JOIN users u ON u.id = d.user_id WHERE d.token_hash = $1`, [hashToken(token)]);
     return rows[0] ? rowToUser(rows[0]) : null;
   }
 
@@ -217,6 +239,8 @@ export class PgStore implements Store {
     if (!isUuid(userId)) return;
     await this.tx(async (c) => {
       await c.query(`DELETE FROM push_tickets WHERE user_id = $1`, [userId]);
+      await c.query(`DELETE FROM accounts WHERE user_id = $1`, [userId]);
+      await c.query(`DELETE FROM devices WHERE user_id = $1`, [userId]);
       await c.query(`DELETE FROM alerts WHERE user_id = $1`, [userId]);
       await c.query(`DELETE FROM saved_places WHERE user_id = $1`, [userId]);
       await c.query(`DELETE FROM users WHERE id = $1`, [userId]);
@@ -439,6 +463,64 @@ export class PgStore implements Store {
     return { ...m, pushDelivery: { delivered: Number(d.delivered), failed: Number(d.failed), pending: Number(d.pending) } };
   }
 
+  // ── accounts ───────────────────────────────────────────────────────────────
+  async accountForUser(userId: string): Promise<Account | null> {
+    if (!isUuid(userId)) return null;
+    const { rows } = await this.q(`SELECT * FROM accounts WHERE user_id = $1`, [userId]);
+    return rows[0] ? rowToAccount(rows[0]) : null;
+  }
+
+  async accountByEmail(email: string): Promise<Account | null> {
+    const { rows } = await this.q(`SELECT * FROM accounts WHERE email = $1`, [email]);
+    return rows[0] ? rowToAccount(rows[0]) : null;
+  }
+
+  async createAccount(email: string, userId: string): Promise<Account> {
+    const a: Account = { id: randomUUID(), email, userId, createdAt: new Date().toISOString() };
+    await this.q(`INSERT INTO accounts (id, email, user_id, created_at) VALUES ($1,$2,$3,$4)`, [a.id, email, userId, a.createdAt]);
+    return a;
+  }
+
+  async moveDevice(token: string, toUserId: string): Promise<void> {
+    await this.q(`UPDATE devices SET user_id = $1 WHERE token_hash = $2`, [toUserId, hashToken(token)]);
+  }
+
+  async removeDevice(token: string): Promise<void> {
+    await this.q(`DELETE FROM devices WHERE token_hash = $1`, [hashToken(token)]);
+  }
+
+  async deviceCount(userId: string): Promise<number> {
+    if (!isUuid(userId)) return 0;
+    return Number((await this.q(`SELECT COUNT(*) AS n FROM devices WHERE user_id = $1`, [userId])).rows[0].n);
+  }
+
+  async mergeUserInto(fromUserId: string, toUserId: string): Promise<void> {
+    const existing = await this.places(toUserId);
+    for (const p of await this.places(fromUserId)) {
+      const dup = existing.some((e) => e.label === p.label && Math.abs(e.lat - p.lat) < 1e-4 && Math.abs(e.lon - p.lon) < 1e-4);
+      if (!dup && existing.length < 10) { await this.addPlace(toUserId, p.label, p.lat, p.lon, p.radiusM); existing.push(p); }
+    }
+    await this.q(`UPDATE devices SET user_id = $1 WHERE user_id = $2`, [toUserId, fromUserId]);
+    await this.deleteUser(fromUserId);
+  }
+
+  async saveEmailCode(c: EmailCode): Promise<void> {
+    await this.q(`
+      INSERT INTO email_codes (email, code_hash, expires_at, attempts, sends, window_start) VALUES ($1,$2,$3,$4,$5,$6)
+      ON CONFLICT (email) DO UPDATE SET code_hash = excluded.code_hash, expires_at = excluded.expires_at,
+        attempts = excluded.attempts, sends = excluded.sends, window_start = excluded.window_start`,
+      [c.email, c.codeHash, c.expiresAt, c.attempts, c.sends, c.windowStart]);
+  }
+
+  async emailCode(email: string): Promise<EmailCode | null> {
+    const r = (await this.q(`SELECT * FROM email_codes WHERE email = $1`, [email])).rows[0];
+    return r ? { email: r.email, codeHash: r.code_hash, expiresAt: iso(r.expires_at)!, attempts: r.attempts, sends: r.sends, windowStart: iso(r.window_start)! } : null;
+  }
+
+  async deleteEmailCode(email: string): Promise<void> {
+    await this.q(`DELETE FROM email_codes WHERE email = $1`, [email]);
+  }
+
   // ── push delivery ────────────────────────────────────────────────────────
   async recordPushTickets(tickets: PushTicket[], attempt: number, atIso: string): Promise<void> {
     const now = atIso;
@@ -496,6 +578,10 @@ function isUuid(s: string) { return UUID.test(s); }
 
 function iso(v: Date | string | null): string | null {
   return v == null ? null : v instanceof Date ? v.toISOString() : new Date(v).toISOString();
+}
+
+function rowToAccount(r: any): Account {
+  return { id: r.id, email: r.email, userId: r.user_id, createdAt: iso(r.created_at)! };
 }
 
 function rowToUser(r: any): User {
