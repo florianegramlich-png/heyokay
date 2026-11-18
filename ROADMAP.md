@@ -70,7 +70,7 @@ Accounts and keys
 - Firebase project (Crashlytics, FCM): put `GoogleService-Info.plist` and `google-services.json` in `app/firebase/` (see its README), then make a new development build and confirm a test crash shows up in the console.
 - RevenueCat plus App Store / Play subscription products (€2.50; €4.99 family test).
 - Sign in with Apple capability, Google OAuth client IDs, an email sender for magic links.
-- Anthropic and OpenAI keys with EU residency and zero-retention terms and DPAs (Decision 12); Mistral's DPA and data-retention settings for the embeddings key (key is set on Fly, 2026-11-18); OpenWeatherMap and VBB API access.
+- Anthropic and OpenAI keys with EU residency and zero-retention terms and DPAs (Decision 12); Mistral data-retention settings for the embeddings key (key is set on Fly and the DPA applies automatically, 2026-11-18); OpenWeatherMap and VBB API access.
 - Hosting account (Fly.io or AWS in Frankfurt), managed Postgres, admin token.
 
 Decisions (PRD section 12) that the agent needs before the related item is final

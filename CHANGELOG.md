@@ -2,10 +2,12 @@
 
 ## Open questions
 
-- **Crash reports: opt-in or opt-out?** (2026-11-16) Crashlytics is built as opt-in: native collection is off (`app/firebase.json`) and only the Settings toggle "Absturzberichte senden" turns it on, defaulting to off. That's the conservative reading of the privacy rules (§25 TTDSG consent for device access that isn't strictly necessary). If you'd rather collect by default, or ask during onboarding's consent step, tell me and I'll change it; it should also go into the privacy policy and DPIA either way.
+None right now.
 
 ## 2026-11-18
 
+- **Decided: crash reports stay opt-in** (Flori, answering the 2026-11-16 question). No code change: Crashlytics collection stays off until the user turns on "Absturzberichte senden" in Settings, which defaults to off. Mention it in the privacy policy and the DPIA.
+- **Mistral DPA:** there's nothing to sign. Mistral's Data Processing Addendum (legal.mistral.ai/terms/data-processing-addendum) is part of its terms and applies from the first API use. Keep a dated copy with the DPIA records.
 - **Decided: Mistral for dedup embeddings** (Flori). A Mistral AI Studio key is set on Fly as `EMBEDDINGS_URL=https://api.mistral.ai/v1/embeddings`, `EMBEDDINGS_MODEL=mistral-embed` and `EMBEDDINGS_API_KEY`. PR #3 was merged and deployed (Deploy server run #4 succeeded), and Flori saw the server running with embeddings dedup. The 0.8 similarity threshold is still a starting point; calibrate it on real reports once the eval set exists. Still for Flori: accept Mistral's DPA and check its data-retention settings, if not done yet (under "Needs a human").
 - **Fix: CI Postgres service** (found by CI on PR #3). Installing pgvector into `postgis/postgis:16-3.4` failed with `bullseye-pgdg … does not have a Release file`: that image (and `16-3.5`) is on Debian bullseye, and apt.postgresql.org has archived bullseye. CI and `server/docker/postgres/Dockerfile` now start from `postgres:16-bookworm` and install `postgresql-16-postgis-3` and `postgresql-16-pgvector` from the live bookworm repository; `init.sql` also enables PostGIS in the `heyokay` database, which the PostGIS image used to do.
   - Verified: the bookworm repository has both packages; the full server suite passes against a fresh database with no extensions preinstalled (112/112), as CI will see it. Not verified here: the container build itself (no Docker daemon); the CI run on this push is the check.
