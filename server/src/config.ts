@@ -1,3 +1,4 @@
+import { parseRole, type Role } from './roles.js';
 import { selectAgencies, type PresseportalAgency } from './sources/presseportal.js';
 import { parseDwdMode, type DwdMode } from './sources/dwd.js';
 
@@ -45,6 +46,10 @@ export interface Config {
   expoPushUrl: string;
   /** Expo access token, if "enhanced push security" is turned on for the EAS project. */
   expoAccessToken: string | null;
+  /** api: HTTP only · worker: ingest + push only · all: both (default, one machine). */
+  role: Role;
+  /** This process's name in the worker lease (Fly sets FLY_MACHINE_ID). */
+  instanceId: string;
   /** Matching buffer added to an event's radius when deciding who is affected. */
   matchBufferM: number;
   /** Below this extraction confidence, events go to the Alert Desk. */
@@ -84,6 +89,8 @@ export function loadConfig(env = process.env): Config {
     geocoderUserAgent: env.GEOCODER_USER_AGENT ?? 'HeyOkay/0.1 (set GEOCODER_USER_AGENT to your contact)',
     expoPushUrl: env.EXPO_PUSH_URL ?? 'https://exp.host/--/api/v2/push/send',
     expoAccessToken: env.EXPO_ACCESS_TOKEN || null,
+    role: parseRole(env.ROLE),
+    instanceId: env.FLY_MACHINE_ID || env.HOSTNAME || `local-${process.pid}`,
     matchBufferM: Number(env.MATCH_BUFFER_M ?? 1500),
     reviewConfidence: Number(env.REVIEW_CONFIDENCE ?? 0.6),
     reviewSeverity: Number(env.REVIEW_SEVERITY ?? 4),

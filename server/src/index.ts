@@ -16,6 +16,8 @@ import { createEmbedder } from './embeddings.js';
 import { installProcessHandlers, logError } from './errors.js';
 import { ResendMailer } from './auth.js';
 import { IngestScheduler, Mutex, type SourceTask } from './ingest.js';
+import { LeaderElector, leaseTtlMs, runsApi, runsWorker } from './roles.js';
+import Fastify from 'fastify';
 
 installProcessHandlers();
 
@@ -94,16 +96,43 @@ const tasks: SourceTask[] = [
 ];
 
 const scheduler = new IngestScheduler(tasks, (key, err) => logError('ingest', err, { source: key }));
-const runIngest = () => scheduler.tick();
+const worker = runsWorker(config.role);
+const leader = new LeaderElector(store, config.instanceId, leaseTtlMs(config.pollIntervalSec), undefined, (leading) =>
+  console.log(`[worker] ${config.instanceId} ${leading ? 'took over ingest and push' : 'stood down'}`));
+// Work only while holding the worker lease, so two machines never fetch or push the same thing.
+const runIngest = async () => {
+  if (!worker) return { skipped: 'this machine serves the API only (ROLE=api); the worker polls' };
+  if (!(await leader.check())) return { skipped: 'another worker holds the lease' };
+  return scheduler.tick();
+};
+const roleStatus = () => ({ role: config.role, ...(worker ? { worker: leader.status() } : {}) });
 
 const mailer = config.resendApiKey && config.mailFrom ? new ResendMailer(config.resendApiKey, config.mailFrom) : null;
-const app = buildApi({ store, pipeline, adminToken: config.adminToken, runIngest, ingestStatus: () => scheduler.snapshot(), mailer });
+let app;
+if (runsApi(config.role)) {
+  app = buildApi({ store, pipeline, adminToken: config.adminToken, runIngest, ingestStatus: worker ? () => scheduler.snapshot() : undefined, roleStatus, mailer });
+} else {
+  // Worker only: no public routes, just the health check the platform polls.
+  app = Fastify({ logger: false });
+  app.get('/health', async () => ({ ok: true, ...roleStatus(), sources: scheduler.snapshot() }));
+}
 await app.listen({ port: config.port, host: '0.0.0.0' });
-console.log(`Hey-Okay server on :${config.port} · ${storeKind(config)} · AI ${llm.enabled ? `on (${config.model})` : 'off — rules + templates'} · dedup ${embedder.enabled ? `embeddings (${embedder.model})` : 'word overlap'} · Alert Desk at /admin`);
+console.log(`Hey-Okay server on :${config.port} · role ${config.role} · ${storeKind(config)} · AI ${llm.enabled ? `on (${config.model})` : 'off — rules + templates'} · dedup ${embedder.enabled ? `embeddings (${embedder.model})` : 'word overlap'}${runsApi(config.role) ? ' · Alert Desk at /admin' : ''}`);
 if (config.adminToken === 'change-me') console.warn('⚠ Set ADMIN_TOKEN before exposing this server.');
+if (config.role !== 'all' && !config.databaseUrl) console.warn('⚠ Separate api/worker roles need a shared database (DATABASE_URL); SQLite is one machine only.');
 
-if (config.pollIntervalSec > 0) {
+if (worker && config.pollIntervalSec > 0) {
   const tick = () => runIngest().then((r) => console.log('[ingest]', JSON.stringify(r))).catch((e) => logError('ingest', e));
   tick();
   setInterval(tick, config.pollIntervalSec * 1000);
+}
+
+// Hand the lease over at once on a clean stop (deploys), instead of waiting for it to run out.
+for (const sig of ['SIGTERM', 'SIGINT'] as const) {
+  process.once(sig, async () => {
+    await leader.release();
+    await app.close().catch(() => {});
+    await store.close().catch(() => {});
+    process.exit(0);
+  });
 }

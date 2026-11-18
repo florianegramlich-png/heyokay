@@ -28,11 +28,13 @@ export interface ApiDeps {
   /** Per-source ingest health for /health (no error texts). */
   ingestStatus?: () => Record<string, { ok: boolean; running: boolean; lastOkAt: string | null }>;
   runIngest: () => Promise<unknown>;
+  /** Role and worker-lease state for /health (multi-machine setups). */
+  roleStatus?: () => Record<string, unknown>;
   /** Where unexpected errors are logged (default: JSON lines on stderr). */
   errorSink?: ErrorSink;
 }
 
-export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus, mailer = null, errorSink = stderrSink }: ApiDeps) {
+export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus, roleStatus, mailer = null, errorSink = stderrSink }: ApiDeps) {
   const app = Fastify({ logger: false });
   // Any origin may call the API: it uses bearer tokens, never cookies. The web app needs PUT and DELETE too.
   app.register(cors, { origin: true, methods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE'] });
@@ -62,9 +64,10 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
 
   // Always 200 while the process is up (Fly's health check). `sources` shows which feeds last worked when.
   app.get('/health', async () => {
-    if (!ingestStatus) return { ok: true };
+    const role = roleStatus?.() ?? {};
+    if (!ingestStatus) return { ok: true, ...role };
     const sources = Object.fromEntries(Object.entries(ingestStatus()).map(([k, v]) => [k, { ok: v.ok, running: v.running, lastOkAt: v.lastOkAt }]));
-    return { ok: true, sources };
+    return { ok: true, ...role, sources };
   });
 
   // ── device / user ────────────────────────────────────────────────────────

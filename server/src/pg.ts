@@ -117,6 +117,11 @@ export const MIGRATIONS: { version: number; sql: string }[] = [
       );
     `,
   },
+  {
+    // Leases: exactly one worker runs ingest and push at a time, across machines (roles.ts).
+    version: 7,
+    sql: `CREATE TABLE leases (name text PRIMARY KEY, holder text NOT NULL, expires_at timestamptz NOT NULL);`,
+  },
 ];
 
 /**
@@ -519,6 +524,21 @@ export class PgStore implements Store {
 
   async deleteEmailCode(email: string): Promise<void> {
     await this.q(`DELETE FROM email_codes WHERE email = $1`, [email]);
+  }
+
+  // ── leases ───────────────────────────────────────────────────────────────
+  async acquireLease(name: string, holder: string, ttlMs: number, now = new Date()): Promise<boolean> {
+    // One statement: the row lock makes concurrent takeovers safe; RETURNING tells us if we won.
+    const { rows } = await this.q(`
+      INSERT INTO leases (name, holder, expires_at) VALUES ($1, $2, $3::timestamptz)
+      ON CONFLICT (name) DO UPDATE SET holder = excluded.holder, expires_at = excluded.expires_at
+      WHERE leases.holder = excluded.holder OR leases.expires_at < $4::timestamptz
+      RETURNING holder`, [name, holder, new Date(now.getTime() + ttlMs).toISOString(), now.toISOString()]);
+    return rows[0]?.holder === holder;
+  }
+
+  async releaseLease(name: string, holder: string): Promise<void> {
+    await this.q(`DELETE FROM leases WHERE name = $1 AND holder = $2`, [name, holder]);
   }
 
   // ── push delivery ────────────────────────────────────────────────────────

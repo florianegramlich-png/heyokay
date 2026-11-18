@@ -143,6 +143,15 @@ export interface Store {
   emailCode(email: string): Promise<EmailCode | null>;
   deleteEmailCode(email: string): Promise<void>;
 
+  // leases (one worker at a time across machines; see roles.ts)
+  /**
+   * Takes or renews the lease `name` for `holder` until now + ttlMs. True when `holder` holds it
+   * afterwards: it was free, expired, or already this holder's. Atomic across processes.
+   */
+  acquireLease(name: string, holder: string, ttlMs: number, now?: Date): Promise<boolean>;
+  /** Gives the lease up early (clean shutdown), so another worker can take over at once. */
+  releaseLease(name: string, holder: string): Promise<void>;
+
   close(): Promise<void>;
 }
 

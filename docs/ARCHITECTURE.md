@@ -51,8 +51,12 @@ Live URLs: API `https://heyokay.fly.dev` (health: `/health`, Alert Desk: `/admin
 ### Storage (`store.ts`, `db.ts`, `pg.ts`)
 
 - `Store` interface with two implementations: `SqliteStore` (tests, demo, production today on the Fly volume `/data/heyokay.db`) and `PgStore` (used when `DATABASE_URL` is set; numbered migrations under an advisory lock; PostGIS for matching, pgvector for embeddings).
-- Tables: `users` (a person's data: prefs, last location only, push token), `devices` (hashed bearer tokens; several per signed-in person), `accounts` (email, one per user), `email_codes` (hashed sign-in codes), `saved_places`, `source_items`, `events` (+ `event_embeddings`), `alerts`, `push_tickets` (delivery status per push).
+- Tables: `users` (a person's data: prefs, last location only, push token), `devices` (hashed bearer tokens; several per signed-in person), `accounts` (email, one per user), `email_codes` (hashed sign-in codes), `saved_places`, `source_items`, `events` (+ `event_embeddings`), `alerts`, `push_tickets` (delivery status per push), `leases` (which worker runs ingest and push).
 - Privacy by design: only the latest location (rounded ~100 m on the device), no history; device tokens hashed; `DELETE /v1/me` erases everything; the model never sees user data.
+
+### Roles (`roles.ts`)
+
+`ROLE=api` answers HTTP only (stateless, scale out freely); `ROLE=worker` polls sources, runs the pipeline, sends pushes and checks receipts, with only `/health` on HTTP; `ROLE=all` (default) does both on one machine. Workers coordinate through a lease row (`leases`, name `worker`): the holder renews it each poll, others wait; on a crash another worker takes over after the lease runs out (3 × `POLL_INTERVAL_SEC`, ≥ 1 min), on a clean stop at once. A worker that can't reach the database stands down. `/health` shows `role` and `worker.leading`.
 
 ### API (`api.ts`)
 
@@ -121,6 +125,7 @@ Health: `GET /health` (per-source status, no error texts). CORS: any origin, bea
 | `GEOCODER_URL`, `GEOCODER_USER_AGENT` | Nominatim | Geocoding |
 | `EXPO_PUSH_URL` | Expo | Push endpoint |
 | `EXPO_ACCESS_TOKEN` | – | Only if Expo "enhanced push security" is on |
+| `ROLE` | `all` | `api`, `worker` or `all` (see Roles). Separate roles need `DATABASE_URL` |
 | `MATCH_BUFFER_M` | 1500 | Buffer around an event for current locations |
 | `REVIEW_CONFIDENCE`, `REVIEW_SEVERITY` | 0.6, 4 | Alert Desk thresholds |
 
@@ -148,7 +153,7 @@ Target, in this order (each is a roadmap item under "Scale foundation"):
 | # | Step | Why | Unlocks |
 |---|---|---|---|
 | 1 | **Managed Postgres** (PostGIS + pgvector) in Frankfurt; switch `DATABASE_URL`, migrate the SQLite data once | The code already runs on Postgres; the disk-bound SQLite is the one thing that keeps us on a single machine | Backups, point-in-time restore, more machines |
-| 2 | **API and worker roles** (`ROLE=api` / `worker`) plus a Postgres advisory-lock leader, so exactly one worker polls and sends at a time, with automatic takeover | Several API machines behind Fly's load balancer; one worker never double-sends | Horizontal API scaling, zero-downtime deploys |
+| 2 | ✅ **API and worker roles** (built 2026-11-18) (`ROLE=api` / `worker`) plus a worker lease in the database, so exactly one worker polls and sends at a time, with automatic takeover | Several API machines behind Fly's load balancer; one worker never double-sends | Horizontal API scaling, zero-downtime deploys |
 | 3 | **Delivery queue** in Postgres (`FOR UPDATE SKIP LOCKED`): matching writes jobs, workers send pushes in parallel with retries | A severe warning for a big city means hundreds of thousands of pushes in minutes | Several workers sharing the load |
 | 4 | **Country packs**: sources, emergency numbers, advice, language and units per country (`COUNTRIES=DE,AT,CH`), source registry with health | Today Germany and the US test are wired in code (112/110, 911) | New country = config + source adapters |
 | 5 | **API hardening**: rate limits per token and IP, body limits, security headers; CDN caching for the web app | Public launch traffic and abuse | Safe public launch |

@@ -71,6 +71,7 @@ export class SqliteStore implements Store {
         email TEXT PRIMARY KEY, code_hash TEXT NOT NULL, expires_at TEXT NOT NULL,
         attempts INTEGER NOT NULL, sends INTEGER NOT NULL, window_start TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS leases (name TEXT PRIMARY KEY, holder TEXT NOT NULL, expires_at TEXT NOT NULL);
       -- Users from before devices existed sign in with their original token.
       INSERT OR IGNORE INTO devices (token_hash, user_id, created_at) SELECT token_hash, id, created_at FROM users;
       PRAGMA foreign_keys = ON;
@@ -379,6 +380,21 @@ export class SqliteStore implements Store {
 
   async deleteEmailCode(email: string): Promise<void> {
     this.db.prepare(`DELETE FROM email_codes WHERE email = ?`).run(email);
+  }
+
+  // ── leases ───────────────────────────────────────────────────────────────
+  async acquireLease(name: string, holder: string, ttlMs: number, now = new Date()): Promise<boolean> {
+    const until = new Date(now.getTime() + ttlMs).toISOString();
+    this.db.prepare(`
+      INSERT INTO leases (name, holder, expires_at) VALUES (?,?,?)
+      ON CONFLICT (name) DO UPDATE SET holder = excluded.holder, expires_at = excluded.expires_at
+      WHERE leases.holder = excluded.holder OR leases.expires_at < ?`).run(name, holder, until, now.toISOString());
+    const r: any = this.db.prepare(`SELECT holder FROM leases WHERE name = ?`).get(name);
+    return r?.holder === holder;
+  }
+
+  async releaseLease(name: string, holder: string): Promise<void> {
+    this.db.prepare(`DELETE FROM leases WHERE name = ? AND holder = ?`).run(name, holder);
   }
 
   // ── push delivery ────────────────────────────────────────────────────────

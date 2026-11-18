@@ -36,3 +36,10 @@ primary_region = 'fra'
 [[vm]]
   size = 'shared-cpu-1x'
   memory = '512mb'
+
+# Scaling (docs/ARCHITECTURE.md §8): once DATABASE_URL points at managed Postgres, drop the
+# [[mounts]] and DB_PATH above and split into process groups, e.g.
+#   [processes]
+#     api = 'npm start'          # with ROLE=api   — scale with `fly scale count api=3`
+#     worker = 'npm start'       # with ROLE=worker — 2 for failover, one leads
+# Until then: ROLE unset = 'all', one machine.
