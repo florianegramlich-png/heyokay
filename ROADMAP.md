@@ -12,7 +12,7 @@ Items that need accounts or keys (Firebase, RevenueCat or App Store products, Ap
 
 #### Scale foundation (Flori, 2026-11-18; see docs/ARCHITECTURE.md §8)
 
-- [ ] **Managed Postgres in production** [10.4]: a one-off SQLite → Postgres copy script (users, devices, accounts, places, events, alerts, tickets), a runbook, and `DATABASE_URL` on Fly. Provider: Supabase (Flori, 2026-11-18). Done: copy tool, `DATABASE_SCHEMA`, runbook. Left: create the project, run the switch.
+- [ ] **Managed Postgres in production** [10.4]: a one-off SQLite → Postgres copy script (users, devices, accounts, places, events, alerts, tickets), a runbook, and `DATABASE_URL` on Fly. Provider: Supabase (Flori, 2026-11-18). Done: copy tool, `DATABASE_SCHEMA`, runbook. Supabase project created and migrated (2026-11-18). Left: Flori runs the switch (runbook).
 - [x] **API and worker roles + leader** [10.4]: `ROLE=api|worker|all` (default `all`), a worker lease in the database (takeover when the holder dies, handover on clean stop), role and lease on `/health`. Tests with 8 racing workers: one wins. (2026-11-18; Fly process groups follow with managed Postgres, see ARCHITECTURE §8.)
 - [ ] **Delivery queue** [6.2 step 9]: a Postgres job table (`FOR UPDATE SKIP LOCKED`) between matching and push; workers send in parallel with retries; queue depth on `/health`. Load test: 100k matched users for one event.
 - [x] **Country packs, part 1** [8.1]: `server/src/countries.ts` with DE, AT, CH, US (language, emergency/police/medical numbers, units); every source tags its items with a country, events keep it, and the recommended actions name that country's numbers. (2026-11-18)
