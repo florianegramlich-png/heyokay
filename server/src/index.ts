@@ -8,6 +8,7 @@ import { fetchNinaChannel } from './sources/nina.js';
 import { fetchFeed } from './sources/rss.js';
 import { fetchAgency } from './sources/presseportal.js';
 import { fetchDwdSnapshot } from './sources/dwd.js';
+import { FEUERWEHR_BERLIN_AREA, fetchFeuerwehrBerlin } from './sources/feuerwehr-berlin.js';
 import { fetchNwsArea, nwsFetcher } from './sources/nws.js';
 import { buildApi } from './api.js';
 import { createEmbedder } from './embeddings.js';
@@ -70,6 +71,14 @@ async function runIngest() {
       } catch (err) {
         logError('ingest', err, { source: `presseportal:${agency.key}` });
         report[`presseportal:${agency.key}`] = { error: (err as Error).message };
+      }
+    }
+    if (config.feuerwehrBerlin) {
+      try {
+        report['feuerwehr-berlin'] = await pipeline.ingest(await fetchFeuerwehrBerlin(seen('rss')), FEUERWEHR_BERLIN_AREA);
+      } catch (err) {
+        logError('ingest', err, { source: 'feuerwehr-berlin' });
+        report['feuerwehr-berlin'] = { error: (err as Error).message };
       }
     }
     const nwsGet = nwsFetcher(config.nwsUserAgent);
