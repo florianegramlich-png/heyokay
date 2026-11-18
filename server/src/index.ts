@@ -6,6 +6,7 @@ import { ExpoPushSender } from './push.js';
 import { Pipeline } from './pipeline/run.js';
 import { fetchNinaChannel } from './sources/nina.js';
 import { fetchFeed } from './sources/rss.js';
+import { fetchAgency } from './sources/presseportal.js';
 import { fetchNwsArea, nwsFetcher } from './sources/nws.js';
 import { buildApi } from './api.js';
 import { createEmbedder } from './embeddings.js';
@@ -47,6 +48,14 @@ async function runIngest() {
       } catch (err) {
         logError('ingest', err, { source: `rss:${feed.sourceName}` });
         report[`rss:${feed.sourceName}`] = { error: (err as Error).message };
+      }
+    }
+    for (const agency of config.presseportalAgencies) {
+      try {
+        report[`presseportal:${agency.key}`] = await pipeline.ingest(await fetchAgency(agency, seen('presseportal')), agency.area);
+      } catch (err) {
+        logError('ingest', err, { source: `presseportal:${agency.key}` });
+        report[`presseportal:${agency.key}`] = { error: (err as Error).message };
       }
     }
     const nwsGet = nwsFetcher(config.nwsUserAgent);

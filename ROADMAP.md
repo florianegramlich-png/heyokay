@@ -10,7 +10,6 @@ Items that need accounts or keys (Firebase, RevenueCat or App Store products, Ap
 
 ### Phase 1: launch blockers
 
-- [ ] **Source: Presseportal Blaulicht** [6.1 #1]: adapter for Presseportal police and fire press releases (RSS per agency) with an agency to region mapping for Berlin, Munich, Hamburg and Cologne. Fixtures and tests.
 - [ ] **Source: DWD direct + heat** [5.4]: DWD warnings via the DWD open data CAP feed as a NINA fallback (dedup on CAP id), plus heat thresholds from OpenWeatherMap at users' saved places (for example "38 °C at your mother's address"). Fixtures and tests.
 - [ ] **Source: BVG/VBB disruptions** [5.4]: VBB/HAFAS disruption messages mapped to `transit` events, with stations geocoded. Fixtures and tests.
 - [ ] **Source: EU-Alert + Feuerwehr Berlin** [5.4]: Cell Broadcast / EU-Alert messages as exposed via NINA (MoWaS), plus Feuerwehr Berlin press releases. Fixtures and tests.
@@ -89,6 +88,7 @@ Legal and partners
 
 ## Done
 
+- [x] 2026-11-18 **Source: Presseportal Blaulicht** [6.1 #1]: `server/src/sources/presseportal.ts` polls 8 approved agencies in Hamburg, Köln, München and Berlin (Bundespolizei), fetching the full article once per new release; missing-person searches and ceremonies are dropped before any model call; releases placed only at city level go to the Alert Desk. On by default (`PRESSEPORTAL_AGENCIES`). 8 tests with real fixtures. Polizei Berlin, Feuerwehr Berlin and Polizei München aren't on Presseportal.
 - [x] 2026-11-18 **Embedding-based dedup** [6.1 #3]: `Embedder` interface with an OpenAI-style HTTP provider (Mistral EU / OpenAI / Voyage, set by env) and a deterministic fake; one vector per event in pgvector (migration 4) or SQLite; clustering compares embedding similarity among nearby, same-category, same-time candidates and falls back to word overlap. 12 tests (pipeline and store tests run per backend). Provider: Mistral `mistral-embed`, live on Fly since 2026-11-18.
 - [x] 2026-11-17 **PostGIS matching** [6.4] (split from "Postgres + PostGIS + pgvector"): `Store.usersNear()` returns only users near an event; Postgres uses generated geography columns with GIST indexes (migration 2); SQLite applies the same rule in JS; delivery no longer loops over all users. 3 tests per backend, including a boundary test that both backends agree with `match`.
 - [x] 2026-11-17 **Postgres store** [6.4, 10.4] (split from "Postgres + PostGIS + pgvector"): `PgStore` (`pg`) selected by `DATABASE_URL`, numbered migrations under an advisory lock, `server/docker-compose.yml` with PostGIS + pgvector, store contract and end-to-end suites run on Postgres when `TEST_DATABASE_URL` is set; CI has a Postgres service. 2 Postgres-only tests + 1 factory test.

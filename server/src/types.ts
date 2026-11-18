@@ -6,7 +6,7 @@ export type Category = (typeof CATEGORIES)[number];
 /** 1 = info, 2 = minor, 3 = moderate, 4 = severe, 5 = extreme. Same meaning across all sources. */
 export type Severity = 1 | 2 | 3 | 4 | 5;
 
-export type SourceKind = 'nina' | 'nws' | 'rss' | 'manual';
+export type SourceKind = 'nina' | 'nws' | 'rss' | 'presseportal' | 'manual';
 
 export type Language = 'de' | 'en';
 
