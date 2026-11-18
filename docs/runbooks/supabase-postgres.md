@@ -11,7 +11,7 @@ Only Postgres, with PostGIS and pgvector. The server talks to it directly. We do
 ## 1. Project (done 2026-11-18)
 
 - Project **Hey-Okay**, ref `wlufgdikkszganhywzpg`, region **eu-central-1 (Frankfurt)**, Postgres 17, in Flori's organisation (free plan, next to Nurse Companion).
-- Schema `heyokay` is created and migrations 1–7 are applied (Supabase migrations `heyokay_schema_v1_to_v7` and `lock_down_public_api`). Checked: PostGIS distance query and pgvector work, 12 tables, and the API roles `anon`/`authenticated` have no access to `heyokay`.
+- Schema `heyokay` is created and migrations 1–7 are applied (later migrations, e.g. 8 for the delivery queue, run automatically when the server starts) (Supabase migrations `heyokay_schema_v1_to_v7` and `lock_down_public_api`). Checked: PostGIS distance query and pgvector work, 12 tables, and the API roles `anon`/`authenticated` have no access to `heyokay`.
 - Free plan: 500 MB and no automatic backups. Upgrade to Pro before the public launch.
 - **Recommended (dashboard, 1 click):** Project Settings → Data API → turn it **off**. We never use it, and that removes the remaining advisor warnings. Those are about PostGIS's own reference table `spatial_ref_sys` and the function `st_estimatedextent` in `public`, which belong to Supabase's admin role, so we can't revoke them. Neither holds our data. "Extension in public" stays as a warning: PostGIS can't be moved, and the code refers to `public.geography`.
 
