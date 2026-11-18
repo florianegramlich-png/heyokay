@@ -70,7 +70,7 @@ Accounts and keys
 - Firebase project (Crashlytics, FCM): put `GoogleService-Info.plist` and `google-services.json` in `app/firebase/` (see its README), then make a new development build and confirm a test crash shows up in the console.
 - RevenueCat plus App Store / Play subscription products (€2.50; €4.99 family test).
 - Sign in with Apple capability, Google OAuth client IDs, an email sender for magic links.
-- Anthropic and OpenAI keys with EU residency and zero-retention terms and DPAs (Decision 12); an embeddings provider key and DPA (Mistral EU suggested, see CHANGELOG open questions); OpenWeatherMap and VBB API access.
+- Anthropic and OpenAI keys with EU residency and zero-retention terms and DPAs (Decision 12); Mistral's DPA and data-retention settings for the embeddings key (key is set on Fly, 2026-11-18); OpenWeatherMap and VBB API access.
 - Hosting account (Fly.io or AWS in Frankfurt), managed Postgres, admin token.
 
 Decisions (PRD section 12) that the agent needs before the related item is final
@@ -89,7 +89,7 @@ Legal and partners
 
 ## Done
 
-- [x] 2026-11-18 **Embedding-based dedup** [6.1 #3]: `Embedder` interface with an OpenAI-style HTTP provider (Mistral EU / OpenAI / Voyage, set by env) and a deterministic fake; one vector per event in pgvector (migration 4) or SQLite; clustering compares embedding similarity among nearby, same-category, same-time candidates and falls back to word overlap. 12 tests (pipeline and store tests run per backend). Provider choice open (see CHANGELOG).
+- [x] 2026-11-18 **Embedding-based dedup** [6.1 #3]: `Embedder` interface with an OpenAI-style HTTP provider (Mistral EU / OpenAI / Voyage, set by env) and a deterministic fake; one vector per event in pgvector (migration 4) or SQLite; clustering compares embedding similarity among nearby, same-category, same-time candidates and falls back to word overlap. 12 tests (pipeline and store tests run per backend). Provider: Mistral `mistral-embed`, live on Fly since 2026-11-18.
 - [x] 2026-11-17 **PostGIS matching** [6.4] (split from "Postgres + PostGIS + pgvector"): `Store.usersNear()` returns only users near an event; Postgres uses generated geography columns with GIST indexes (migration 2); SQLite applies the same rule in JS; delivery no longer loops over all users. 3 tests per backend, including a boundary test that both backends agree with `match`.
 - [x] 2026-11-17 **Postgres store** [6.4, 10.4] (split from "Postgres + PostGIS + pgvector"): `PgStore` (`pg`) selected by `DATABASE_URL`, numbered migrations under an advisory lock, `server/docker-compose.yml` with PostGIS + pgvector, store contract and end-to-end suites run on Postgres when `TEST_DATABASE_URL` is set; CI has a Postgres service. 2 Postgres-only tests + 1 factory test.
 - [x] 2026-11-17 **Async Store interface** [6.4] (split from "Postgres + PostGIS + pgvector"): `Store` is now an async interface in `server/src/store.ts`; SQLite is `SqliteStore`; pipeline, API, server and demo await it; shared store contract tests (7) run per backend via `test/backends.ts`.
