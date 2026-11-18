@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<alert xmlns="urn:oasis:names:tc:emergency:cap:1.2">
+  <identifier>2.49.0.0.276.0.DWD.PVW.1795022460000.36312d7c-42a8-4cae-9919-5718d7a70f09.DEU</identifier>
+  <sender>opendata@dwd.de</sender>
+  <sent>2026-11-18T18:21:00+01:00</sent>
+  <status>Actual</status>
+  <msgType>Alert</msgType>
+  <source>PVW</source>
+  <scope>Public</scope>
+  <code>id:2.49.0.0.276.0.DWD.PVW.1795022460000.36312d7c-42a8-4cae-9919-5718d7a70f09</code>
+  <info>
+    <language>de-DE</language>
+    <category>Met</category>
+    <event>STARKES GEWITTER</event>
+    <responseType>Prepare</responseType>
+    <urgency>Immediate</urgency>
+    <severity>Moderate</severity>
+    <certainty>Likely</certainty>
+    <eventCode>
+      <valueName>PROFILE_VERSION</valueName>
+      <value>2.1.14</value>
+    </eventCode>
+    <eventCode>
+      <valueName>LICENSE</valueName>
+      <value>© GeoBasis-DE / BKG 2021 (Daten modifiziert)</value>
+    </eventCode>
+    <eventCode>
+      <valueName>II</valueName>
+      <value>33</value>
+    </eventCode>
+    <eventCode>
+      <valueName>GROUP</valueName>
+      <value>THUNDERSTORM</value>
+    </eventCode>
+    <eventCode>
+      <valueName>GROUP</valueName>
+      <value>WIND</value>
+    </eventCode>
+    <eventCode>
+      <valueName>AREA_COLOR</valueName>
+      <value>251 140 0</value>
+    </eventCode>
+    <effective>2026-11-18T18:21:00+01:00</effective>
+    <onset>2026-11-18T18:21:00+01:00</onset>
+    <expires>2026-11-18T18:45:00+01:00</expires>
+    <senderName>Deutscher Wetterdienst</senderName>
+    <headline>Amtliche WARNUNG vor STARKEM GEWITTER</headline>
+    <description>Von Westen ziehen einzelne Gewitter auf. Dabei gibt es Sturmböen mit Geschwindigkeiten bis 80 km/h (22 m/s, 44 kn, Bft 9).</description>
+    <instruction>Gefahr durch: Blitzschlag (Lebensgefahr!); einzelne herabstürzende Äste; umherfliegende Gegenstände. 
+Handlungsempfehlungen: 
+Aufenthalt im Freien vermeiden oder Schutz suchen (z.B. in Gebäuden); Gewässer meiden; frei stehende Objekte sichern (z.B. Leinwände und Möbel); z.B. Zelte und Abdeckungen befestigen; im Freien auf herabfallende Gegenstände (z.B. Äste) achten</instruction>
+    <web>https://dwd.de/warnungen</web>
+    <contact>Deutscher Wetterdienst</contact>
+    <parameter>
+      <valueName>gusts</valueName>
+      <value>&lt;80 [km/h]</value>
+    </parameter>
+    <parameter>
+      <valueName>occurrence</valueName>
+      <value>isolated</value>
+    </parameter>
+    <parameter>
+      <valueName>direction of approach</valueName>
+      <value>west</value>
+    </parameter>
+    <area>
+      <areaDesc>Kreis und Stadt Karlsruhe</areaDesc>
+      <polygon>49.265543,8.524868 49.262243,8.542506 49.269782,8.548607 49.266043,8.561486 49.262112,8.575014 49.254659,8.570638 49.246609,8.598486 49.241519,8.616076 49.243406,8.627753 49.235953,8.642182 49.239825,8.647818 49.229086,8.686659 49.231972,8.694891 49.227061,8.700625 49.237331,8.722368 49.228201,8.729296 49.230142,8.736039 49.219586,8.750258 49.206244,8.752088 49.198489,8.783632 49.201554,8.81362 49.194192,8.820715 49.157789,8.817702 49.161422,8.828962 49.150345,8.842212 49.126117,8.827485 49.126197,8.858711 49.131816,8.869576 49.119281,8.877409 49.115339,8.889767 49.082538,8.89297 49.080091,8.87891 49.072042,8.86585 49.069569,8.876436 49.057972,8.879941 49.061229,8.839515 49.037517,8.835502 49.033648,8.812157 49.045702,8.795409 49.041094,8.759703 49.044779,8.759474 49.027658,8.732509 48.995704,8.737039 48.989013,8.710216 48.996268,8.700924 48.993955,8.671519 49.007532,8.660557 49.00174,8.647636 48.989721,8.6477 48.993623,8.626509 48.985256,8.600915 48.986872,8.58875 48.987235,8.573564 48.970678,8.558931 48.965296,8.563478 48.953339,8.548998 48.95299,8.537562 48.936347,8.543018 48.926047,8.535252 48.927371,8.553471 48.919371,8.552386 48.919495,8.543507 48.903763,8.534494 48.898286,8.517345 48.878524,8.525682 48.865412,8.516888 48.858754,8.501753 48.844599,8.467768 48.828649,8.477225 48.820099,8.492977 48.821032,8.445974 48.811995,8.438933 48.830097,8.419776 48.859003,8.404169 48.849582,8.389785 48.855561,8.375876 48.851672,8.360695 48.842831,8.356991 48.857921,8.330231 48.854927,8.321611 48.861903,8.30522 48.883673,8.297788 48.886443,8.288971 48.912542,8.295677 48.922877,8.315606 48.922566,8.352309 48.935218,8.353427 48.94967,8.309097 48.946618,8.302131 48.953169,8.273767 48.959174,8.258874 48.980602,8.261802 48.990573,8.279385 49.00412,8.29231 49.053855,8.312559 49.079854,8.340504 49.087664,8.350758 49.104401,8.361073 49.129391,8.367452 49.144297,8.371282 49.155821,8.371912 49.167511,8.368359 49.176497,8.371656 49.188766,8.382892 49.219295,8.404971 49.224293,8.397432 49.220725,8.385731 49.240226,8.394484 49.250726,8.416497 49.265491,8.444734 49.2824,8.466996 49.28766,8.487666 49.274708,8.525804 49.265543,8.524868 49.265543,8.524868</polygon>
+      <geocode>
+        <valueName>WARNCELLID</valueName>
+        <value>908215999</value>
+      </geocode>
+      <altitude>0.0</altitude>
+      <ceiling>9842.5197</ceiling>
+    </area>
+  </info>
+</alert>
