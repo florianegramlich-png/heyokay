@@ -6,6 +6,13 @@
 
 ## 2026-11-18
 
+- **Push receipts + retry** [5.4, 6.2 step 9] (Flori picked push reliability, notification actions, heat and sign-in as next; the roadmap now starts with those).
+  - `server/src/push.ts`: every send returns one ticket per message. Sending retries network errors, HTTP 429 and 5xx (1 s, 2 s; 3 attempts), never a 4xx. New `getReceipts()`. Optional `EXPO_ACCESS_TOKEN` for Expo's "enhanced push security".
+  - Tickets are stored per push (`push_tickets`; SQLite table, Postgres migration 5) with alert, user, token, status and attempt; GDPR delete removes them.
+  - `Pipeline.checkPushReceipts()` runs on the ingest clock (`push:receipts` on `/health`): 15 minutes after sending it asks Expo for the receipts. Delivered → recorded. `DeviceNotRegistered` → the token is forgotten (also straight away when Expo refuses at send time), so uninstalled apps stop counting. Transient errors (`MessageRateExceeded`, `ExpoError`, `ProviderError`) → the alert is sent again, at most twice. No receipt after a day → unknown.
+  - Alert Desk metrics now include push delivery (delivered / failed / pending).
+  - Pushes now carry `categoryId: "alert"` (the rating buttons, next item) and the event id; all-clears have no buttons.
+  - Tests: `server/test/push.test.ts` (4 sender tests with a fake Expo endpoint: retries and backoff, no retry on 4xx, ticket mapping, receipts; 3 pipeline tests per backend: delivered / uninstalled / resent with a cap of two, refused at send time, unknown after a day, GDPR delete). Server 113 passed + 2 skipped on SQLite, 155/155 on Postgres.
 - **iPhone app: new look** (Flori: "also fix the UI of the app"), matching the web app and her v0 design. JavaScript only, no new native packages, so the existing development build picks it up after `git pull` and a reload.
   - Night sky behind every screen (`app/src/components/Starfield.tsx`: still stars in cyan, purple and pink; no animation, so no battery cost), dark navy, cyan and purple accents, "Hey-Okay" logo in the header, softer cards and pills, a dark map in the alert detail, dark text fields.
   - Main screen: "In deiner Nähe" with the current alerts grouped by topic (newest per event, ended events and all-clears left out, most severe first), "Alles okay." when nothing affects you, and "Vorher" with everything earlier. Same rule as the web app (`app/src/lib/feed.ts`). Settings sits top right.

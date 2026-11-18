@@ -46,12 +46,12 @@ Live URLs: API `https://heyokay.fly.dev` (health: `/health`, Alert Desk: `/admin
 5. **Compose + verify** (`compose.ts`): Claude writes title (≤ 50) and body (≤ 100); a verifier rejects numbers not in the sources, alarm words and area stigma; two failures → template. The recommended action comes from a fixed library (`guidance.ts`).
 6. **Match** (`rank.ts`, `Store.usersNear`): users whose last location (≤ 24 h old) or saved places are inside the event's exact outlines (or circle + buffer). PostGIS index in Postgres.
 7. **Rank** (`rank.ts`): push / feed / suppress (official extreme always pushes; categories off; quiet hours; daily limit; learned relevance).
-8. **Deliver** (`push.ts`): Expo push; updates and all-clears ("Entwarnung") to people who got the original.
+8. **Deliver** (`push.ts`): Expo push with retries (429/5xx/network); updates and all-clears ("Entwarnung") to people who got the original. Every push is stored as a ticket (`push_tickets`); 15 minutes later the receipt is checked (`checkPushReceipts`): delivered, token of an uninstalled app forgotten, transient errors resent up to twice.
 
 ### Storage (`store.ts`, `db.ts`, `pg.ts`)
 
 - `Store` interface with two implementations: `SqliteStore` (tests, demo, production today on the Fly volume `/data/heyokay.db`) and `PgStore` (used when `DATABASE_URL` is set; numbered migrations under an advisory lock; PostGIS for matching, pgvector for embeddings).
-- Tables: `users` (hashed device token, prefs, last location only), `saved_places`, `source_items`, `events` (+ `event_embeddings`), `alerts`.
+- Tables: `users` (hashed device token, prefs, last location only), `saved_places`, `source_items`, `events` (+ `event_embeddings`), `alerts`, `push_tickets` (delivery status per push).
 - Privacy by design: only the latest location (rounded ~100 m on the device), no history; device tokens hashed; `DELETE /v1/me` erases everything; the model never sees user data.
 
 ### API (`api.ts`)
@@ -84,7 +84,7 @@ Health: `GET /health` (per-source status, no error texts). CORS: any origin, bea
 | GitHub + Actions | Code, CI, deploy to Fly | `.github/workflows/` | Live | Code |
 | Anthropic Claude | Extraction, alert copy | `ANTHROPIC_API_KEY`, `HEYOKAY_MODEL` | Optional (rules/templates without) | Public source text only |
 | Mistral (AI Studio) | Embeddings for dedup (`mistral-embed`) | `EMBEDDINGS_URL/MODEL/API_KEY` | Live since 2026-11-18 | Public source text only; DPA via terms |
-| Expo Push Service | Push to iOS (APNs) and Android (FCM) | `EXPO_PUSH_URL`, `app.json` EAS project | Live (needs EAS projectId) | Push token, alert text |
+| Expo Push Service | Push to iOS (APNs) and Android (FCM), delivery receipts | `EXPO_PUSH_URL`, `EXPO_ACCESS_TOKEN`, `app.json` EAS project | Live (needs EAS projectId) | Push token, alert text |
 | Firebase Crashlytics | Crash reports, opt-in | `app/firebase/*` files | Built, waits for Firebase files | Crash data only if opted in |
 | OpenStreetMap Nominatim | Geocoding places in text (server) and addresses (web) | `GEOCODER_URL`, `GEOCODER_USER_AGENT` | Live (public instance) | Place names / addresses typed by the user (web) |
 | OS geocoder | Addresses for saved places (phone) | expo-location | Live | Address, on the device's provider |
@@ -114,6 +114,7 @@ Health: `GET /health` (per-source status, no error texts). CORS: any origin, bea
 | `POLL_INTERVAL_SEC` | 120 | Ingest interval |
 | `GEOCODER_URL`, `GEOCODER_USER_AGENT` | Nominatim | Geocoding |
 | `EXPO_PUSH_URL` | Expo | Push endpoint |
+| `EXPO_ACCESS_TOKEN` | – | Only if Expo "enhanced push security" is on |
 | `MATCH_BUFFER_M` | 1500 | Buffer around an event for current locations |
 | `REVIEW_CONFIDENCE`, `REVIEW_SEVERITY` | 0.6, 4 | Alert Desk thresholds |
 

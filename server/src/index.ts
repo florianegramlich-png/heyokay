@@ -27,7 +27,7 @@ const store = await createStore(config);
 const llm = new AnthropicLLM(config.anthropicApiKey, config.model);
 const geocoder = config.geocoderUrl ? new NominatimGeocoder(config.geocoderUrl, config.geocoderUserAgent) : new GazetteerGeocoder();
 const embedder = createEmbedder(config);
-const pipeline = new Pipeline({ store, llm, geocoder, embedder, push: new ExpoPushSender(config.expoPushUrl), config });
+const pipeline = new Pipeline({ store, llm, geocoder, embedder, push: new ExpoPushSender(config.expoPushUrl, { accessToken: config.expoAccessToken }), config });
 
 const seen = (source: string) => async (externalId: string) => !(await store.hasSourceItem(source, externalId));
 
@@ -48,6 +48,8 @@ function ninaDwdFailing(): boolean {
 }
 
 const tasks: SourceTask[] = [
+  // Not a source, but runs on the same clock: delivery receipts for pushes sent 15+ minutes ago.
+  { key: 'push:receipts', run: () => ingestLock.run(() => pipeline.checkPushReceipts()) },
   ...config.ninaChannels.map((channel) => ({
     key: `nina:${channel}`,
     run: async () => ingest(await fetchNinaChannel(channel, seen('nina'))),

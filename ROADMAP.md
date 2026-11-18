@@ -10,7 +10,6 @@ Items that need accounts or keys (Firebase, RevenueCat or App Store products, Ap
 
 ### Phase 1: launch blockers
 
-- [ ] **Push receipts + retry** [5.4, 6.2 step 9]: fetch Expo push receipts, clear tokens on `DeviceNotRegistered`, retry transient errors with backoff, and record delivery status per alert. Tests with a fake Expo endpoint.
 - [ ] **Notification actions** [5.3]: rich notifications with "Relevant" / "Nicht relevant" buttons (notification categories) that post feedback without opening the app; group related alerts via thread id.
 - [ ] **Source: heat at saved places** [5.4]: heat thresholds from OpenWeatherMap at users' saved places (for example "38 °C at your mother's address"), on top of DWD's official HITZE warnings, which already arrive via NINA and DWD direct. Needs an OpenWeatherMap key (see "Needs a human"). Fixtures and tests. *(Split from "DWD direct + heat", 2026-11-18.)*
 - [ ] **Sign-in** [5.3, 7.1]: Sign in with Apple, Google sign-in and email (magic link) on top of the anonymous device token. Link the existing device user to the account, and restore it on a new phone. Server: account table, verification of identity tokens, session tokens. Tests.
@@ -88,6 +87,7 @@ Legal and partners
 
 ## Done
 
+- [x] 2026-11-18 **Push receipts + retry** [5.4, 6.2 step 9]: Expo tickets stored per push (`push_tickets`), receipts checked 15 min later; `DeviceNotRegistered` clears the token (at send time too); transient errors resent up to twice; sends retry 429/5xx/network with backoff; delivery counts in the Alert Desk metrics. 7 tests per backend.
 - [x] 2026-11-18 **Web app** (Flori's request; not on the roadmap before): `web/`, a Next.js browser version in the look of Flori's v0 design, connected to the real API: Jetzt (current alerts by category, no risk scores), Verlauf, alert detail with feedback, settings (DE/EN, topics, quiet hours, limit, places, delete), onboarding. No push, payments or sign-in. Server CORS now allows PUT/DELETE. 10 web tests, CI job.
 - [x] 2026-11-18 **Source: EU-Alert + Feuerwehr Berlin** [5.4]: EU-Alert / Cell Broadcast messages are MoWaS warnings, which NINA already delivers; they now keep their exact warned outlines for matching (up to 60 per warning) and the authority's extra instructions. New `server/src/sources/feuerwehr-berlin.ts` reads the Berliner Feuerwehr incident feed (`einsaetze.xml`) with street and district as the place hint (`FEUERWEHR_BERLIN`, on by default). 9 tests with real fixtures.
 - [x] 2026-11-18 **Source: DWD direct** [5.4] (split from "DWD direct + heat"): `server/src/sources/dwd.ts` reads DWD's open-data snapshot of all current warnings (CAP 1.2 in a ZIP, with district polygons) while NINA's DWD channel fails (`DWD_DIRECT=fallback`, default; `always`/`off`); updates merge by CAP reference; warnings dropped from the snapshot early get an all-clear. Small ZIP reader, no dependency. 7 tests on real DWD messages.

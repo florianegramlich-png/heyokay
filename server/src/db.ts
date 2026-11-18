@@ -4,7 +4,8 @@ import type {
   Alert, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
 } from './types.js';
 import { DEFAULT_PREFS } from './types.js';
-import { SCHEDULED_LOOKBACK_H, computeMetrics, type Area, type Metrics, type Store, type UserWithPlaces } from './store.js';
+import { SCHEDULED_LOOKBACK_H, computeMetrics, type Area, type Metrics, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces } from './store.js';
+import type { PushTicket } from './push.js';
 import { distanceM, LOCATION_MAX_AGE_MS } from './geo.js';
 import { cosine } from './embeddings.js';
 
@@ -51,6 +52,12 @@ export class SqliteStore implements Store {
         event_id TEXT PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
         model TEXT NOT NULL, vector TEXT NOT NULL, updated_at TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS push_tickets (
+        id TEXT PRIMARY KEY, ticket_id TEXT UNIQUE, alert_id TEXT NOT NULL,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, token TEXT NOT NULL,
+        status TEXT NOT NULL, error TEXT, attempt INTEGER NOT NULL, created_at TEXT NOT NULL, checked_at TEXT
+      );
+      CREATE INDEX IF NOT EXISTS push_tickets_pending ON push_tickets(status, created_at);
       PRAGMA foreign_keys = ON;
     `);
   }
@@ -97,6 +104,7 @@ export class SqliteStore implements Store {
 
   /** GDPR erasure: user, places and alerts (cascade). */
   async deleteUser(userId: string): Promise<void> {
+    this.db.prepare(`DELETE FROM push_tickets WHERE user_id = ?`).run(userId);
     this.db.prepare(`DELETE FROM alerts WHERE user_id = ?`).run(userId);
     this.db.prepare(`DELETE FROM saved_places WHERE user_id = ?`).run(userId);
     this.db.prepare(`DELETE FROM users WHERE id = ?`).run(userId);
@@ -285,7 +293,35 @@ export class SqliteStore implements Store {
   async metrics(sinceIso: string): Promise<Metrics> {
     const rows = (this.db.prepare(`SELECT data, delivery, feedback FROM alerts WHERE created_at >= ?`).all(sinceIso) as any[])
       .map((r) => ({ alert: JSON.parse(r.data) as Alert, delivery: r.delivery as string, feedback: (r.feedback ?? null) as string | null }));
-    return computeMetrics(rows, sinceIso, (await this.eventsByStatus('pending_review')).length);
+    const m = computeMetrics(rows, sinceIso, (await this.eventsByStatus('pending_review')).length);
+    const d = this.db.prepare(`
+      SELECT SUM(status = 'delivered') AS delivered, SUM(status = 'error') AS failed, SUM(status = 'pending') AS pending
+      FROM push_tickets WHERE created_at >= ?`).get(sinceIso) as any;
+    return { ...m, pushDelivery: { delivered: Number(d?.delivered ?? 0), failed: Number(d?.failed ?? 0), pending: Number(d?.pending ?? 0) } };
+  }
+
+  // ── push delivery ────────────────────────────────────────────────────────
+  async recordPushTickets(tickets: PushTicket[], attempt: number, atIso: string): Promise<void> {
+    const now = atIso;
+    const ins = this.db.prepare(`INSERT OR IGNORE INTO push_tickets (id, ticket_id, alert_id, user_id, token, status, error, attempt, created_at) VALUES (?,?,?,?,?,?,?,?,?)`);
+    for (const t of tickets) ins.run(randomUUID(), t.ticketId, t.alertId, t.userId, t.token, t.status, t.error, attempt, now);
+  }
+
+  async pushTicketsToCheck(sentBeforeIso: string, limit: number): Promise<StoredPushTicket[]> {
+    return (this.db.prepare(
+      `SELECT * FROM push_tickets WHERE status = 'pending' AND ticket_id IS NOT NULL AND created_at <= ? ORDER BY created_at LIMIT ?`,
+    ).all(sentBeforeIso, limit) as any[]).map((r) => ({
+      ticketId: r.ticket_id, alertId: r.alert_id, userId: r.user_id, token: r.token, attempt: r.attempt, createdAt: r.created_at,
+    }));
+  }
+
+  async setPushStatus(ticketId: string, status: PushStatus, error: string | null = null): Promise<void> {
+    this.db.prepare(`UPDATE push_tickets SET status = ?, error = ?, checked_at = ? WHERE ticket_id = ?`)
+      .run(status, error, new Date().toISOString(), ticketId);
+  }
+
+  async clearPushToken(token: string): Promise<number> {
+    return Number(this.db.prepare(`UPDATE users SET push_token = NULL WHERE push_token = ?`).run(token).changes);
   }
 
   async close(): Promise<void> {

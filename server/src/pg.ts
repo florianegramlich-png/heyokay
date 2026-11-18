@@ -6,7 +6,8 @@ import type {
 import { DEFAULT_PREFS } from './types.js';
 import { hashToken } from './db.js';
 import { LOCATION_MAX_AGE_MS, MAX_PLACE_RADIUS_M } from './geo.js';
-import { SCHEDULED_LOOKBACK_H, computeMetrics, type Area, type Metrics, type Store, type UserWithPlaces } from './store.js';
+import { SCHEDULED_LOOKBACK_H, computeMetrics, type Area, type Metrics, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces } from './store.js';
+import type { PushTicket } from './push.js';
 
 /**
  * Schema migrations, applied in order and recorded in `schema_migrations`. Append new entries;
@@ -83,6 +84,18 @@ export const MIGRATIONS: { version: number; sql: string }[] = [
         event_id text PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
         model text NOT NULL, embedding public.vector NOT NULL, updated_at timestamptz NOT NULL
       );
+    `,
+  },
+  {
+    // Push delivery: one row per push with Expo's ticket, checked against the receipt later.
+    version: 5,
+    sql: `
+      CREATE TABLE push_tickets (
+        id uuid PRIMARY KEY, ticket_id text UNIQUE, alert_id uuid NOT NULL,
+        user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE, token text NOT NULL,
+        status text NOT NULL, error text, attempt integer NOT NULL, created_at timestamptz NOT NULL, checked_at timestamptz
+      );
+      CREATE INDEX push_tickets_pending ON push_tickets(status, created_at);
     `,
   },
 ];
@@ -203,6 +216,7 @@ export class PgStore implements Store {
   async deleteUser(userId: string): Promise<void> {
     if (!isUuid(userId)) return;
     await this.tx(async (c) => {
+      await c.query(`DELETE FROM push_tickets WHERE user_id = $1`, [userId]);
       await c.query(`DELETE FROM alerts WHERE user_id = $1`, [userId]);
       await c.query(`DELETE FROM saved_places WHERE user_id = $1`, [userId]);
       await c.query(`DELETE FROM users WHERE id = $1`, [userId]);
@@ -404,11 +418,45 @@ export class PgStore implements Store {
   async metrics(sinceIso: string): Promise<Metrics> {
     const { rows } = await this.q(`SELECT data, delivery, feedback FROM alerts WHERE created_at >= $1`, [sinceIso]);
     const pending = await this.q(`SELECT COUNT(*) AS n FROM events WHERE status = 'pending_review'`);
-    return computeMetrics(
+    const m = computeMetrics(
       rows.map((r) => ({ alert: r.data as Alert, delivery: r.delivery, feedback: r.feedback ?? null })),
       sinceIso,
       Number(pending.rows[0].n),
     );
+    const d = (await this.q(`
+      SELECT COUNT(*) FILTER (WHERE status = 'delivered') AS delivered, COUNT(*) FILTER (WHERE status = 'error') AS failed,
+             COUNT(*) FILTER (WHERE status = 'pending') AS pending
+      FROM push_tickets WHERE created_at >= $1`, [sinceIso])).rows[0];
+    return { ...m, pushDelivery: { delivered: Number(d.delivered), failed: Number(d.failed), pending: Number(d.pending) } };
+  }
+
+  // ── push delivery ────────────────────────────────────────────────────────
+  async recordPushTickets(tickets: PushTicket[], attempt: number, atIso: string): Promise<void> {
+    const now = atIso;
+    for (const t of tickets) {
+      if (!isUuid(t.userId) || !isUuid(t.alertId)) continue;
+      await this.q(
+        `INSERT INTO push_tickets (id, ticket_id, alert_id, user_id, token, status, error, attempt, created_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT DO NOTHING`,
+        [randomUUID(), t.ticketId, t.alertId, t.userId, t.token, t.status, t.error, attempt, now],
+      );
+    }
+  }
+
+  async pushTicketsToCheck(sentBeforeIso: string, limit: number): Promise<StoredPushTicket[]> {
+    const { rows } = await this.q(
+      `SELECT * FROM push_tickets WHERE status = 'pending' AND ticket_id IS NOT NULL AND created_at <= $1 ORDER BY created_at LIMIT $2`,
+      [sentBeforeIso, limit],
+    );
+    return rows.map((r) => ({ ticketId: r.ticket_id, alertId: r.alert_id, userId: r.user_id, token: r.token, attempt: r.attempt, createdAt: iso(r.created_at)! }));
+  }
+
+  async setPushStatus(ticketId: string, status: PushStatus, error: string | null = null): Promise<void> {
+    await this.q(`UPDATE push_tickets SET status = $1, error = $2, checked_at = now() WHERE ticket_id = $3`, [status, error, ticketId]);
+  }
+
+  async clearPushToken(token: string): Promise<number> {
+    return (await this.q(`UPDATE users SET push_token = NULL WHERE push_token = $1`, [token])).rowCount ?? 0;
   }
 
   async close(): Promise<void> {

@@ -1,3 +1,4 @@
+import type { PushTicket } from './push.js';
 import type {
   Alert, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
 } from './types.js';
@@ -8,6 +9,20 @@ export const SCHEDULED_LOOKBACK_H = 24 * 14;
 export interface Area { lat: number; lon: number; radiusM: number }
 export interface UserWithPlaces { user: User; places: SavedPlace[] }
 
+/** A push ticket as stored: status of one push to one device. */
+export interface StoredPushTicket {
+  ticketId: string;
+  alertId: string;
+  userId: string;
+  token: string;
+  /** 0 for the first send, 1+ for resends after a transient error. */
+  attempt: number;
+  createdAt: string;
+}
+
+/** pending = accepted by Expo, receipt not checked yet; retried = resent after a transient error. */
+export type PushStatus = 'pending' | 'delivered' | 'error' | 'retried' | 'unknown';
+
 export interface Metrics {
   alerts: number;
   pushed: number;
@@ -17,6 +32,8 @@ export interface Metrics {
   beyondNinaRate: number | null;
   pushesPerUserPerDay: number;
   pendingReview: number;
+  /** Push receipts in the period: delivered to Apple/Google, failed, or not checked yet. */
+  pushDelivery?: { delivered: number; failed: number; pending: number };
 }
 
 /**
@@ -90,6 +107,15 @@ export interface Store {
   feedbackByCategory(userId: string): Promise<Record<string, { relevant: number; notRelevant: number }>>;
   /** KPIs from PRD Section 13: relevance, beyond-NINA, alerts per user per day. */
   metrics(sinceIso: string): Promise<Metrics>;
+
+  // push delivery (receipts)
+  /** Stores one row per push; `attempt` counts resends. */
+  recordPushTickets(tickets: PushTicket[], attempt: number, atIso: string): Promise<void>;
+  /** Pending tickets (with an Expo ticket id) sent before `sentBeforeIso`, oldest first. */
+  pushTicketsToCheck(sentBeforeIso: string, limit: number): Promise<StoredPushTicket[]>;
+  setPushStatus(ticketId: string, status: PushStatus, error?: string | null): Promise<void>;
+  /** A device that uninstalled the app: forget its push token. Returns how many users had it. */
+  clearPushToken(token: string): Promise<number>;
 
   close(): Promise<void>;
 }

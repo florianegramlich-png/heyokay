@@ -36,6 +36,8 @@ export interface Config {
   geocoderUrl: string | null;
   geocoderUserAgent: string;
   expoPushUrl: string;
+  /** Expo access token, if "enhanced push security" is turned on for the EAS project. */
+  expoAccessToken: string | null;
   /** Matching buffer added to an event's radius when deciding who is affected. */
   matchBufferM: number;
   /** Below this extraction confidence, events go to the Alert Desk. */
@@ -70,6 +72,7 @@ export function loadConfig(env = process.env): Config {
     geocoderUrl: env.GEOCODER_URL ?? 'https://nominatim.openstreetmap.org/search',
     geocoderUserAgent: env.GEOCODER_USER_AGENT ?? 'HeyOkay/0.1 (set GEOCODER_USER_AGENT to your contact)',
     expoPushUrl: env.EXPO_PUSH_URL ?? 'https://exp.host/--/api/v2/push/send',
+    expoAccessToken: env.EXPO_ACCESS_TOKEN || null,
     matchBufferM: Number(env.MATCH_BUFFER_M ?? 1500),
     reviewConfidence: Number(env.REVIEW_CONFIDENCE ?? 0.6),
     reviewSeverity: Number(env.REVIEW_SEVERITY ?? 4),
