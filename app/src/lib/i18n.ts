@@ -43,6 +43,10 @@ const de = {
 
   // Feed
   'feed.header': 'Letzte 7 Tage in deiner Nähe',
+  'feed.now': 'In deiner Nähe',
+  'feed.now.subtitle': 'Was gerade dich und deine Orte betrifft.',
+  'feed.count': '{n} aktuell',
+  'feed.earlier': 'Vorher',
   'feed.empty.title': 'Alles okay.',
   'feed.empty.text': 'Gerade gibt es nichts, das dich betrifft. Wir melden uns, wenn sich das ändert.',
   'feed.error.title': 'Hm.',
@@ -152,6 +156,10 @@ const en: Record<Key, string> = {
   'onb.error': 'Couldn’t reach the server. Please try again later.',
 
   'feed.header': 'Last 7 days near you',
+  'feed.now': 'Near you',
+  'feed.now.subtitle': 'What affects you and your places right now.',
+  'feed.count': '{n} current',
+  'feed.earlier': 'Earlier',
   'feed.empty.title': 'All okay.',
   'feed.empty.text': 'Nothing affects you right now. We’ll let you know if that changes.',
   'feed.error.title': 'Hm.',

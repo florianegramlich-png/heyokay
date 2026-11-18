@@ -3,6 +3,7 @@ import * as Notifications from 'expo-notifications';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { Pressable, Text } from 'react-native';
 import { ErrorScreen } from '../components/ErrorScreen';
 import { initCrashReporting } from '../lib/crash';
 import { loadLanguage, useI18n } from '../lib/i18n';
@@ -37,22 +38,43 @@ export default function RootLayout() {
 
   return (
     <>
-      <StatusBar style="dark" />
+      <StatusBar style="light" />
       <Stack
         screenOptions={{
           headerStyle: { backgroundColor: colors.bg },
           headerShadowVisible: false,
-          headerTintColor: colors.brand,
+          headerTintColor: colors.cyan,
           headerTitleStyle: { color: colors.text },
           contentStyle: { backgroundColor: colors.bg },
         }}
       >
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="onboarding" options={{ headerShown: false, gestureEnabled: false }} />
-        <Stack.Screen name="feed" options={{ title: 'Hey-Okay', headerBackVisible: false }} />
+        <Stack.Screen
+          name="feed"
+          options={{
+            headerBackVisible: false,
+            headerTitle: () => <Logo />,
+            headerRight: () => (
+              <Pressable onPress={() => router.push('/settings')} accessibilityRole="button" hitSlop={10}>
+                <Text style={{ color: colors.muted, fontSize: 15, fontWeight: '600' }}>{t('nav.settings')}</Text>
+              </Pressable>
+            ),
+          }}
+        />
         <Stack.Screen name="alert/[id]" options={{ title: t('nav.alert') }} />
         <Stack.Screen name="settings" options={{ title: t('nav.settings') }} />
       </Stack>
     </>
+  );
+}
+
+/** "Hey-Okay" in the logo's two colours (the web app uses a cyan→purple gradient). */
+function Logo() {
+  return (
+    <Text accessibilityRole="header" style={{ fontSize: 18, fontWeight: '700' }}>
+      <Text style={{ color: colors.cyan }}>Hey-</Text>
+      <Text style={{ color: colors.brand }}>Okay</Text>
+    </Text>
   );
 }
