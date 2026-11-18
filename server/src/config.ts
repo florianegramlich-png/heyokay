@@ -1,3 +1,4 @@
+import { parseStatusPages, type StatusPage } from './sources/statuspage.js';
 import type { CountryCode } from './countries.js';
 import { parseCountries } from './sources/registry.js';
 import { parseRole, type Role } from './roles.js';
@@ -52,6 +53,8 @@ export interface Config {
   expoAccessToken: string | null;
   /** api: HTTP only · worker: ingest + push only · all: both (default, one machine). */
   role: Role;
+  /** Status pages polled for technology outages (STATUS_PAGES JSON, or "off"). Default: US list. */
+  statusPages: StatusPage[];
   /** Internal Prometheus port (Fly scrapes it; never public). 0 = off. */
   metricsPort: number;
   /** Sentry DSN (EU region) for server errors; unset = stderr only. */
@@ -103,6 +106,7 @@ export function loadConfig(env = process.env): Config {
     expoPushUrl: env.EXPO_PUSH_URL ?? 'https://exp.host/--/api/v2/push/send',
     expoAccessToken: env.EXPO_ACCESS_TOKEN || null,
     role: parseRole(env.ROLE),
+    statusPages: parseStatusPages(env.STATUS_PAGES),
     metricsPort: Number(env.METRICS_PORT ?? 9091),
     sentryDsn: env.SENTRY_DSN || null,
     countries: parseCountries(env.COUNTRIES),

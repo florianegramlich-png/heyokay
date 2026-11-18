@@ -31,6 +31,10 @@ const LIBRARY: Record<Category, Advice> = {
     low: t('Hinweise des Gesundheitsamts beachten.'),
     high: (n) => `Hinweise des Gesundheitsamts sofort befolgen. ${n.medical ? `Bei Beschwerden ${n.medical}, im Notfall ${n.emergency}.` : `Im Notfall ${n.emergency}.`}`,
   },
+  technology: {
+    low: t('Mit Störungen bei diesem Dienst rechnen. Später erneut versuchen.'),
+    high: t('Eine Alternative bereithalten, z. B. Bargeld oder eine andere App. Statusseite des Anbieters beachten.'),
+  },
   infrastructure: {
     low: t('Mit Einschränkungen rechnen.'),
     high: (n) => `Bereich meiden. Bei Gasgeruch Gebäude verlassen und ${n.emergency} anrufen.`,
@@ -58,6 +62,10 @@ const LIBRARY_EN: Record<Category, Advice> = {
     low: t('Follow guidance from your local health department.'),
     high: (n) => `Follow health department guidance now. ${n.medical ? `Advice: ${n.medical}. ` : ''}Emergency: ${n.emergency}.`,
   },
+  technology: {
+    low: t('Expect problems with this service. Try again later.'),
+    high: t('Have a backup ready, such as cash or another app. Check the provider\'s status page.'),
+  },
   infrastructure: {
     low: t('Expect disruptions.'),
     high: (n) => `Avoid the area. If you smell gas, leave the building and call ${n.emergency}.`,
@@ -66,6 +74,16 @@ const LIBRARY_EN: Record<Category, Advice> = {
 
 /** Hazard-specific actions, where the category's general advice would be wrong (storm advice for heat). */
 const HAZARD: Record<Hazard, Record<Language, Advice>> = {
+  outage: {
+    de: {
+      low: t('Mit Störungen bei diesem Dienst rechnen. Später erneut versuchen.'),
+      high: t('Eine Alternative bereithalten, z. B. Bargeld oder eine andere App. Statusseite des Anbieters beachten.'),
+    },
+    en: {
+      low: t('Expect problems with this service. Try again later.'),
+      high: t('Have a backup ready, such as cash or another app. Check the provider\'s status page.'),
+    },
+  },
   heat: {
     de: {
       low: t('Viel trinken, Mittagshitze meiden, Räume tagsüber abdunkeln.'),
@@ -88,12 +106,12 @@ export function recommendedAction(
 
 export const CATEGORY_LABEL_DE: Record<Category, string> = {
   weather: 'Wetter', crime: 'Polizei', transit: 'Verkehr', public_safety: 'Sicherheit',
-  health: 'Gesundheit', infrastructure: 'Infrastruktur',
+  health: 'Gesundheit', infrastructure: 'Infrastruktur', technology: 'Technik',
 };
 
 export const CATEGORY_LABEL_EN: Record<Category, string> = {
   weather: 'Weather', crime: 'Police', transit: 'Transit', public_safety: 'Safety',
-  health: 'Health', infrastructure: 'Infrastructure',
+  health: 'Health', infrastructure: 'Infrastructure', technology: 'Technology',
 };
 
 /** Wording for update and all-clear alerts (PRD 5.4). Calm, no alarm words. */

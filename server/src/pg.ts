@@ -3,7 +3,7 @@ import { randomUUID, randomBytes } from 'node:crypto';
 import type {
   Alert, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
 } from './types.js';
-import { DEFAULT_PREFS } from './types.js';
+import { DEFAULT_PREFS, normalizePrefs, savedPrefs } from './types.js';
 import { hashToken } from './db.js';
 import { LOCATION_MAX_AGE_MS, MAX_PLACE_RADIUS_M } from './geo.js';
 import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob } from './store.js';
@@ -247,7 +247,7 @@ export class PgStore implements Store {
   }
 
   async updatePrefs(userId: string, prefs: UserPrefs): Promise<void> {
-    await this.q(`UPDATE users SET prefs = $1 WHERE id = $2`, [JSON.stringify(prefs), userId]);
+    await this.q(`UPDATE users SET prefs = $1 WHERE id = $2`, [JSON.stringify(savedPrefs(prefs)), userId]);
   }
 
   async updatePushToken(userId: string, pushToken: string | null): Promise<void> {
@@ -682,7 +682,7 @@ function rowToAccount(r: any): Account {
 function rowToUser(r: any): User {
   return {
     id: r.id, tokenHash: r.token_hash, pushToken: r.push_token ?? null,
-    prefs: { ...DEFAULT_PREFS, ...r.prefs }, lat: r.lat ?? null, lon: r.lon ?? null,
+    prefs: normalizePrefs(r.prefs), lat: r.lat ?? null, lon: r.lon ?? null,
     locationUpdatedAt: iso(r.location_updated_at), createdAt: iso(r.created_at)!,
   };
 }

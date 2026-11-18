@@ -35,7 +35,9 @@ export function findCluster(ext: ExtractedEvent, item: SourceItem, active: RiskE
   }
   // NWS gives every alert an id and names the alert it updates. Two different NWS alerts are two
   // different warnings even when their wording is alike ("... until November 18 at ..."), so never fuzzy-merge.
-  if (item.source === 'nws') return null;
+  // Same for status-page incidents: each has its own id, and every outage sits on the same
+  // country-wide area, so the distance rule would merge them all.
+  if (item.source === 'nws' || item.source === 'statuspage') return null;
   let best: { e: RiskEvent; score: number } | null = null;
   for (const e of active) {
     if (e.category !== ext.category || ext.lat == null || ext.lon == null) continue;
