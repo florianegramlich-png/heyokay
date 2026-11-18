@@ -27,7 +27,12 @@ async function request<T>(method: string, path: string, body?: unknown, auth = t
 export const api = {
   register: (prefs: UserPrefs, pushToken: string | null) =>
     request<{ userId: string; token: string; prefs: UserPrefs }>('POST', '/v1/devices', { prefs, pushToken }, false),
-  me: () => request<{ userId: string; prefs: UserPrefs; places: SavedPlace[]; hasLocation: boolean }>('GET', '/v1/me'),
+  me: () => request<{ userId: string; prefs: UserPrefs; places: SavedPlace[]; hasLocation: boolean; account: { email: string } | null }>('GET', '/v1/me'),
+  // Sign-in with an email code (server: auth.ts). The device token stays the same.
+  emailStart: (email: string) => request<{ ok: true }>('POST', '/v1/auth/email/start', { email }),
+  emailVerify: (email: string, code: string) =>
+    request<{ userId: string; prefs: UserPrefs; places: SavedPlace[]; account: { email: string } }>('POST', '/v1/auth/email/verify', { email, code }),
+  signOut: () => request<{ userId: string; token: string; prefs: UserPrefs }>('POST', '/v1/auth/signout'),
   updatePrefs: (prefs: Partial<UserPrefs>) => request<{ prefs: UserPrefs }>('PUT', '/v1/me/prefs', prefs),
   updatePushToken: (pushToken: string | null) => request<{ ok: true }>('PUT', '/v1/me/push-token', { pushToken }),
   sendLocation: (lat: number, lon: number, firstSync = false) =>

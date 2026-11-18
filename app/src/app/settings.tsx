@@ -4,6 +4,7 @@ import { Alert as RNAlert, Linking, Pressable, ScrollView, Text, TextInput, View
 import { SkyScreen } from '../components/Starfield';
 import { Button, s, Section, ToggleRow } from '../components/ui';
 import { LanguagePicker } from '../components/LanguagePicker';
+import { AccountSection } from '../components/AccountSection';
 import { api } from '../lib/api';
 import { crashReportingAvailable, getCrashReportsOptIn, setCrashReportsOptIn } from '../lib/crash';
 import { setLanguage, useI18n, type Lang } from '../lib/i18n';
@@ -23,11 +24,12 @@ export default function Settings() {
   const [address, setAddress] = useState('');
   const [placeError, setPlaceError] = useState<string | null>(null);
   const [crashReports, setCrashReports] = useState(false);
+  const [account, setAccount] = useState<string | null>(null);
   const showCrashToggle = crashReportingAvailable();
   const { t, lang, categoryLabel, categoryHint } = useI18n();
 
   useEffect(() => {
-    api.me().then((me) => { setPrefs(me.prefs); setPlaces(me.places); }).catch(() => null);
+    api.me().then((me) => { setPrefs(me.prefs); setPlaces(me.places); setAccount(me.account?.email ?? null); }).catch(() => null);
     locationAccess().then(setAccess);
     getCrashReportsOptIn().then(setCrashReports);
   }, []);
@@ -88,6 +90,8 @@ export default function Settings() {
   return (
     <SkyScreen>
     <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
+      <AccountSection email={account} onChanged={(n) => { setAccount(n.email); setPrefs(n.prefs); setPlaces(n.places); }} />
+
       <Section title={t('set.language')}>
         <LanguagePicker value={lang} onChange={changeLanguage} />
       </Section>

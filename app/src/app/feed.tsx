@@ -9,6 +9,7 @@ import { byCategory, earlierAlerts } from '../lib/feed';
 import { useI18n } from '../lib/i18n';
 import { locationAccess, syncNow } from '../lib/location';
 import { session } from '../lib/session';
+import { loadFeed, saveFeed } from '../lib/offline';
 import { categoryColor, colors } from '../lib/theme';
 import type { Alert } from '../lib/types';
 
@@ -22,7 +23,9 @@ export default function Feed() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [noLocation, setNoLocation] = useState(false);
-  const { t, categoryLabel } = useI18n();
+  /** Set when showing the saved copy because the server can't be reached. */
+  const [offlineSince, setOfflineSince] = useState<string | null>(null);
+  const { t, categoryLabel, locale } = useI18n();
 
   const load = useCallback(async (withLocation: boolean) => {
     setError(false);
@@ -30,14 +33,19 @@ export default function Feed() {
       setNoLocation((await locationAccess()) === 'denied');
       if (withLocation) await syncNow().catch(() => null);
       const { alerts } = await api.alerts();
-      setAlerts(alerts.filter((a) => a.delivery !== 'suppressed'));
+      const visible = alerts.filter((a) => a.delivery !== 'suppressed');
+      setAlerts(visible);
+      setOfflineSince(null);
+      void saveFeed(visible);
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
         await session.clear(); // account was deleted or token lost → start over
         router.replace('/onboarding');
         return;
       }
-      setError(true);
+      const cached = await loadFeed();
+      if (cached) { setAlerts(cached.alerts); setOfflineSince(cached.savedAt); }
+      else setError(true);
     } finally {
       setLoading(false);
     }
@@ -57,6 +65,12 @@ export default function Feed() {
       >
         <Text style={[s.h1, { fontSize: 26 }]}>{t('feed.now')}</Text>
         <Text style={[s.muted, { marginTop: 2, marginBottom: 14 }]}>{t('feed.now.subtitle')}</Text>
+
+        {offlineSince ? (
+          <Card style={{ marginBottom: 12 }}>
+            <Text style={s.p}>{t('feed.offline', { time: new Date(offlineSince).toLocaleString(locale, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) })}</Text>
+          </Card>
+        ) : null}
 
         {noLocation ? (
           <Card style={{ marginBottom: 12, backgroundColor: colors.cyanSoft, borderColor: 'rgba(34,211,238,0.3)' }}>

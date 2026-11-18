@@ -14,6 +14,7 @@ import { session } from '@/lib/session';
 import { geocodeAddress } from '@/lib/location';
 import { setLanguage, useI18n, type Lang } from '@/lib/i18n';
 import { LanguageSelect } from '@/components/language-select';
+import { AccountSection } from '@/components/account-section';
 import { useDevice } from '@/lib/use-device';
 import { CATEGORIES, type Category, type SavedPlace, type UserPrefs } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -40,10 +41,11 @@ export default function Settings() {
   const [placeMsg, setPlaceMsg] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [account, setAccount] = useState<string | null>(null);
 
   useEffect(() => {
     if (!ready) return;
-    api.me().then((m) => { setPrefs(m.prefs); setPlaces(m.places); }).catch(() => {});
+    api.me().then((m) => { setPrefs(m.prefs); setPlaces(m.places); setAccount(m.account?.email ?? null); }).catch(() => {});
   }, [ready]);
 
   const save = async (patch: Partial<UserPrefs>) => {
@@ -92,6 +94,8 @@ export default function Settings() {
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-semibold">{t('web.nav.settings')}</h1>
+
+      <AccountSection email={account} onChanged={(n) => { setAccount(n.email); setPrefs(n.prefs); setPlaces(n.places); }} />
 
       <Section title={t('set.language')}>
         <LanguageSelect onChange={chooseLanguage} />
