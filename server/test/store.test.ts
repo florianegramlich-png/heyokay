@@ -82,6 +82,15 @@ describe.each(storeBackends())('store contract ($name)', (backend) => {
     await store.saveEvent(event('rejected', { status: 'rejected' }));
     await store.saveEvent(event('pending', { status: 'pending_review' }));
     expect((await store.activeEvents(NOW)).map((e) => e.id).sort()).toEqual(['live', 'pending']);
+    // A warning that started three days ago but officially runs until tomorrow is still active;
+    // times with an offset compare correctly.
+    await store.saveEvent(event('multiday', {
+      startsAt: new Date(NOW.getTime() - 72 * 3600_000).toISOString(),
+      endsAt: '2026-11-15T20:00:00+01:00',
+    }));
+    await store.saveEvent(event('long-ago', { startsAt: '2026-10-01T00:00:00Z', endsAt: '2026-11-20T00:00:00Z' }));
+    await store.saveEvent(event('ended-offset', { endsAt: '2026-11-14T09:00:00+01:00' })); // 50 min before NOW
+    expect((await store.activeEvents(NOW)).map((e) => e.id).sort()).toEqual(['live', 'multiday', 'pending']);
 
     await store.saveEvent(event('live', { severity: 4, revision: 2 }));
     expect((await store.getEvent('live'))?.severity).toBe(4);

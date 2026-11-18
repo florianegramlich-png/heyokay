@@ -2,6 +2,9 @@ import type {
   Alert, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
 } from './types.js';
 
+/** How far back an event with a known, future end time still counts as active. */
+export const SCHEDULED_LOOKBACK_H = 24 * 14;
+
 export interface Area { lat: number; lon: number; radiusM: number }
 export interface UserWithPlaces { user: User; places: SavedPlace[] }
 
@@ -56,7 +59,12 @@ export interface Store {
   // events
   saveEvent(e: RiskEvent): Promise<void>;
   getEvent(id: string): Promise<RiskEvent | null>;
-  /** Events that are not over yet (no end, or end in the future) and started within the lookback. */
+  /**
+   * Events that are not over yet. Without an end time, "not over" means started within the
+   * lookback (default 24 h). With an end time in the future, they count until that end, however
+   * long ago they started (up to SCHEDULED_LOOKBACK_H): a multi-day storm or flood watch must
+   * still reach someone who arrives on day two, and its updates must merge into it.
+   */
   activeEvents(now: Date, lookbackHours?: number): Promise<RiskEvent[]>;
   eventsByStatus(status: EventStatus): Promise<RiskEvent[]>;
   /** Store (or replace) the dedup embedding of an event. Postgres: pgvector. */

@@ -13,6 +13,7 @@ import { fetchNwsArea, nwsFetcher } from './sources/nws.js';
 import { buildApi } from './api.js';
 import { createEmbedder } from './embeddings.js';
 import { installProcessHandlers, logError } from './errors.js';
+import { IngestScheduler, Mutex, type SourceTask } from './ingest.js';
 
 installProcessHandlers();
 
@@ -30,76 +31,57 @@ const pipeline = new Pipeline({ store, llm, geocoder, embedder, push: new ExpoPu
 
 const seen = (source: string) => async (externalId: string) => !(await store.hasSourceItem(source, externalId));
 
-let running = false;
-async function runIngest() {
-  if (running) return { skipped: 'already running' };
-  running = true;
-  const report: Record<string, unknown> = {};
-  try {
-    let ninaDwdOk = false;
-    for (const channel of config.ninaChannels) {
-      try {
-        report[`nina:${channel}`] = await pipeline.ingest(await fetchNinaChannel(channel, seen('nina')));
-        if (channel === 'dwd') ninaDwdOk = true;
-      } catch (err) {
-        logError('ingest', err, { source: `nina:${channel}` });
-        report[`nina:${channel}`] = { error: (err as Error).message };
-      }
-    }
-    // DWD open data: a fallback while NINA's copy of the DWD warnings is unavailable.
-    if (config.dwdDirect === 'always' || (config.dwdDirect === 'fallback' && !ninaDwdOk)) {
-      try {
-        const { feedKey, items, listedIds } = await fetchDwdSnapshot(seen('dwd'));
-        const ingested = await pipeline.ingest(items);
-        report['dwd:direct'] = { ...ingested, liftedEarly: await pipeline.reconcileFeed(feedKey, listedIds) };
-      } catch (err) {
-        logError('ingest', err, { source: 'dwd:direct' });
-        report['dwd:direct'] = { error: (err as Error).message };
-      }
-    }
-    for (const feed of config.rssFeeds) {
-      try {
-        report[`rss:${feed.sourceName}`] = await pipeline.ingest(await fetchFeed(feed), feed.defaultArea);
-      } catch (err) {
-        logError('ingest', err, { source: `rss:${feed.sourceName}` });
-        report[`rss:${feed.sourceName}`] = { error: (err as Error).message };
-      }
-    }
-    for (const agency of config.presseportalAgencies) {
-      try {
-        report[`presseportal:${agency.key}`] = await pipeline.ingest(await fetchAgency(agency, seen('presseportal')), agency.area);
-      } catch (err) {
-        logError('ingest', err, { source: `presseportal:${agency.key}` });
-        report[`presseportal:${agency.key}`] = { error: (err as Error).message };
-      }
-    }
-    if (config.feuerwehrBerlin) {
-      try {
-        report['feuerwehr-berlin'] = await pipeline.ingest(await fetchFeuerwehrBerlin(seen('rss')), FEUERWEHR_BERLIN_AREA);
-      } catch (err) {
-        logError('ingest', err, { source: 'feuerwehr-berlin' });
-        report['feuerwehr-berlin'] = { error: (err as Error).message };
-      }
-    }
-    const nwsGet = nwsFetcher(config.nwsUserAgent);
-    for (const area of config.nwsAreas) {
-      try {
-        const { feedKey, items, listedIds } = await fetchNwsArea(area, seen('nws'), nwsGet);
-        const ingested = await pipeline.ingest(items);
-        // Only after a successful poll: alerts that vanished early get an all-clear.
-        report[`nws:${area}`] = { ...ingested, liftedEarly: await pipeline.reconcileFeed(feedKey, listedIds) };
-      } catch (err) {
-        logError('ingest', err, { source: `nws:${area}` });
-        report[`nws:${area}`] = { error: (err as Error).message };
-      }
-    }
-  } finally {
-    running = false;
-  }
-  return report;
+// Pipeline steps one at a time (clustering reads and writes the store); fetching runs in parallel.
+const ingestLock = new Mutex();
+const ingest = (items: Parameters<typeof pipeline.ingest>[0], area?: Parameters<typeof pipeline.ingest>[1]) =>
+  ingestLock.run(() => pipeline.ingest(items, area));
+const ingestAndReconcile = (r: { feedKey: string; items: Parameters<typeof pipeline.ingest>[0]; listedIds: Set<string> }) =>
+  ingestLock.run(async () => ({ ...(await pipeline.ingest(r.items)), liftedEarly: await pipeline.reconcileFeed(r.feedKey, r.listedIds) }));
+
+/** DWD direct is the fallback while NINA's DWD channel is failing (it has failed and not worked for 10 minutes). */
+const NINA_DWD_STALE_MS = 10 * 60_000;
+function ninaDwdFailing(): boolean {
+  if (!config.ninaChannels.includes('dwd')) return true;
+  const s = scheduler.snapshot()['nina:dwd'];
+  if (!s?.lastErrorAt) return false; // working, or no result yet
+  return !s.lastOkAt || Date.now() - Date.parse(s.lastOkAt) > NINA_DWD_STALE_MS;
 }
 
-const app = buildApi({ store, pipeline, adminToken: config.adminToken, runIngest });
+const tasks: SourceTask[] = [
+  ...config.ninaChannels.map((channel) => ({
+    key: `nina:${channel}`,
+    run: async () => ingest(await fetchNinaChannel(channel, seen('nina'))),
+  })),
+  ...(config.dwdDirect === 'off' ? [] : [{
+    key: 'dwd:direct',
+    run: async () => {
+      if (config.dwdDirect === 'fallback' && !ninaDwdFailing()) return { skipped: 'NINA DWD channel is working' };
+      return ingestAndReconcile(await fetchDwdSnapshot(seen('dwd')));
+    },
+  }]),
+  ...config.rssFeeds.map((feed) => ({
+    key: `rss:${feed.sourceName}`,
+    run: async () => ingest(await fetchFeed(feed), feed.defaultArea),
+  })),
+  ...config.presseportalAgencies.map((agency) => ({
+    key: `presseportal:${agency.key}`,
+    run: async () => ingest(await fetchAgency(agency, seen('presseportal')), agency.area),
+  })),
+  ...(config.feuerwehrBerlin ? [{
+    key: 'feuerwehr-berlin',
+    run: async () => ingest(await fetchFeuerwehrBerlin(seen('rss')), FEUERWEHR_BERLIN_AREA),
+  }] : []),
+  ...config.nwsAreas.map((area) => ({
+    key: `nws:${area}`,
+    // Only after a successful poll: alerts that vanished early get an all-clear.
+    run: async () => ingestAndReconcile(await fetchNwsArea(area, seen('nws'), nwsFetcher(config.nwsUserAgent))),
+  })),
+];
+
+const scheduler = new IngestScheduler(tasks, (key, err) => logError('ingest', err, { source: key }));
+const runIngest = () => scheduler.tick();
+
+const app = buildApi({ store, pipeline, adminToken: config.adminToken, runIngest, ingestStatus: () => scheduler.snapshot() });
 await app.listen({ port: config.port, host: '0.0.0.0' });
 console.log(`Hey-Okay server on :${config.port} · ${storeKind(config)} · AI ${llm.enabled ? `on (${config.model})` : 'off — rules + templates'} · dedup ${embedder.enabled ? `embeddings (${embedder.model})` : 'word overlap'} · Alert Desk at /admin`);
 if (config.adminToken === 'change-me') console.warn('⚠ Set ADMIN_TOKEN before exposing this server.');

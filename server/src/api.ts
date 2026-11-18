@@ -22,12 +22,14 @@ export interface ApiDeps {
   store: Store;
   pipeline: Pipeline;
   adminToken: string;
+  /** Per-source ingest health for /health (no error texts). */
+  ingestStatus?: () => Record<string, { ok: boolean; running: boolean; lastOkAt: string | null }>;
   runIngest: () => Promise<unknown>;
   /** Where unexpected errors are logged (default: JSON lines on stderr). */
   errorSink?: ErrorSink;
 }
 
-export function buildApi({ store, pipeline, adminToken, runIngest, errorSink = stderrSink }: ApiDeps) {
+export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus, errorSink = stderrSink }: ApiDeps) {
   const app = Fastify({ logger: false });
   // Any origin may call the API: it uses bearer tokens, never cookies. The web app needs PUT and DELETE too.
   app.register(cors, { origin: true, methods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE'] });
@@ -54,7 +56,12 @@ export function buildApi({ store, pipeline, adminToken, runIngest, errorSink = s
     return true;
   };
 
-  app.get('/health', async () => ({ ok: true }));
+  // Always 200 while the process is up (Fly's health check). `sources` shows which feeds last worked when.
+  app.get('/health', async () => {
+    if (!ingestStatus) return { ok: true };
+    const sources = Object.fromEntries(Object.entries(ingestStatus()).map(([k, v]) => [k, { ok: v.ok, running: v.running, lastOkAt: v.lastOkAt }]));
+    return { ok: true, sources };
+  });
 
   // ── device / user ────────────────────────────────────────────────────────
   app.post('/v1/devices', async (req) => {

@@ -6,7 +6,7 @@ import type {
 import { DEFAULT_PREFS } from './types.js';
 import { hashToken } from './db.js';
 import { LOCATION_MAX_AGE_MS, MAX_PLACE_RADIUS_M } from './geo.js';
-import { computeMetrics, type Area, type Metrics, type Store, type UserWithPlaces } from './store.js';
+import { SCHEDULED_LOOKBACK_H, computeMetrics, type Area, type Metrics, type Store, type UserWithPlaces } from './store.js';
 
 /**
  * Schema migrations, applied in order and recorded in `schema_migrations`. Append new entries;
@@ -299,9 +299,11 @@ export class PgStore implements Store {
 
   async activeEvents(now: Date, lookbackHours = 24): Promise<RiskEvent[]> {
     const since = new Date(now.getTime() - lookbackHours * 3600_000).toISOString();
+    const sinceWithEnd = new Date(now.getTime() - SCHEDULED_LOOKBACK_H * 3600_000).toISOString();
     const { rows } = await this.q(
-      `SELECT data FROM events WHERE status != 'rejected' AND starts_at >= $1 AND (ends_at IS NULL OR ends_at > $2)`,
-      [since, now.toISOString()],
+      `SELECT data FROM events WHERE status != 'rejected' AND (
+         (ends_at IS NULL AND starts_at >= $1) OR (ends_at > $2 AND starts_at >= $3))`,
+      [since, now.toISOString(), sinceWithEnd],
     );
     return rows.map((r) => r.data);
   }

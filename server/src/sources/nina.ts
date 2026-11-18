@@ -1,5 +1,6 @@
 import type { Category, Severity, SourceItem } from '../types.js';
 import { enclosingCircle, outerRings, polygonCircle, thinRing } from '../geo.js';
+import { fetchWithTimeout } from '../http.js';
 
 /**
  * NINA (Bundesamt für Bevölkerungsschutz und Katastrophenhilfe) public API.
@@ -82,17 +83,22 @@ export function geojsonCircle(g: GeoJson): { lat: number; lon: number; radiusM: 
   return circles.length ? enclosingCircle(circles) : null;
 }
 
-/** More outlines than this (a warning for hundreds of municipalities) and the circle is used instead, to keep events small. */
-const MAX_AREA_RINGS = 60;
+/** Total outline points kept per warning, so events stay small even for warnings over hundreds of municipalities. */
+const AREA_POINT_BUDGET = 6000;
+/** Fewer points than this per outline and it stops resembling the municipality. */
+const MIN_POINTS_PER_RING = 12;
 
 /**
  * Exact warning outlines ([lon, lat] rings) so matching follows the warned area, not the enclosing
- * circle: a drinking-water warning for two villages shouldn't reach the whole district.
+ * circle: a drinking-water warning for two villages shouldn't reach the whole district, and a DWD
+ * warning for municipalities scattered across several states must not become one circle over half
+ * of Germany. Outlines are thinned to fit a point budget; only beyond MAX rings is the circle used.
  */
 export function warningAreas(g: GeoJson | null): [number, number][][] | undefined {
   const rings = (g?.features ?? []).flatMap((f) => outerRings(f.geometry ?? null)).filter((r) => r?.length >= 3);
-  if (!rings.length || rings.length > MAX_AREA_RINGS) return undefined;
-  return rings.map((r) => thinRing(r, 150));
+  if (!rings.length || rings.length > AREA_POINT_BUDGET / MIN_POINTS_PER_RING) return undefined;
+  const perRing = Math.max(MIN_POINTS_PER_RING, Math.min(150, Math.floor(AREA_POINT_BUDGET / rings.length)));
+  return rings.map((r) => thinRing(r, perRing));
 }
 
 /** Build a SourceItem from a NINA warning + its GeoJSON. Pure — tested with fixtures. */
@@ -131,7 +137,7 @@ export function stripHtml(s: string): string {
 export type Fetcher = (url: string) => Promise<any>;
 
 export const jsonFetch: Fetcher = async (url) => {
-  const res = await fetch(url, { headers: { Accept: 'application/json' } });
+  const res = await fetchWithTimeout(url, { headers: { Accept: 'application/json' } });
   if (!res.ok) throw new Error(`${url} → HTTP ${res.status}`);
   return res.json();
 };

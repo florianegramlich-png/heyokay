@@ -4,7 +4,7 @@ import type {
   Alert, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
 } from './types.js';
 import { DEFAULT_PREFS } from './types.js';
-import { computeMetrics, type Area, type Metrics, type Store, type UserWithPlaces } from './store.js';
+import { SCHEDULED_LOOKBACK_H, computeMetrics, type Area, type Metrics, type Store, type UserWithPlaces } from './store.js';
 import { distanceM, LOCATION_MAX_AGE_MS } from './geo.js';
 import { cosine } from './embeddings.js';
 
@@ -168,7 +168,7 @@ export class SqliteStore implements Store {
       ON CONFLICT(id) DO UPDATE SET data=excluded.data, status=excluded.status, category=excluded.category,
         lat=excluded.lat, lon=excluded.lon, starts_at=excluded.starts_at, ends_at=excluded.ends_at,
         updated_at=excluded.updated_at
-    `).run(e.id, JSON.stringify(e), e.status, e.category, e.lat, e.lon, e.startsAt, e.endsAt, e.updatedAt);
+    `).run(e.id, JSON.stringify(e), e.status, e.category, e.lat, e.lon, iso(e.startsAt), e.endsAt ? iso(e.endsAt) : null, iso(e.updatedAt));
   }
 
   async getEvent(id: string): Promise<RiskEvent | null> {
@@ -179,9 +179,11 @@ export class SqliteStore implements Store {
   /** Events that are not over yet (no end, or end in the future) and started within the lookback. */
   async activeEvents(now: Date, lookbackHours = 24): Promise<RiskEvent[]> {
     const since = new Date(now.getTime() - lookbackHours * 3600_000).toISOString();
+    const sinceWithEnd = new Date(now.getTime() - SCHEDULED_LOOKBACK_H * 3600_000).toISOString();
     return this.db.prepare(
-      `SELECT data FROM events WHERE status != 'rejected' AND starts_at >= ? AND (ends_at IS NULL OR ends_at > ?)`,
-    ).all(since, now.toISOString()).map((r: any) => JSON.parse(r.data));
+      `SELECT data FROM events WHERE status != 'rejected' AND (
+         (ends_at IS NULL AND starts_at >= ?) OR (ends_at > ? AND starts_at >= ?))`,
+    ).all(since, now.toISOString(), sinceWithEnd).map((r: any) => JSON.parse(r.data));
   }
 
   async eventsByStatus(status: EventStatus): Promise<RiskEvent[]> {
@@ -289,6 +291,12 @@ export class SqliteStore implements Store {
   async close(): Promise<void> {
     this.db.close();
   }
+}
+
+/** Times are compared as text in SQLite, so they're stored as UTC ISO strings ("+01:00" offsets would sort wrongly). */
+function iso(t: string): string {
+  const ms = Date.parse(t);
+  return Number.isNaN(ms) ? t : new Date(ms).toISOString();
 }
 
 export function hashToken(token: string): string {

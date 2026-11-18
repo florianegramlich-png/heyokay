@@ -1,5 +1,6 @@
 import type { SourceItem } from '../types.js';
 import { stripHtml } from './nina.js';
+import { fetchWithTimeout } from '../http.js';
 
 /**
  * Berliner Feuerwehr incident reports ("Einsätze"), from the RSS feed the fire brigade publishes
@@ -72,7 +73,7 @@ export function toSourceItem(r: FireReport): SourceItem {
 export async function fetchFeuerwehrBerlin(
   isNew: (externalId: string) => boolean | Promise<boolean>,
   get: (url: string) => Promise<string> = async (url) => {
-    const res = await fetch(url, { headers: { Accept: 'application/rss+xml, text/xml' } });
+    const res = await fetchWithTimeout(url, { headers: { Accept: 'application/rss+xml, text/xml' } });
     if (!res.ok) throw new Error(`${url} → HTTP ${res.status}`);
     return res.text();
   },

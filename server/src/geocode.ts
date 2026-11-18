@@ -1,3 +1,5 @@
+import { fetchWithTimeout } from './http.js';
+
 export interface GeoResult {
   lat: number;
   lon: number;
@@ -72,7 +74,7 @@ export class NominatimGeocoder implements Geocoder {
       if (wait > 0) await new Promise((r) => setTimeout(r, wait));
       this.last = Date.now();
       const q = new URLSearchParams({ q: place, format: 'jsonv2', limit: '1', countrycodes: 'de,at,ch' });
-      const res = await fetch(`${this.url}?${q}`, { headers: { 'User-Agent': this.userAgent } });
+      const res = await fetchWithTimeout(`${this.url}?${q}`, { headers: { 'User-Agent': this.userAgent } }, 8_000);
       if (res.ok) {
         const [hit] = (await res.json()) as any[];
         if (hit) {

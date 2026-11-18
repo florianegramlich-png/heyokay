@@ -214,8 +214,11 @@ export class Pipeline {
   async reconcileFeed(feedKey: string, listedExternalIds: Set<string>): Promise<{ ended: number; alerts: number; pushes: number }> {
     const out = { ended: 0, alerts: 0, pushes: 0 };
     const soon = this.now().getTime() + 15 * 60_000;
-    for (const e of await this.d.store.activeEvents(this.now(), 24 * 14)) {
-      if (!e.feedKeys?.includes(feedKey)) continue;
+    const fromFeed = (await this.d.store.activeEvents(this.now(), 24 * 14)).filter((e) => e.feedKeys?.includes(feedKey));
+    // An empty list while several warnings are running is far more likely a feed glitch than
+    // everything being lifted at once. Don't send a wave of all-clears for it; the next poll decides.
+    if (listedExternalIds.size === 0 && fromFeed.length >= 3) return out;
+    for (const e of fromFeed) {
       if (e.sources.some((s) => listedExternalIds.has(s.externalId))) continue;
       if (e.endsAt && Date.parse(e.endsAt) <= soon) continue;
       out.ended++;
