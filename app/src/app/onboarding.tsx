@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Linking, Pressable, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Starfield } from '../components/Starfield';
 import { Button, Card, s, ToggleRow } from '../components/ui';
 import { api } from '../lib/api';
 import { setLanguage, useI18n, type Lang } from '../lib/i18n';
@@ -46,6 +47,7 @@ export default function Onboarding() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
+      <Starfield />
       <ScrollView contentContainerStyle={{ padding: 24, flexGrow: 1, justifyContent: 'center' }}>
         {step === 'value' && (
           <Screen title={t('onb.value.title')} text={t('onb.value.text')}>
@@ -99,7 +101,7 @@ export default function Onboarding() {
 
         {step === 'consent' && (
           <Screen title={t('onb.consent.title')} text={t('onb.consent.text')}>
-            <Text style={[s.muted, { color: colors.brand, marginBottom: 8 }]} onPress={() => Linking.openURL('https://heyokay.de/datenschutz')}>
+            <Text style={[s.muted, { color: colors.cyan, marginBottom: 8 }]} onPress={() => Linking.openURL('https://heyokay.de/datenschutz')}>
               {t('onb.consent.policy')}
             </Text>
             {error ? <Text style={{ color: colors.danger, marginBottom: 8 }}>{error}</Text> : null}
@@ -114,6 +116,10 @@ export default function Onboarding() {
 function Screen({ title, text, children }: { title: string; text: string; children: React.ReactNode }) {
   return (
     <View>
+      <Text style={{ fontSize: 15, fontWeight: '700', marginBottom: 16 }}>
+        <Text style={{ color: colors.cyan }}>Hey-</Text>
+        <Text style={{ color: colors.brand }}>Okay</Text>
+      </Text>
       <Text style={[s.h1, { marginBottom: 12 }]}>{title}</Text>
       <Text style={[s.p, { marginBottom: 24, color: colors.muted }]}>{text}</Text>
       {children}
@@ -125,7 +131,7 @@ function Screen({ title, text, children }: { title: string; text: string; childr
 export function LanguageSwitch({ value, onChange }: { value: Lang; onChange: (l: Lang) => void }) {
   const opt = (l: Lang, label: string) => (
     <Pressable key={l} onPress={() => onChange(l)} accessibilityRole="button" accessibilityState={{ selected: value === l }} hitSlop={8}>
-      <Text style={{ color: value === l ? colors.text : colors.brand, fontWeight: value === l ? '700' : '500', fontSize: 15 }}>{label}</Text>
+      <Text style={{ color: value === l ? colors.text : colors.muted, fontWeight: value === l ? '700' : '500', fontSize: 15 }}>{label}</Text>
     </Pressable>
   );
   return (

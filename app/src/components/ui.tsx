@@ -12,7 +12,7 @@ export function Button({ title, onPress, kind = 'primary', disabled }: {
       disabled={disabled}
       style={({ pressed }) => [s.btn, s[kind], (pressed || disabled) && { opacity: 0.6 }]}
     >
-      <Text style={[s.btnText, kind !== 'primary' && { color: kind === 'danger' ? colors.danger : colors.brand }]}>{title}</Text>
+      <Text style={[s.btnText, kind !== 'primary' && { color: kind === 'danger' ? colors.danger : colors.text }]}>{title}</Text>
     </Pressable>
   );
 }
@@ -39,14 +39,14 @@ export function ToggleRow({ label, hint, value, onChange, last }: {
         <Text style={s.rowLabel}>{label}</Text>
         {hint ? <Text style={s.rowHint}>{hint}</Text> : null}
       </View>
-      <Switch value={value} onValueChange={onChange} trackColor={{ true: colors.brand }} />
+      <Switch value={value} onValueChange={onChange} trackColor={{ true: colors.brand, false: 'rgba(255,255,255,0.18)' }} thumbColor="#FFFFFF" ios_backgroundColor="rgba(255,255,255,0.18)" />
     </View>
   );
 }
 
 export function Pill({ text, color }: { text: string; color: string }) {
   return (
-    <View style={[s.pill, { borderColor: color }]}>
+    <View style={[s.pill, { borderColor: color, backgroundColor: `${color}22` }]}>
       <Text style={[s.pillText, { color }]}>{text}</Text>
     </View>
   );
@@ -55,11 +55,11 @@ export function Pill({ text, color }: { text: string; color: string }) {
 export const s = StyleSheet.create({
   btn: { paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginTop: 10 },
   primary: { backgroundColor: colors.brand },
-  secondary: { backgroundColor: colors.brandSoft },
-  danger: { backgroundColor: '#FDECEA' },
+  secondary: { backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: colors.line },
+  danger: { backgroundColor: colors.dangerSoft, borderWidth: 1, borderColor: 'rgba(248,113,113,0.35)' },
   btnText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  card: { backgroundColor: colors.card, borderRadius: 14, padding: 16, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.line },
-  sectionTitle: { fontSize: 13, fontWeight: '600', color: colors.muted, textTransform: 'uppercase', marginBottom: 8, marginLeft: 4 },
+  card: { backgroundColor: colors.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.line },
+  sectionTitle: { fontSize: 12, fontWeight: '700', color: colors.muted, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8, marginLeft: 4 },
   row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
   rowLine: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.line },
   rowLabel: { fontSize: 16, color: colors.text },

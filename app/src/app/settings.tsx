@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert as RNAlert, Linking, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { SkyScreen } from '../components/Starfield';
 import { Button, s, Section, ToggleRow } from '../components/ui';
 import { api } from '../lib/api';
 import { crashReportingAvailable, getCrashReportsOptIn, setCrashReportsOptIn } from '../lib/crash';
@@ -80,10 +81,11 @@ export default function Settings() {
     ]);
   }
 
-  if (!prefs) return <Text style={[s.muted, { padding: 24 }]}>{t('set.loading')}</Text>;
+  if (!prefs) return <SkyScreen><Text style={[s.muted, { padding: 24 }]}>{t('set.loading')}</Text></SkyScreen>;
   const quiet = prefs.quietHours;
 
   return (
+    <SkyScreen>
     <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
       <Section title={t('set.language')}>
         <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -93,9 +95,9 @@ export default function Settings() {
               onPress={() => changeLanguage(l)}
               accessibilityRole="button"
               accessibilityState={{ selected: lang === l }}
-              style={{ flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center', backgroundColor: lang === l ? colors.brand : colors.brandSoft }}
+              style={{ flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center', backgroundColor: lang === l ? colors.brand : 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: lang === l ? colors.brand : colors.line }}
             >
-              <Text style={{ color: lang === l ? '#fff' : colors.brand, fontWeight: '600' }}>{l === 'de' ? 'Deutsch' : 'English'}</Text>
+              <Text style={{ color: lang === l ? '#fff' : colors.muted, fontWeight: '600' }}>{l === 'de' ? 'Deutsch' : 'English'}</Text>
             </Pressable>
           ))}
         </View>
@@ -129,10 +131,10 @@ export default function Settings() {
               onPress={() => save({ dailyLimit: n })}
               style={{
                 flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center',
-                backgroundColor: prefs.dailyLimit === n ? colors.brand : colors.brandSoft,
+                backgroundColor: prefs.dailyLimit === n ? colors.brand : 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: prefs.dailyLimit === n ? colors.brand : colors.line,
               }}
             >
-              <Text style={{ color: prefs.dailyLimit === n ? '#fff' : colors.brand, fontWeight: '600' }}>{n}</Text>
+              <Text style={{ color: prefs.dailyLimit === n ? '#fff' : colors.muted, fontWeight: '600' }}>{n}</Text>
             </Pressable>
           ))}
         </View>
@@ -155,8 +157,8 @@ export default function Settings() {
             <Text style={{ color: colors.danger }} onPress={() => removePlace(p.id)}>{t('set.places.remove')}</Text>
           </View>
         ))}
-        <TextInput placeholder={t('set.places.name')} value={label} onChangeText={setLabel} style={input} maxLength={40} />
-        <TextInput placeholder={t('set.places.address')} value={address} onChangeText={setAddress} style={input} />
+        <TextInput placeholder={t('set.places.name')} placeholderTextColor={colors.muted} value={label} onChangeText={setLabel} style={input} maxLength={40} keyboardAppearance="dark" />
+        <TextInput placeholder={t('set.places.address')} placeholderTextColor={colors.muted} value={address} onChangeText={setAddress} style={input} keyboardAppearance="dark" />
         {placeError ? <Text style={{ color: colors.danger, marginTop: 6 }}>{placeError}</Text> : null}
         <Button kind="secondary" title={t('set.places.add')} disabled={!address.trim()} onPress={addPlace} />
       </Section>
@@ -175,9 +177,11 @@ export default function Settings() {
         <Button kind="danger" title={t('set.delete')} onPress={confirmDelete} />
       </Section>
     </ScrollView>
+    </SkyScreen>
   );
 }
 
 const input = {
   borderWidth: 1, borderColor: colors.line, borderRadius: 10, padding: 12, marginTop: 10, fontSize: 16, color: colors.text,
+  backgroundColor: 'rgba(255,255,255,0.05)',
 } as const;
