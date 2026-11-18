@@ -1,6 +1,7 @@
 import type { SourceItem } from '../types.js';
 import { geojsonCircle, mapCategory, mapSeverity } from './nina.js';
 import { outerRings, thinRing } from '../geo.js';
+import { fetchWithTimeout } from '../http.js';
 
 /**
  * US National Weather Service active alerts (CAP via api.weather.gov).
@@ -92,7 +93,7 @@ export type NwsFetcher = (url: string) => Promise<any>;
 /** NWS asks every client to identify itself with a contact in the User-Agent. */
 export function nwsFetcher(userAgent: string): NwsFetcher {
   return async (url) => {
-    const res = await fetch(url, { headers: { Accept: 'application/geo+json', 'User-Agent': userAgent } });
+    const res = await fetchWithTimeout(url, { headers: { Accept: 'application/geo+json', 'User-Agent': userAgent } });
     if (!res.ok) throw new Error(`${url} → HTTP ${res.status}`);
     return res.json();
   };

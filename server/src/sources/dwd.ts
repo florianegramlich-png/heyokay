@@ -2,6 +2,7 @@ import type { SourceItem } from '../types.js';
 import { enclosingCircle, polygonCircle, thinRing } from '../geo.js';
 import { mapSeverity } from './nina.js';
 import { readZip } from './zip.js';
+import { fetchWithTimeout } from '../http.js';
 
 /**
  * Deutscher Wetterdienst warnings straight from DWD open data, as a fallback for NINA's DWD
@@ -99,7 +100,7 @@ export async function fetchDwdSnapshot(
 }
 
 export async function binaryFetch(url: string): Promise<Buffer> {
-  const res = await fetch(url);
+  const res = await fetchWithTimeout(url, {}, 30_000);
   if (!res.ok) throw new Error(`${url} → HTTP ${res.status}`);
   return Buffer.from(await res.arrayBuffer());
 }

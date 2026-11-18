@@ -1,4 +1,5 @@
 import type { Alert } from './types.js';
+import { fetchWithTimeout } from './http.js';
 
 /**
  * Expo Push Service: one API in front of APNs (iOS) and FCM (Android).
@@ -26,7 +27,7 @@ export class ExpoPushSender implements PushSender {
         data: { alertId: alert.id, url: `heyokay://alert/${alert.id}` },
       }));
       try {
-        const res = await fetch(this.url, {
+        const res = await fetchWithTimeout(this.url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
           body: JSON.stringify(batch),

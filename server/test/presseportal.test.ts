@@ -15,6 +15,8 @@ import { Pipeline } from '../src/pipeline/run.js';
 const fx = (f: string) => readFileSync(join(import.meta.dirname, 'fixtures', f), 'utf8');
 const POLICE_HH = PRESSEPORTAL_AGENCIES.find((a) => a.key === 'polizei-hamburg')!;
 const FIRE_HH = PRESSEPORTAL_AGENCIES.find((a) => a.key === 'feuerwehr-hamburg')!;
+/** The fixtures span weeks; these tests look at all of them. */
+const ALL = { now: new Date('2026-11-18T15:00:00+01:00'), maxAgeH: 24 * 60, maxArticles: 50 };
 
 /** Serves the fixtures by URL; anything else is a 404. Records what was fetched. */
 function fakeWeb(pages: Record<string, string>) {
@@ -73,7 +75,7 @@ describe('Presseportal Blaulicht: polling', () => {
       'https://www.presseportal.de/blaulicht/pm/6337/6393268': fx('presseportal-article-6337_6393268.html'),
     });
     const seen = new Set([externalId('6337/6393253')]);
-    const items = await fetchAgency(POLICE_HH, (id) => !seen.has(id), web.get);
+    const items = await fetchAgency(POLICE_HH, (id) => !seen.has(id), web.get, ALL);
 
     const titles = items.map((i) => i.title);
     expect(titles.some((t) => /vermisst/i.test(t))).toBe(false); // "Vermisstenfahndung …", "Erledigung der Vermisstenfahndung …"
@@ -92,12 +94,25 @@ describe('Presseportal Blaulicht: polling', () => {
 
   it('skips station openings and ceremonies from the fire brigade', async () => {
     const web = fakeWeb({ [feedUrl(FIRE_HH)]: fx('presseportal-feuerwehr-hamburg.rss2') });
-    const items = await fetchAgency(FIRE_HH, () => true, web.get);
+    const items = await fetchAgency(FIRE_HH, () => true, web.get, ALL);
     expect(items.map((i) => i.title)).toEqual([
       'Eine Person bei Wohnungsbrand in Hamburg-Farmsen-Berne verstorben',
       'Pfefferspray in Schule: Feuerwehr betreut 60 Kinder',
       'Kontrollierte Sprengung in Heimfeld',
     ]);
+  });
+
+  it('fetches no articles for releases older than 12 hours, and at most a few per poll', async () => {
+    const web = fakeWeb({ [feedUrl(POLICE_HH)]: fx('presseportal-polizei-hamburg.rss2') });
+    // 15:00 on the 18th: only the four releases from the 18th are recent (two are missing-person searches).
+    const recent = await fetchAgency(POLICE_HH, () => true, web.get, { now: new Date('2026-11-18T15:00:00+01:00') });
+    expect(recent.map((i) => i.externalId)).toEqual(['presseportal:6337/6393268', 'presseportal:6337/6393253']);
+    expect(web.fetched.filter((u) => u.includes('/pm/'))).toHaveLength(2);
+
+    const capped = fakeWeb({ [feedUrl(POLICE_HH)]: fx('presseportal-polizei-hamburg.rss2') });
+    const some = await fetchAgency(POLICE_HH, () => true, capped.get, { ...ALL, maxArticles: 1 });
+    expect(some).toHaveLength(1);
+    expect(capped.fetched.filter((u) => u.includes('/pm/'))).toHaveLength(1);
   });
 
   it('selects agencies from config', () => {
@@ -131,7 +146,7 @@ describe('Presseportal Blaulicht: end to end', () => {
       [feedUrl(FIRE_HH)]: fx('presseportal-feuerwehr-hamburg.rss2'),
       'https://www.presseportal.de/blaulicht/pm/82522/6378012': fx('presseportal-article-82522_6378012.html'),
     });
-    const items = (await fetchAgency(FIRE_HH, () => true, web.get)).filter((i) => i.externalId === 'presseportal:82522/6378012');
+    const items = (await fetchAgency(FIRE_HH, () => true, web.get, ALL)).filter((i) => i.externalId === 'presseportal:82522/6378012');
     const store = new SqliteStore(':memory:');
     const push = new MemoryPushSender();
     const now = new Date('2026-10-26T09:00:00Z'); // shortly after the release

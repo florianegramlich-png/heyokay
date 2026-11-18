@@ -43,6 +43,11 @@ export async function compose(event: RiskEvent, llm: StructuredLLM): Promise<Ale
 }
 
 /** Deterministic copy from verbatim source text — always grounded. */
+/** "WARNUNG vor STURMBÖEN" → "Warnung vor Sturmböen": DWD writes the warning type in capitals. */
+export function sentenceCase(s: string): string {
+  return s.replace(/\p{Lu}{2,}[\p{Lu}\p{Ll}]*/gu, (w) => (w === w.toUpperCase() ? w[0] + w.slice(1).toLowerCase() : w));
+}
+
 export function template(event: RiskEvent): { title: string; body: string } {
   // The latest official message describes the current state (an update may carry a new end time).
   const src = [...event.sources].reverse().find((s) => s.official) ?? event.sources[0];
@@ -52,6 +57,12 @@ export function template(event: RiskEvent): { title: string; body: string } {
   // would mislead people in the others, so name the warning instead: "Weather: Wind Advisory".
   if (event.areaName.includes(';')) {
     const what = srcTitle.split(/\s+(?:until|from|for)\s+/i)[0];
+    return { title: truncate(`${label}: ${what}`, TITLE_MAX), body: truncate(srcTitle, BODY_MAX) };
+  }
+  // Same for NINA/DWD warnings over several municipalities ("Gemeinde Bodensee, Stadt Bad Sachsa, …"):
+  // someone in Berlin must not read "Wetter: Gemeinde Bodensee". Name the warning, in calm sentence case.
+  if (event.areaName.includes(',') && event.official) {
+    const what = sentenceCase(srcTitle.replace(/^amtliche\s+/i, ''));
     return { title: truncate(`${label}: ${what}`, TITLE_MAX), body: truncate(srcTitle, BODY_MAX) };
   }
   const area = event.areaName.split(',')[0].trim();

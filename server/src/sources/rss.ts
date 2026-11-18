@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { RssFeedConfig } from '../config.js';
 import type { SourceItem } from '../types.js';
 import { stripHtml } from './nina.js';
+import { fetchWithTimeout } from '../http.js';
 
 /**
  * Generic RSS 2.0 / Atom adapter for unstructured sources:
@@ -44,7 +45,7 @@ function attr(block: string, tag: string, name: string): string | null {
 }
 
 export async function fetchFeed(feed: RssFeedConfig): Promise<SourceItem[]> {
-  const res = await fetch(feed.url, { headers: { Accept: 'application/rss+xml, application/atom+xml, text/xml' } });
+  const res = await fetchWithTimeout(feed.url, { headers: { Accept: 'application/rss+xml, application/atom+xml, text/xml' } });
   if (!res.ok) throw new Error(`${feed.url} → HTTP ${res.status}`);
   return parseFeed(await res.text(), feed);
 }

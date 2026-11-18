@@ -1,5 +1,6 @@
 import type { Category, SourceItem } from '../types.js';
 import { stripHtml } from './nina.js';
+import { fetchWithTimeout } from '../http.js';
 
 /**
  * Presseportal "Blaulicht": police and fire brigade press releases, one RSS feed per agency
@@ -53,6 +54,11 @@ export function selectAgencies(spec: string | undefined): PresseportalAgency[] {
   if (unknown.length) throw new Error(`PRESSEPORTAL_AGENCIES: unknown agency ${unknown.join(', ')} (known: ${PRESSEPORTAL_AGENCIES.map((a) => a.key).join(', ')})`);
   return PRESSEPORTAL_AGENCIES.filter((a) => wanted.includes(a.key) || wanted.includes(String(a.id)));
 }
+
+/** Same limit as the extractor's: older press releases are history, not alerts. */
+const MAX_AGE_H = 12;
+/** Article pages fetched per agency and poll. New releases are a few a day, so this only bites after downtime. */
+const MAX_ARTICLES_PER_POLL = 5;
 
 export function feedUrl(agency: PresseportalAgency) {
   return `${PRESSEPORTAL_BASE}/rss/dienststelle_${agency.id}.rss2`;
@@ -118,7 +124,7 @@ export function parseArticle(html: string): string | null {
 export type TextFetcher = (url: string) => Promise<string>;
 
 export const textFetch: TextFetcher = async (url) => {
-  const res = await fetch(url, { headers: { Accept: 'text/html, application/rss+xml, text/xml', 'User-Agent': 'HeyOkay/0.1 (safety alerts; contact via app)' } });
+  const res = await fetchWithTimeout(url, { headers: { Accept: 'text/html, application/rss+xml, text/xml', 'User-Agent': 'HeyOkay/0.1 (safety alerts; contact via app)' } });
   if (!res.ok) throw new Error(`${url} → HTTP ${res.status}`);
   return res.text();
 };
@@ -135,13 +141,22 @@ export async function fetchAgency(
   agency: PresseportalAgency,
   isNew: (externalId: string) => boolean | Promise<boolean>,
   get: TextFetcher = textFetch,
+  opts: { now?: Date; maxAgeH?: number; maxArticles?: number } = {},
 ): Promise<SourceItem[]> {
+  const now = (opts.now ?? new Date()).getTime();
+  const maxAgeMs = (opts.maxAgeH ?? MAX_AGE_H) * 3600_000;
+  let articles = opts.maxArticles ?? MAX_ARTICLES_PER_POLL;
   const entries = parseAgencyFeed(await get(feedUrl(agency)));
   const out: SourceItem[] = [];
   for (const e of entries) {
     if (NOT_AN_ALERT.test(e.title)) continue;
+    // Older releases would be dropped as history anyway: don't fetch their articles.
+    if (now - Date.parse(e.publishedAt) > maxAgeMs) continue;
     const id = externalId(e.pmId);
     if (!(await isNew(id))) continue;
+    // A few articles per poll and agency at most; the rest come next poll (or keep their teaser).
+    if (articles <= 0) break;
+    articles--;
     let body = e.teaser;
     try {
       body = parseArticle(await get(e.url)) ?? e.teaser;

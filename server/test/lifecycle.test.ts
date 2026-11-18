@@ -124,6 +124,20 @@ describe.each(storeBackends())('event lifecycle: updates and all-clears ($name)'
     expect(await kinds(home.id)).toEqual(['update', 'new']);
   });
 
+  it('an empty feed while three or more alerts run is treated as a glitch: no wave of all-clears', async () => {
+    const home = await user(HOME);
+    await pipeline.ingest([
+      nws('g1', { expiresAt: hours(6) }),
+      nws('g2', { title: 'Beach Hazards Statement', expiresAt: hours(6), areas: [ring] }),
+      nws('g3', { title: 'High Surf Advisory', expiresAt: hours(6), areas: [ring] }),
+    ]);
+    const before = (await store.alertsForUser(home.id)).length;
+    expect((await pipeline.reconcileFeed('nws:CA', new Set())).ended).toBe(0);
+    expect(await store.alertsForUser(home.id)).toHaveLength(before);
+    // A real partial list still lifts what's missing.
+    expect((await pipeline.reconcileFeed('nws:CA', new Set(['g1', 'g2']))).ended).toBe(1);
+  });
+
   it('an alert that vanishes from its feed early is lifted; one that runs out on time ends quietly', async () => {
     const home = await user(HOME);
     await pipeline.ingest([nws('a1', { expiresAt: hours(6) }), nws('b1', { title: 'Beach Hazards Statement until 12:10PM', expiresAt: hours(0.1), areas: [ring] })]);
