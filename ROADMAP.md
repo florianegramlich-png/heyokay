@@ -18,7 +18,7 @@ Items that need accounts or keys (Firebase, RevenueCat or App Store products, Ap
 - [x] **Country packs, part 1** [8.1]: `server/src/countries.ts` with DE, AT, CH, US (language, emergency/police/medical numbers, units); every source tags its items with a country, events keep it, and the recommended actions name that country's numbers. (2026-11-18)
 - [x] **Country packs, part 2** [8.1]: `COUNTRIES=DE,AT` setting that switches each country's sources on, plus the source registry below. (2026-11-18)
 - [ ] **Country packs, part 3** [8.1]: the first non-German sources (e.g. Austria's official warnings) once Flori picks the next country.
-- [ ] **Observability** [13]: Prometheus-style metrics endpoint (event-to-push latency, source lag, queue depth, push delivery), error tracking (Sentry, EU), uptime checks.
+- [x] **Observability** [13]: Prometheus metrics on an internal port (`METRICS_PORT` 9091, scraped by Fly via `[metrics]`, never public). The metrics are push latency, pushes sent/failed, queue depth, per-source polls, duration, up and last-OK age, HTTP requests by route pattern, errors by context, and worker lease. Server errors also go to Sentry when `SENTRY_DSN` is set (envelope API, no SDK, 30/min cap, no user data). (2026-11-18; Sentry project and uptime monitor are under "Needs a human".)
 - [ ] **Staging and release channels** [10.4]: staging Fly app and database, Vercel previews against staging, EAS Update channels (preview/production), documented secrets.
 
 - [ ] **Sign-in: Apple + Google** [5.3, 7.1]: verify Sign in with Apple and Google identity tokens on the server (JWKS, audience, expiry), link to the same accounts as email; `apple_sub` / `google_sub` on accounts. Needs the Apple capability and Google client IDs (see "Needs a human"). *(Split from "Sign-in", 2026-11-18.)*
@@ -67,6 +67,11 @@ Items that need accounts or keys (Firebase, RevenueCat or App Store products, Ap
 - [ ] **Apple Watch + Wear OS** [8.3].
 
 ## Needs a human
+
+Operations
+- Sentry: create a project in the **EU region** (de.sentry.io), then `fly secrets set SENTRY_DSN=… -a heyokay`.
+- Uptime monitor on `https://heyokay.fly.dev/health` (e.g. Better Stack or UptimeRobot, 1-minute checks, alert to your phone).
+- Charts: Fly dashboard → Metrics (Grafana at fly-metrics.net) shows the `heyokay_*` metrics after the next deploy.
 
 Real devices and stores
 - Run the app on a real iPhone and Android phone (development build); verify background location, geofences and push when the app is closed; battery test.

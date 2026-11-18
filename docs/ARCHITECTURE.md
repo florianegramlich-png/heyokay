@@ -131,6 +131,8 @@ Health: `GET /health` (per-source status, no error texts). CORS: any origin, bea
 | `EXPO_ACCESS_TOKEN` | – | Only if Expo "enhanced push security" is on |
 | `DATABASE_SCHEMA` | – | Postgres schema for our tables; `heyokay` on Supabase (keeps them off Supabase's public Data API) |
 | `COUNTRIES` | all | Countries whose sources run, e.g. `DE,AT` (registry in `sources/registry.ts`) |
+| `METRICS_PORT` | `9091` | Internal Prometheus port (0 = off) |
+| `SENTRY_DSN` | – | Sentry (EU) for server errors |
 | `PUSH_CONCURRENCY` | `4` | Push sends in flight from the delivery queue |
 | `ROLE` | `all` | `api`, `worker` or `all` (see Roles). Separate roles need `DATABASE_URL` |
 | `MATCH_BUFFER_M` | 1500 | Buffer around an event for current locations |
@@ -147,7 +149,8 @@ Phone app: `EXPO_PUBLIC_API_URL` (else `app.json → extra.apiUrl`). Web app: `N
 ## 7. Quality and operations
 
 - Tests: server (vitest) on SQLite and Postgres; web (Node test runner); app typecheck. Real fixtures from live sources.
-- Error logging: structured JSON lines on stderr (`errors.ts`); `fly logs -a heyokay`.
+- Error logging: structured JSON lines on stderr (`errors.ts`); `fly logs -a heyokay`; also Sentry (EU) when `SENTRY_DSN` is set.
+- Metrics: Prometheus text on the internal `METRICS_PORT` (9091), scraped by Fly (`[metrics]` in `fly.toml`). Main metrics: `heyokay_push_latency_seconds`, `heyokay_pushes_total`, `heyokay_push_queue_depth`, `heyokay_source_up`, `heyokay_source_last_ok_age_seconds`, `heyokay_http_requests_total`, `heyokay_errors_total`, `heyokay_worker_leading`.
 - Health: `/health` per source (`ok`, `running`, `lastOkAt`) on the worker; the Alert Desk **Sources** table (from `source_status`, any machine) shows ok / failing / stale / waiting with the fallback.
 - Build agent: runs daily on `agent/next`, rules in `AGENT.md`, work list in `ROADMAP.md`, history in `CHANGELOG.md`.
 
@@ -164,7 +167,7 @@ Target, in this order (each is a roadmap item under "Scale foundation"):
 | 3 | ✅ **Delivery queue** (built 2026-11-18; 20k pushes ≈ 1 s on Postgres) in Postgres (`FOR UPDATE SKIP LOCKED`): matching writes jobs, workers send pushes in parallel with retries | A severe warning for a big city means hundreds of thousands of pushes in minutes | Several workers sharing the load |
 | 4 | 🟡 **Country packs** (built 2026-11-18: packs, country tags, numbers in advice, `COUNTRIES`, source registry + health; next: a second country's sources): sources, emergency numbers, advice, language and units per country (`COUNTRIES=DE,AT,CH`), source registry with health | Today Germany and the US test are wired in code (112/110, 911) | New country = config + source adapters |
 | 5 | **API hardening**: rate limits per token and IP, body limits, security headers; CDN caching for the web app | Public launch traffic and abuse | Safe public launch |
-| 6 | **Observability**: metrics (event-to-push p90, queue depth, source lag), error tracking, uptime alerts, `/health` per role | Know before users notice | On-call |
+| 6 | ✅ **Observability** (built 2026-11-18: metrics, Sentry; uptime monitor = human step): metrics (event-to-push p90, queue depth, source lag), error tracking, uptime alerts, `/health` per role | Know before users notice | On-call |
 | 7 | **Environments**: staging Fly app + Vercel preview against staging, EAS Update channels (preview/production), infrastructure as code (Fly config, secrets list) | Ship fast without breaking production | Daily releases |
 | 8 | **Data retention** job and partitioning of alerts/source items by month | Tables grow with users × events | Stable performance and GDPR |
 

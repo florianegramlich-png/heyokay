@@ -13,16 +13,18 @@ import { FEUERWEHR_BERLIN_AREA, fetchFeuerwehrBerlin } from './sources/feuerwehr
 import { fetchNwsArea, nwsFetcher } from './sources/nws.js';
 import { buildApi } from './api.js';
 import { createEmbedder } from './embeddings.js';
-import { installProcessHandlers, logError } from './errors.js';
+import { installProcessHandlers, logError, sentrySink, setErrorSinks, stderrSink } from './errors.js';
+import { M, registry } from './metrics.js';
+import { sourceHealth } from './sources/registry.js';
 import { ResendMailer } from './auth.js';
 import { IngestScheduler, Mutex, type SourceTask } from './ingest.js';
 import { describeSource, sourceEnabled } from './sources/registry.js';
 import { LeaderElector, leaseTtlMs, runsApi, runsWorker } from './roles.js';
 import Fastify from 'fastify';
 
-installProcessHandlers();
-
 const config = loadConfig();
+if (config.sentryDsn) setErrorSinks(stderrSink, sentrySink(config.sentryDsn, { environment: process.env.NODE_ENV ?? 'development', release: process.env.FLY_IMAGE_REF }));
+installProcessHandlers();
 // A hosted server with the default admin token would let anyone send alerts from the Alert Desk.
 if (process.env.NODE_ENV === 'production' && config.adminToken === 'change-me') {
   console.error('Refusing to start: set ADMIN_TOKEN (e.g. `fly secrets set ADMIN_TOKEN=…`).');
@@ -132,6 +134,28 @@ await app.listen({ port: config.port, host: '0.0.0.0' });
 console.log(`Hey-Okay server on :${config.port} · role ${config.role} · ${storeKind(config)} · AI ${llm.enabled ? `on (${config.model})` : 'off — rules + templates'} · dedup ${embedder.enabled ? `embeddings (${embedder.model})` : 'word overlap'}${runsApi(config.role) ? ' · Alert Desk at /admin' : ''}`);
 if (config.adminToken === 'change-me') console.warn('⚠ Set ADMIN_TOKEN before exposing this server.');
 if (config.role !== 'all' && !config.databaseUrl) console.warn('⚠ Separate api/worker roles need a shared database (DATABASE_URL); SQLite is one machine only.');
+
+// Prometheus on an internal port only (fly.toml [metrics]); gauges are read fresh on each scrape.
+if (worker) {
+  registry.onCollect(async () => {
+    M.workerLeading.set({}, leader.status().leading ? 1 : 0);
+    M.pushQueue.set({}, await store.pushQueueDepth());
+    M.sourceUp.reset(); M.sourceLastOkAge.reset();
+    for (const [key, s] of Object.entries(scheduler.snapshot())) {
+      M.sourceUp.set({ source: key }, sourceHealth(s, config.pollIntervalSec) === 'ok' ? 1 : 0);
+      if (s.lastOkAt) M.sourceLastOkAge.set({ source: key }, Math.round((Date.now() - Date.parse(s.lastOkAt)) / 1000));
+    }
+  });
+}
+if (config.metricsPort > 0) {
+  const metricsApp = Fastify({ logger: false });
+  metricsApp.get('/metrics', async (_req, reply) => reply.type('text/plain; version=0.0.4').send(await registry.render()));
+  // Fly scrapes over its private IPv6 network; fall back to IPv4 where there is no IPv6 (local).
+  // A metrics port that can't open is logged, never fatal: alerts matter more than charts.
+  await metricsApp.listen({ port: config.metricsPort, host: '::' })
+    .catch(() => metricsApp.listen({ port: config.metricsPort, host: '0.0.0.0' }))
+    .catch((e) => logError('metrics', e, { port: config.metricsPort }));
+}
 
 if (worker && config.pollIntervalSec > 0) {
   const tick = () => runIngest().then((r) => console.log('[ingest]', JSON.stringify(r))).catch((e) => logError('ingest', e));

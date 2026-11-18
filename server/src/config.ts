@@ -52,6 +52,10 @@ export interface Config {
   expoAccessToken: string | null;
   /** api: HTTP only · worker: ingest + push only · all: both (default, one machine). */
   role: Role;
+  /** Internal Prometheus port (Fly scrapes it; never public). 0 = off. */
+  metricsPort: number;
+  /** Sentry DSN (EU region) for server errors; unset = stderr only. */
+  sentryDsn: string | null;
   /** Countries whose sources run (COUNTRIES=DE,AT). null = all. */
   countries: CountryCode[] | null;
   /** Push sends in flight at once from the delivery queue (each up to 500 pushes). */
@@ -99,6 +103,8 @@ export function loadConfig(env = process.env): Config {
     expoPushUrl: env.EXPO_PUSH_URL ?? 'https://exp.host/--/api/v2/push/send',
     expoAccessToken: env.EXPO_ACCESS_TOKEN || null,
     role: parseRole(env.ROLE),
+    metricsPort: Number(env.METRICS_PORT ?? 9091),
+    sentryDsn: env.SENTRY_DSN || null,
     countries: parseCountries(env.COUNTRIES),
     pushConcurrency: Math.max(1, Number(env.PUSH_CONCURRENCY ?? 4)),
     instanceId: env.FLY_MACHINE_ID || env.HOSTNAME || `local-${process.pid}`,

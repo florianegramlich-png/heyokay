@@ -8,7 +8,8 @@ import { DESK_HTML } from './desk.js';
 import { sourceReport } from './sources/registry.js';
 import { MAX_PLACE_RADIUS_M } from './geo.js';
 import { AuthError, checkEmailCode, signIn, signOut, startEmailSignIn, type Mailer } from './auth.js';
-import { logError, stderrSink, type ErrorSink } from './errors.js';
+import { logError, defaultSink, type ErrorSink } from './errors.js';
+import { M } from './metrics.js';
 
 const PrefsSchema = z.object({
   categories: z.array(z.enum(CATEGORIES)),
@@ -37,8 +38,14 @@ export interface ApiDeps {
   errorSink?: ErrorSink;
 }
 
-export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus, roleStatus, pollIntervalSec = 120, mailer = null, errorSink = stderrSink }: ApiDeps) {
+export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus, roleStatus, pollIntervalSec = 120, mailer = null, errorSink = defaultSink }: ApiDeps) {
   const app = Fastify({ logger: false });
+  // Request metrics by route pattern (never the URL itself: no ids or tokens in labels).
+  app.addHook('onResponse', async (req, reply) => {
+    const route = req.routeOptions.url ?? 'unmatched';
+    M.http.inc({ route, method: req.method, status: `${Math.floor(reply.statusCode / 100)}xx` });
+    M.httpSeconds.observe({ route }, reply.elapsedTime / 1000);
+  });
   // Any origin may call the API: it uses bearer tokens, never cookies. The web app needs PUT and DELETE too.
   app.register(cors, { origin: true, methods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE'] });
 
