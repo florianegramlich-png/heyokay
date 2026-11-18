@@ -114,6 +114,10 @@ const de = {
   'time.min': 'vor {n} Min.',
   'time.h': 'vor {n} Std.',
 
+  // Notification buttons
+  'notif.relevant': '👍 Relevant',
+  'notif.notRelevant': '👎 Nicht relevant',
+
   // Android notification channels
   'channel.alerts': 'Warnungen',
   'channel.urgent': 'Dringende Warnungen',
@@ -223,6 +227,8 @@ const en: Record<Key, string> = {
   'time.min': '{n} min ago',
   'time.h': '{n} h ago',
 
+  'notif.relevant': '👍 Relevant',
+  'notif.notRelevant': '👎 Not relevant',
   'channel.alerts': 'Alerts',
   'channel.urgent': 'Urgent alerts',
 

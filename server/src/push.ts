@@ -48,6 +48,8 @@ export function toExpoMessage({ token, alert }: PushMessage) {
     interruptionLevel: alert.severity >= 4 ? 'time-sensitive' : 'active',
     // Buttons defined in app/src/lib/notifications.ts (setNotificationCategoryAsync). All-clears need no rating.
     ...(alert.kind === 'all_clear' ? {} : { categoryId: 'alert' }),
+    // One stack per incident: the warning, its updates and the all-clear group together.
+    threadId: alert.eventId,
     data: { alertId: alert.id, eventId: alert.eventId, url: `heyokay://alert/${alert.id}` },
   };
 }

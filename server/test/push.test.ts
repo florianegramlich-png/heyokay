@@ -27,7 +27,8 @@ function fakeFetch(responses: Array<{ status: number; body?: unknown } | Error>)
 
 describe('Expo push sender', () => {
   it('adds the rating buttons (category) and groups by event, except on all-clears', () => {
-    expect(toExpoMessage({ token: 'T', alert: alert() })).toMatchObject({ to: 'T', categoryId: 'alert', data: { alertId: 'a1', eventId: 'e1' } });
+    expect(toExpoMessage({ token: 'T', alert: alert() })).toMatchObject({ to: 'T', categoryId: 'alert', threadId: 'e1', data: { alertId: 'a1', eventId: 'e1' } });
+    expect(toExpoMessage({ token: 'T', alert: alert({ kind: 'all_clear' }) })).toMatchObject({ threadId: 'e1' });
     expect(toExpoMessage({ token: 'T', alert: alert({ kind: 'all_clear' }) })).not.toHaveProperty('categoryId');
   });
 

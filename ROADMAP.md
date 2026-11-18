@@ -10,7 +10,6 @@ Items that need accounts or keys (Firebase, RevenueCat or App Store products, Ap
 
 ### Phase 1: launch blockers
 
-- [ ] **Notification actions** [5.3]: rich notifications with "Relevant" / "Nicht relevant" buttons (notification categories) that post feedback without opening the app; group related alerts via thread id.
 - [ ] **Source: heat at saved places** [5.4]: heat thresholds from OpenWeatherMap at users' saved places (for example "38 °C at your mother's address"), on top of DWD's official HITZE warnings, which already arrive via NINA and DWD direct. Needs an OpenWeatherMap key (see "Needs a human"). Fixtures and tests. *(Split from "DWD direct + heat", 2026-11-18.)*
 - [ ] **Sign-in** [5.3, 7.1]: Sign in with Apple, Google sign-in and email (magic link) on top of the anonymous device token. Link the existing device user to the account, and restore it on a new phone. Server: account table, verification of identity tokens, session tokens. Tests.
 - [ ] **Source: BVG/VBB disruptions** [5.4]: VBB/HAFAS disruption messages mapped to `transit` events, with stations geocoded. Fixtures and tests.
@@ -87,6 +86,7 @@ Legal and partners
 
 ## Done
 
+- [x] 2026-11-18 **Notification actions** [5.3]: "👍 Relevant" / "👎 Nicht relevant" buttons on every alert push (category `alert`, not on all-clears), recorded without opening the app; Android background task, iOS response listener, offline queue; pushes grouped per incident (`threadId`). Needs a new development build to show the buttons.
 - [x] 2026-11-18 **Push receipts + retry** [5.4, 6.2 step 9]: Expo tickets stored per push (`push_tickets`), receipts checked 15 min later; `DeviceNotRegistered` clears the token (at send time too); transient errors resent up to twice; sends retry 429/5xx/network with backoff; delivery counts in the Alert Desk metrics. 7 tests per backend.
 - [x] 2026-11-18 **Web app** (Flori's request; not on the roadmap before): `web/`, a Next.js browser version in the look of Flori's v0 design, connected to the real API: Jetzt (current alerts by category, no risk scores), Verlauf, alert detail with feedback, settings (DE/EN, topics, quiet hours, limit, places, delete), onboarding. No push, payments or sign-in. Server CORS now allows PUT/DELETE. 10 web tests, CI job.
 - [x] 2026-11-18 **Source: EU-Alert + Feuerwehr Berlin** [5.4]: EU-Alert / Cell Broadcast messages are MoWaS warnings, which NINA already delivers; they now keep their exact warned outlines for matching (up to 60 per warning) and the authority's extra instructions. New `server/src/sources/feuerwehr-berlin.ts` reads the Berliner Feuerwehr incident feed (`einsaetze.xml`) with street and district as the place hint (`FEUERWEHR_BERLIN`, on by default). 9 tests with real fixtures.

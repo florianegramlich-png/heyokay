@@ -6,6 +6,12 @@
 
 ## 2026-11-18
 
+- **Notification actions** [5.3]: every alert push has two buttons, "👍 Relevant" and "👎 Nicht relevant" ("Not relevant" in English). Tapping one records the rating without opening the app, and it feeds ranking like the rating in the alert screen. All-clears have no buttons.
+  - Server: pushes carry `categoryId: "alert"` and `threadId` = the event, so a warning, its updates and its all-clear stack together on the lock screen.
+  - App (`app/src/lib/notifications.ts`): the category is registered with titles in the chosen language. A button tap is handled by the response listener, and on Android also by a background notification task (`heyokay-notification`, `expo-task-manager`, already installed) when the app is closed. If sending fails (offline, or iOS gives the app too little time), the rating waits in `app/src/lib/feedback-queue.ts` and goes out on the next start. A normal tap still opens the alert.
+  - Interpretation: Expo's docs only promise background handling of button taps on Android. On iOS the listener and the queue cover it; to be confirmed on a real iPhone.
+  - Checks: app `tsc --noEmit` clean; iOS and Android bundles build; server push tests updated (threadId). Not verifiable here: the buttons themselves (needs a device).
+  - For Flori: the buttons need a **new development build** (`eas build --profile development`, or `npx expo run:ios`), because notification categories are native. Everything else in this update works with a reload.
 - **Push receipts + retry** [5.4, 6.2 step 9] (Flori picked push reliability, notification actions, heat and sign-in as next; the roadmap now starts with those).
   - `server/src/push.ts`: every send returns one ticket per message. Sending retries network errors, HTTP 429 and 5xx (1 s, 2 s; 3 attempts), never a 4xx. New `getReceipts()`. Optional `EXPO_ACCESS_TOKEN` for Expo's "enhanced push security".
   - Tickets are stored per push (`push_tickets`; SQLite table, Postgres migration 5) with alert, user, token, status and attempt; GDPR delete removes them.
