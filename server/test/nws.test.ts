@@ -1,7 +1,9 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Store } from '../src/db.js';
+import { SqliteStore } from '../src/db.js';
+import type { Store } from '../src/store.js';
+import { storeBackends } from './backends.js';
 import { NoLLM } from '../src/llm.js';
 import { GazetteerGeocoder } from '../src/geocode.js';
 import { MemoryPushSender } from '../src/push.js';
@@ -92,33 +94,34 @@ describe('NWS source', () => {
   });
 });
 
-describe('NWS through the pipeline', () => {
+describe.each(storeBackends())('NWS through the pipeline ($name)', (backend) => {
   let store: Store;
   let pipeline: Pipeline;
-  beforeEach(() => {
-    store = new Store();
+  beforeEach(async () => {
+    store = await backend.make();
     pipeline = new Pipeline({ store, llm: new NoLLM(), geocoder: new GazetteerGeocoder(), push: new MemoryPushSender(), config: cfg, now: () => NOW });
   });
-  const userAt = (p: { lat: number; lon: number }) => {
-    const { user } = store.createUser('ExponentPushToken[us]', { timezone: 'America/Los_Angeles', language: 'en' });
-    store.updateLocation(user.id, p.lat, p.lon);
+  afterEach(async () => { await store.close(); });
+  const userAt = async (p: { lat: number; lon: number }) => {
+    const { user } = await store.createUser('ExponentPushToken[us]', { timezone: 'America/Los_Angeles', language: 'en' });
+    await store.updateLocation(user.id, p.lat, p.lon);
     return user;
   };
 
   it('alerts users inside the zones in English, and nobody outside', async () => {
-    const pacifica = userAt(PACIFICA);
-    const sacramento = userAt(SACRAMENTO);
+    const pacifica = await userAt(PACIFICA);
+    const sacramento = await userAt(SACRAMENTO);
     const r = await pipeline.ingest([toSourceItem(WIND, zoneShapes())!]);
     expect(r.eventsCreated).toBe(1);
     expect(r.sentToReview).toBe(0); // official → no Alert Desk
 
-    const [alert] = store.alertsForUser(pacifica.id);
+    const [alert] = await store.alertsForUser(pacifica.id);
     expect(alert).toBeDefined();
     expect(alert.title).toBe('Weather: Wind Advisory');
     expect(alert.body).toBe('Wind Advisory until November 18 at 1:00PM PST');
     expect(alert.action).toBe('Secure loose objects and limit time outdoors.');
     expect(alert.official).toBe(true);
-    expect(store.alertsForUser(sacramento.id)).toHaveLength(0);
+    expect(await store.alertsForUser(sacramento.id)).toHaveLength(0);
   });
 
   it('an update that references the earlier alert merges into the same event', async () => {
@@ -146,7 +149,7 @@ describe('NWS through the pipeline', () => {
 
 describe('NWS clustering', () => {
   it('keeps two different NWS alerts with similar wording apart', async () => {
-    const store = new Store();
+    const store = new SqliteStore();
     const pipeline = new Pipeline({ store, llm: new NoLLM(), geocoder: new GazetteerGeocoder(), push: new MemoryPushSender(), config: cfg, now: () => NOW });
     const a = structuredClone(WIND);
     const b = structuredClone(WIND);

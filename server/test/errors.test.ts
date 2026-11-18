@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { describe, it, expect } from 'vitest';
-import { Store } from '../src/db.js';
+import { SqliteStore } from '../src/db.js';
 import { NoLLM } from '../src/llm.js';
 import { GazetteerGeocoder } from '../src/geocode.js';
 import { MemoryPushSender } from '../src/push.js';
@@ -11,7 +11,7 @@ import { errorEntry, installProcessHandlers, type ErrorLogEntry } from '../src/e
 
 function api() {
   const logged: ErrorLogEntry[] = [];
-  const store = new Store();
+  const store = new SqliteStore();
   const pipeline = new Pipeline({ store, llm: new NoLLM(), geocoder: new GazetteerGeocoder(), push: new MemoryPushSender(), config: loadConfig({}) });
   const app = buildApi({ store, pipeline, adminToken: 'secret-admin', runIngest: async () => ({}), errorSink: (e) => logged.push(e) });
   return { app, logged };

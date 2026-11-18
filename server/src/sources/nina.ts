@@ -118,11 +118,11 @@ export const jsonFetch: Fetcher = async (url) => {
 };
 
 /** Poll one NINA channel. Only fetches details for entries not seen before (`isNew`). */
-export async function fetchNinaChannel(channel: string, isNew: (externalId: string) => boolean, get: Fetcher = jsonFetch): Promise<SourceItem[]> {
+export async function fetchNinaChannel(channel: string, isNew: (externalId: string) => boolean | Promise<boolean>, get: Fetcher = jsonFetch): Promise<SourceItem[]> {
   const entries = (await get(`${NINA_BASE}/${channel}/mapData.json`)) as NinaMapEntry[];
   const out: SourceItem[] = [];
   for (const entry of entries ?? []) {
-    if (!isNew(`${entry.id}@v${entry.version}`)) continue;
+    if (!(await isNew(`${entry.id}@v${entry.version}`))) continue;
     try {
       const warning = (await get(`${NINA_BASE}/warnings/${encodeURIComponent(entry.id)}.json`)) as NinaWarning;
       let geo: GeoJson | null = null;

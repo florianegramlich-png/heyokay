@@ -105,7 +105,7 @@ const zoneCache = new Map<string, Geometry>();
  * Builds items only for alerts not seen before (`isNew`), and returns the ids of everything still
  * listed, so the pipeline can tell when an alert was lifted early (NWS drops cancelled alerts).
  */
-export async function fetchNwsArea(area: string, isNew: (externalId: string) => boolean, get: NwsFetcher, cache = zoneCache): Promise<{ feedKey: string; items: SourceItem[]; listedIds: Set<string> }> {
+export async function fetchNwsArea(area: string, isNew: (externalId: string) => boolean | Promise<boolean>, get: NwsFetcher, cache = zoneCache): Promise<{ feedKey: string; items: SourceItem[]; listedIds: Set<string> }> {
   const feedKey = `nws:${area.toUpperCase()}`;
   const q = /^-?\d+(\.\d+)?,-?\d+(\.\d+)?$/.test(area) ? `point=${area}` : `area=${encodeURIComponent(area.toUpperCase())}`;
   const data = await get(`${NWS_BASE}/alerts/active?${q}&status=actual`);
@@ -114,7 +114,7 @@ export async function fetchNwsArea(area: string, isNew: (externalId: string) => 
   for (const f of (data?.features ?? []) as NwsFeature[]) {
     if (!f?.properties?.id || (f.properties.status ?? 'Actual') !== 'Actual') continue;
     listedIds.add(f.properties.id);
-    if (!isNew(f.properties.id)) continue;
+    if (!(await isNew(f.properties.id))) continue;
     if (!f.geometry) {
       for (const z of (f.properties.affectedZones ?? []).slice(0, MAX_ZONES)) {
         if (cache.has(z)) continue;

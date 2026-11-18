@@ -1,8 +1,5 @@
 import type { Delivery, RiskEvent, SavedPlace, User } from '../types.js';
-import { distanceM, distanceToAreasM } from '../geo.js';
-
-/** A user location older than this is not used for matching (saved places still are). */
-const LOCATION_MAX_AGE_MS = 24 * 3600_000;
+import { distanceM, distanceToAreasM, LOCATION_MAX_AGE_MS } from '../geo.js';
 
 export interface Match {
   /** null = the user's current location; otherwise the saved place's label. */

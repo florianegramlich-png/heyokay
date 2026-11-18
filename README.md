@@ -4,7 +4,7 @@ Calm, location-aware safety alerts for Germany. One sentence on what's happening
 
 ```
 heyokay/
-├── server/   Node 22 · Fastify · SQLite (node:sqlite) · Claude API — ingest → AI pipeline → push
+├── server/   Node 22 · Fastify · Postgres or SQLite (node:sqlite) · Claude API — ingest → AI pipeline → push
 └── app/      Expo SDK 58 · expo-router · background location · Expo push
 ```
 
@@ -12,7 +12,7 @@ heyokay/
 
 ```bash
 cd server && npm install
-npm test            # 28 tests: sources, verifier, ranking, end-to-end pipeline
+npm test            # sources, verifier, ranking, store contract, end-to-end pipeline
 npm run demo        # API on :8787 with an in-memory DB fed from Berlin fixtures
 ```
 
@@ -37,7 +37,8 @@ npm start
 | Variable | Default | |
 |---|---|---|
 | `PORT` | 8787 | |
-| `DB_PATH` | ./heyokay.db | SQLite file |
+| `DATABASE_URL` | – | Postgres connection string. When set, Postgres is used and `DB_PATH` is ignored; tables are created/migrated on start |
+| `DB_PATH` | ./heyokay.db | SQLite file (tests, demo, single-node setups) |
 | `ADMIN_TOKEN` | change-me | Alert Desk + admin API — **set this** |
 | `ANTHROPIC_API_KEY` | – | Without it: keyword rules + fixed templates (still works, less coverage) |
 | `HEYOKAY_MODEL` | claude-haiku-5-5 | |
@@ -49,6 +50,20 @@ npm start
 | `GEOCODER_URL` | Nominatim | Use your own instance for volume; the built-in gazetteer is the fallback |
 | `MATCH_BUFFER_M` | 1500 | Extra distance around an event's area |
 | `REVIEW_CONFIDENCE` / `REVIEW_SEVERITY` | 0.6 / 4 | Below/at these, non-official items go to the Alert Desk |
+| `EMBEDDINGS_URL` / `EMBEDDINGS_API_KEY` / `EMBEDDINGS_MODEL` | – | Dedup embeddings from any OpenAI-style `/embeddings` endpoint, e.g. Mistral (EU) `https://api.mistral.ai/v1/embeddings` + `mistral-embed`, or OpenAI `https://api.openai.com/v1/embeddings` + `text-embedding-3-small`. Only public source text is sent. Off unless all three are set; then word overlap is used |
+| `EMBEDDINGS_DIMENSIONS` | – | Ask for shorter vectors, for providers that support it (OpenAI `text-embedding-3-*`) |
+| `EMBEDDINGS_MIN_SIMILARITY` | 0.8 | Cosine similarity at which two nearby reports count as the same incident. Depends on the model: calibrate with the eval set |
+
+### Postgres
+
+```bash
+cd server
+docker compose up -d   # Postgres 16 + PostGIS + pgvector on localhost:5432
+DATABASE_URL=postgres://heyokay:heyokay@localhost:5432/heyokay npm run dev
+TEST_DATABASE_URL=postgres://heyokay:heyokay@localhost:5432/heyokay_test npm test   # runs the store and pipeline suites on SQLite and Postgres
+```
+
+Schema changes are numbered migrations in `server/src/pg.ts` (`MIGRATIONS`), applied on start under an advisory lock, so several instances can start at once. Postgres needs the **PostGIS** and **pgvector** (`vector`, for dedup embeddings) extensions: the server runs `CREATE EXTENSION IF NOT EXISTS` for both, so on a managed database either enable them once as an admin or let the app's role create it. Finding the users affected by an event is a GIST index lookup on current locations and saved places.
 
 ## Deploy (Fly.io)
 
@@ -80,6 +95,8 @@ Point the app at it: `EXPO_PUBLIC_API_URL=https://<app>.fly.dev npx expo start -
 
 `fly.toml` sets `NWS_AREAS=CA` for US testing; remove it for a Germany-only server.
 
+To move from SQLite to Postgres, set `DATABASE_URL` as a Fly secret (the database needs PostGIS and pgvector, see Postgres above); the server then ignores the volume. Managed Postgres in production is still open on the roadmap.
+
 ## How an alert is made (PRD 6.2)
 
 1. **Ingest**: NINA (all official channels, with polygons) plus any RSS/Atom feed. Each item is stored once and versioned.
@@ -87,7 +104,7 @@ Point the app at it: `EXPO_PUBLIC_API_URL=https://<app>.fly.dev npx expo start -
 3. **Cluster**: the same incident from several sources becomes one event. A NINA update escalates the same event rather than creating a new one.
 4. **Review gate**: unofficial items with low confidence or high severity wait at the Alert Desk.
 5. **Compose and verify**: Claude writes a ≤50-character title and a ≤100-character body. A verifier rejects any number not found in the sources, alarm words ("Terror", "Panik"…) and stigmatising area labels. After two failures the alert falls back to a template. The recommended action always comes from a fixed library, never from the model.
-6. **Match and rank**: the event is checked against the user's last location and saved places. Then:
+6. **Match and rank**: the store finds users whose last location (from the past 24 hours) or saved places are near the event (a PostGIS index lookup on Postgres), and the event is checked against each of them. Then:
    - Official extreme warnings always push.
    - Categories the user turned off are suppressed.
    - Severity 1 goes to the feed only.
@@ -118,6 +135,6 @@ Point the app at it: `EXPO_PUBLIC_API_URL=https://<app>.fly.dev npx expo start -
 - Push receipts (handle `DeviceNotRegistered`), retries, and Sentry.
 - More sources: BVG/VBB disruption API, Feuerwehr, and city press releases beyond Berlin.
 - An English UI (prefs already carry `language`).
-- Postgres + PostGIS once the user count passes about 50k (the schema maps 1:1), and a hosted deployment (Fly/Render) with a managed Nominatim.
+- A hosted deployment (Fly/Render) with managed Postgres + PostGIS and a managed Nominatim.
 - Alert Desk login (currently one shared token), plus an audit log.
 - App Store assets, privacy policy URL and the DPIA.

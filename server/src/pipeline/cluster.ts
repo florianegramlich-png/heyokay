@@ -5,12 +5,22 @@ import { ninaRootId } from '../sources/nina.js';
 
 const WINDOW_MS = 6 * 3600_000;
 const MIN_SIMILARITY = 0.25;
+export const DEFAULT_EMBEDDING_MIN_SIMILARITY = 0.8;
+
+export interface EmbeddingMatch {
+  /** Cosine similarity of the new report to each active event that has an embedding from the same model. */
+  similarity: Map<string, number>;
+  /** At or above this, two reports that pass the geo and time checks are the same incident. */
+  minSimilarity: number;
+}
 
 /**
  * Same event from several sources = one event, then updates.
- * MVP uses word overlap + distance + time; Phase 2 swaps in embeddings (pgvector) behind the same function.
+ * Hard rules first (NINA id root, CAP references, NWS never fuzzy). Then candidates must share the
+ * category, start within 6 h and lie close together; among those, embedding similarity decides when
+ * both sides have a vector, otherwise word overlap (the fallback when no provider is set or it fails).
  */
-export function findCluster(ext: ExtractedEvent, item: SourceItem, active: RiskEvent[]): RiskEvent | null {
+export function findCluster(ext: ExtractedEvent, item: SourceItem, active: RiskEvent[], emb?: EmbeddingMatch): RiskEvent | null {
   if (item.source === 'nina') {
     const root = ninaRootId(item.externalId);
     const same = active.find((e) => e.sources.some((s) => ninaRootId(s.externalId) === root));
@@ -31,9 +41,13 @@ export function findCluster(ext: ExtractedEvent, item: SourceItem, active: RiskE
     if (Math.abs(Date.parse(e.startsAt) - Date.parse(ext.startsAt)) > WINDOW_MS) continue;
     const d = distanceM(e.lat, e.lon, ext.lat, ext.lon);
     if (d > Math.min(e.radiusM, ext.radiusM) + 1000) continue;
-    const sim = jaccard(tokens(`${e.title} ${e.summary}`), tokens(`${ext.title} ${ext.summary}`));
-    const score = d < 300 ? Math.max(sim, MIN_SIMILARITY) : sim;
-    if (score >= MIN_SIMILARITY && (!best || score > best.score)) best = { e, score };
+    const vec = emb?.similarity.get(e.id);
+    // Put both measures on one scale (1 = the threshold) so the best candidate wins either way.
+    const sim = vec != null
+      ? vec / emb!.minSimilarity
+      : jaccard(tokens(`${e.title} ${e.summary}`), tokens(`${ext.title} ${ext.summary}`)) / MIN_SIMILARITY;
+    const score = d < 300 ? Math.max(sim, 1) : sim;
+    if (score >= 1 && (!best || score > best.score)) best = { e, score };
   }
   return best?.e ?? null;
 }

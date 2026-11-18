@@ -1,16 +1,20 @@
 import { DatabaseSync } from 'node:sqlite';
 import { randomUUID, createHash, randomBytes } from 'node:crypto';
 import type {
-  Alert, Delivery, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
+  Alert, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
 } from './types.js';
 import { DEFAULT_PREFS } from './types.js';
+import { computeMetrics, type Area, type Metrics, type Store, type UserWithPlaces } from './store.js';
+import { distanceM, LOCATION_MAX_AGE_MS } from './geo.js';
+import { cosine } from './embeddings.js';
+
+export type { Store } from './store.js';
 
 /**
- * SQLite storage for the MVP (built into Node 22). The query surface is small and
- * isolated here so it can move to Postgres + PostGIS without touching the pipeline.
+ * SQLite storage (built into Node 22) for tests, the demo and small single-node setups.
  * Location: only the latest point per user is stored — no location history.
  */
-export class Store {
+export class SqliteStore implements Store {
   readonly db: DatabaseSync;
 
   constructor(path = ':memory:') {
@@ -43,12 +47,16 @@ export class Store {
         UNIQUE (user_id, event_id, event_revision)
       );
       CREATE INDEX IF NOT EXISTS alerts_user ON alerts(user_id, created_at);
+      CREATE TABLE IF NOT EXISTS event_embeddings (
+        event_id TEXT PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
+        model TEXT NOT NULL, vector TEXT NOT NULL, updated_at TEXT NOT NULL
+      );
       PRAGMA foreign_keys = ON;
     `);
   }
 
   // ── users ────────────────────────────────────────────────────────────────
-  createUser(pushToken: string | null, prefs?: Partial<UserPrefs>): { user: User; token: string } {
+  async createUser(pushToken: string | null, prefs?: Partial<UserPrefs>): Promise<{ user: User; token: string }> {
     const token = randomBytes(24).toString('base64url');
     const user: User = {
       id: randomUUID(), tokenHash: hashToken(token), pushToken,
@@ -60,73 +68,100 @@ export class Store {
     return { user, token };
   }
 
-  userByToken(token: string): User | null {
+  async userByToken(token: string): Promise<User | null> {
     const row = this.db.prepare(`SELECT * FROM users WHERE token_hash = ?`).get(hashToken(token));
     return row ? rowToUser(row) : null;
   }
 
-  getUser(id: string): User | null {
+  async getUser(id: string): Promise<User | null> {
     const row = this.db.prepare(`SELECT * FROM users WHERE id = ?`).get(id);
     return row ? rowToUser(row) : null;
   }
 
-  allUsers(): User[] {
+  async allUsers(): Promise<User[]> {
     return this.db.prepare(`SELECT * FROM users`).all().map(rowToUser);
   }
 
-  updatePrefs(userId: string, prefs: UserPrefs) {
+  async updatePrefs(userId: string, prefs: UserPrefs): Promise<void> {
     this.db.prepare(`UPDATE users SET prefs = ? WHERE id = ?`).run(JSON.stringify(prefs), userId);
   }
 
-  updatePushToken(userId: string, pushToken: string | null) {
+  async updatePushToken(userId: string, pushToken: string | null): Promise<void> {
     this.db.prepare(`UPDATE users SET push_token = ? WHERE id = ?`).run(pushToken, userId);
   }
 
-  updateLocation(userId: string, lat: number, lon: number) {
+  async updateLocation(userId: string, lat: number, lon: number): Promise<void> {
     this.db.prepare(`UPDATE users SET lat = ?, lon = ?, location_updated_at = ? WHERE id = ?`)
       .run(lat, lon, new Date().toISOString(), userId);
   }
 
   /** GDPR erasure: user, places and alerts (cascade). */
-  deleteUser(userId: string) {
+  async deleteUser(userId: string): Promise<void> {
     this.db.prepare(`DELETE FROM alerts WHERE user_id = ?`).run(userId);
     this.db.prepare(`DELETE FROM saved_places WHERE user_id = ?`).run(userId);
     this.db.prepare(`DELETE FROM users WHERE id = ?`).run(userId);
   }
 
   // ── saved places ─────────────────────────────────────────────────────────
-  addPlace(userId: string, label: string, lat: number, lon: number, radiusM: number): SavedPlace {
+  async addPlace(userId: string, label: string, lat: number, lon: number, radiusM: number): Promise<SavedPlace> {
     const place: SavedPlace = { id: randomUUID(), userId, label, lat, lon, radiusM };
     this.db.prepare(`INSERT INTO saved_places VALUES (?,?,?,?,?,?)`).run(place.id, userId, label, lat, lon, radiusM);
     return place;
   }
 
-  places(userId: string): SavedPlace[] {
+  async places(userId: string): Promise<SavedPlace[]> {
     return this.db.prepare(`SELECT * FROM saved_places WHERE user_id = ?`).all(userId).map((r: any) => ({
       id: r.id, userId: r.user_id, label: r.label, lat: r.lat, lon: r.lon, radiusM: r.radius_m,
     }));
   }
 
-  deletePlace(userId: string, placeId: string) {
+  async deletePlace(userId: string, placeId: string): Promise<void> {
     this.db.prepare(`DELETE FROM saved_places WHERE id = ? AND user_id = ?`).run(placeId, userId);
+  }
+
+  /**
+   * Same rule as PgStore.usersNear, evaluated in JS (SQLite has no spatial index here), with the
+   * same 1 % + 10 m slack: `match` measures exact warning outlines with a flat approximation, so
+   * the circle search stays a safe superset and `match` makes the final call.
+   */
+  async usersNear(area: Area, bufferM: number, now: Date): Promise<UserWithPlaces[]> {
+    const placesByUser = new Map<string, SavedPlace[]>();
+    for (const r of this.db.prepare(`SELECT * FROM saved_places ORDER BY label, id`).all() as any[]) {
+      const p: SavedPlace = { id: r.id, userId: r.user_id, label: r.label, lat: r.lat, lon: r.lon, radiusM: r.radius_m };
+      placesByUser.set(p.userId, [...(placesByUser.get(p.userId) ?? []), p]);
+    }
+    const out: UserWithPlaces[] = [];
+    for (const user of this.db.prepare(`SELECT * FROM users`).all().map(rowToUser)) {
+      const places = placesByUser.get(user.id) ?? [];
+      const here = user.lat != null && user.lon != null && user.locationUpdatedAt != null &&
+        now.getTime() - Date.parse(user.locationUpdatedAt) < LOCATION_MAX_AGE_MS &&
+        distanceM(user.lat, user.lon, area.lat, area.lon) <= (area.radiusM + bufferM) * 1.01 + 10;
+      const atPlace = places.some((p) => distanceM(p.lat, p.lon, area.lat, area.lon) <= (area.radiusM + p.radiusM) * 1.01 + 10);
+      if (here || atPlace) out.push({ user, places });
+    }
+    return out;
   }
 
   // ── source items ─────────────────────────────────────────────────────────
   /** Returns true if the item is new (not seen before). */
-  recordSourceItem(item: SourceItem): boolean {
+  async recordSourceItem(item: SourceItem): Promise<boolean> {
     const res = this.db.prepare(
       `INSERT OR IGNORE INTO source_items (source, external_id, payload, first_seen_at) VALUES (?,?,?,?)`,
     ).run(item.source, item.externalId, JSON.stringify(item), new Date().toISOString());
     return Number(res.changes) > 0;
   }
 
-  linkSourceItem(item: SourceItem, eventId: string) {
+  async hasSourceItem(source: string, externalId: string): Promise<boolean> {
+    return !!this.db.prepare(`SELECT 1 FROM source_items WHERE source = ? AND external_id = ?`).get(source, externalId);
+  }
+
+  async linkSourceItem(item: SourceItem, eventId: string): Promise<void> {
     this.db.prepare(`UPDATE source_items SET event_id = ? WHERE source = ? AND external_id = ?`)
       .run(eventId, item.source, item.externalId);
   }
 
   // ── events ───────────────────────────────────────────────────────────────
-  saveEvent(e: RiskEvent) {
+  async saveEvent(e: RiskEvent): Promise<void> {
     this.db.prepare(`
       INSERT INTO events (id, data, status, category, lat, lon, starts_at, ends_at, updated_at)
       VALUES (?,?,?,?,?,?,?,?,?)
@@ -136,27 +171,48 @@ export class Store {
     `).run(e.id, JSON.stringify(e), e.status, e.category, e.lat, e.lon, e.startsAt, e.endsAt, e.updatedAt);
   }
 
-  getEvent(id: string): RiskEvent | null {
+  async getEvent(id: string): Promise<RiskEvent | null> {
     const row: any = this.db.prepare(`SELECT data FROM events WHERE id = ?`).get(id);
     return row ? JSON.parse(row.data) : null;
   }
 
   /** Events that are not over yet (no end, or end in the future) and started within the lookback. */
-  activeEvents(now: Date, lookbackHours = 24): RiskEvent[] {
+  async activeEvents(now: Date, lookbackHours = 24): Promise<RiskEvent[]> {
     const since = new Date(now.getTime() - lookbackHours * 3600_000).toISOString();
     return this.db.prepare(
       `SELECT data FROM events WHERE status != 'rejected' AND starts_at >= ? AND (ends_at IS NULL OR ends_at > ?)`,
     ).all(since, now.toISOString()).map((r: any) => JSON.parse(r.data));
   }
 
-  eventsByStatus(status: EventStatus): RiskEvent[] {
+  async eventsByStatus(status: EventStatus): Promise<RiskEvent[]> {
     return this.db.prepare(`SELECT data FROM events WHERE status = ? ORDER BY updated_at DESC`)
       .all(status).map((r: any) => JSON.parse(r.data));
   }
 
+  async saveEventEmbedding(eventId: string, model: string, vector: number[]): Promise<void> {
+    this.db.prepare(`
+      INSERT INTO event_embeddings (event_id, model, vector, updated_at) VALUES (?,?,?,?)
+      ON CONFLICT(event_id) DO UPDATE SET model=excluded.model, vector=excluded.vector, updated_at=excluded.updated_at
+    `).run(eventId, model, JSON.stringify(vector), new Date().toISOString());
+  }
+
+  /** Cosine in JS; SQLite only holds the few active events of a test or demo. */
+  async eventSimilarities(eventIds: string[], model: string, vector: number[]): Promise<Map<string, number>> {
+    const out = new Map<string, number>();
+    if (!eventIds.length) return out;
+    const rows = this.db.prepare(
+      `SELECT event_id, vector FROM event_embeddings WHERE model = ? AND event_id IN (${eventIds.map(() => '?').join(',')})`,
+    ).all(model, ...eventIds) as any[];
+    for (const r of rows) {
+      const v = JSON.parse(r.vector) as number[];
+      if (v.length === vector.length) out.set(r.event_id, cosine(v, vector));
+    }
+    return out;
+  }
+
   // ── alerts ───────────────────────────────────────────────────────────────
   /** Returns null if this user already has an alert for this event revision. */
-  insertAlert(a: Omit<Alert, 'id' | 'createdAt' | 'feedback'>): Alert | null {
+  async insertAlert(a: Omit<Alert, 'id' | 'createdAt' | 'feedback'>): Promise<Alert | null> {
     const alert: Alert = { ...a, id: randomUUID(), createdAt: new Date().toISOString(), feedback: null };
     const res = this.db.prepare(`
       INSERT OR IGNORE INTO alerts (id, user_id, event_id, event_revision, data, delivery, created_at)
@@ -166,7 +222,7 @@ export class Store {
   }
 
   /** Everyone who was told about this event (feed or push), and whether any of it reached them as a push. */
-  recipients(eventId: string): Array<{ userId: string; pushed: boolean }> {
+  async recipients(eventId: string): Promise<Array<{ userId: string; pushed: boolean }>> {
     return (this.db.prepare(
       `SELECT user_id, MAX(delivery = 'push') AS pushed FROM alerts
        WHERE event_id = ? AND delivery != 'suppressed' GROUP BY user_id`,
@@ -174,7 +230,7 @@ export class Store {
   }
 
   /** The event an earlier source message belongs to (any age), for updates that reference it. */
-  eventIdForSourceRefs(source: string, externalIds: string[]): string | null {
+  async eventIdForSourceRefs(source: string, externalIds: string[]): Promise<string | null> {
     if (!externalIds.length) return null;
     const row: any = this.db.prepare(
       `SELECT event_id FROM source_items WHERE source = ? AND event_id IS NOT NULL
@@ -183,12 +239,12 @@ export class Store {
     return row?.event_id ?? null;
   }
 
-  hasAlertForEvent(userId: string, eventId: string): boolean {
+  async hasAlertForEvent(userId: string, eventId: string): Promise<boolean> {
     return !!this.db.prepare(`SELECT 1 FROM alerts WHERE user_id = ? AND event_id = ? LIMIT 1`).get(userId, eventId);
   }
 
   /** Pushes that count toward the daily limit: updates and all-clears don't (PRD 5.4). */
-  pushCountSince(userId: string, sinceIso: string): number {
+  async pushCountSince(userId: string, sinceIso: string): Promise<number> {
     const row: any = this.db.prepare(
       `SELECT COUNT(*) AS n FROM alerts WHERE user_id = ? AND delivery = 'push' AND created_at >= ?
          AND COALESCE(json_extract(data, '$.kind'), 'new') = 'new'`,
@@ -196,24 +252,24 @@ export class Store {
     return Number(row.n);
   }
 
-  alertsForUser(userId: string, limit = 50): Alert[] {
+  async alertsForUser(userId: string, limit = 50): Promise<Alert[]> {
     return this.db.prepare(
       `SELECT data, feedback FROM alerts WHERE user_id = ? AND delivery != 'suppressed' ORDER BY created_at DESC LIMIT ?`,
     ).all(userId, limit).map((r: any) => ({ ...JSON.parse(r.data), feedback: r.feedback ?? null }));
   }
 
-  getAlert(userId: string, alertId: string): Alert | null {
+  async getAlert(userId: string, alertId: string): Promise<Alert | null> {
     const r: any = this.db.prepare(`SELECT data, feedback FROM alerts WHERE id = ? AND user_id = ?`).get(alertId, userId);
     return r ? { ...JSON.parse(r.data), feedback: r.feedback ?? null } : null;
   }
 
-  setFeedback(userId: string, alertId: string, feedback: Feedback): boolean {
+  async setFeedback(userId: string, alertId: string, feedback: Feedback): Promise<boolean> {
     const res = this.db.prepare(`UPDATE alerts SET feedback = ? WHERE id = ? AND user_id = ?`).run(feedback, alertId, userId);
     return Number(res.changes) > 0;
   }
 
   /** Per-category relevance history for one user — input to ranking. */
-  feedbackByCategory(userId: string): Record<string, { relevant: number; notRelevant: number }> {
+  async feedbackByCategory(userId: string): Promise<Record<string, { relevant: number; notRelevant: number }>> {
     const out: Record<string, { relevant: number; notRelevant: number }> = {};
     for (const r of this.db.prepare(`SELECT data, feedback FROM alerts WHERE user_id = ? AND feedback IS NOT NULL`).all(userId) as any[]) {
       const cat = JSON.parse(r.data).category as string;
@@ -224,30 +280,14 @@ export class Store {
   }
 
   /** KPIs from PRD Section 13: relevance, beyond-NINA, alerts per user per day. */
-  metrics(sinceIso: string) {
-    const rows = this.db.prepare(`SELECT data, delivery, feedback FROM alerts WHERE created_at >= ?`).all(sinceIso) as any[];
-    const users = new Set<string>();
-    let pushed = 0, rated = 0, relevant = 0, relevantNonOfficial = 0;
-    for (const r of rows) {
-      const a = JSON.parse(r.data) as Alert;
-      users.add(a.userId);
-      if (r.delivery === 'push') pushed++;
-      if (r.feedback) {
-        rated++;
-        if (r.feedback === 'relevant') { relevant++; if (!a.official) relevantNonOfficial++; }
-      }
-    }
-    const days = Math.max(1, (Date.now() - Date.parse(sinceIso)) / 86_400_000);
-    return {
-      alerts: rows.length,
-      pushed,
-      rated,
-      relevantRate: rated ? relevant / rated : null,
-      /** Share of relevant alerts that did not come from official warning apps (target ≥ 60%). */
-      beyondNinaRate: relevant ? relevantNonOfficial / relevant : null,
-      pushesPerUserPerDay: users.size ? pushed / users.size / days : 0,
-      pendingReview: this.eventsByStatus('pending_review').length,
-    };
+  async metrics(sinceIso: string): Promise<Metrics> {
+    const rows = (this.db.prepare(`SELECT data, delivery, feedback FROM alerts WHERE created_at >= ?`).all(sinceIso) as any[])
+      .map((r) => ({ alert: JSON.parse(r.data) as Alert, delivery: r.delivery as string, feedback: (r.feedback ?? null) as string | null }));
+    return computeMetrics(rows, sinceIso, (await this.eventsByStatus('pending_review')).length);
+  }
+
+  async close(): Promise<void> {
+    this.db.close();
   }
 }
 
@@ -263,4 +303,3 @@ function rowToUser(r: any): User {
   };
 }
 
-export type { Delivery };

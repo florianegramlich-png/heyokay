@@ -1,0 +1,116 @@
+import type {
+  Alert, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
+} from './types.js';
+
+export interface Area { lat: number; lon: number; radiusM: number }
+export interface UserWithPlaces { user: User; places: SavedPlace[] }
+
+export interface Metrics {
+  alerts: number;
+  pushed: number;
+  rated: number;
+  relevantRate: number | null;
+  /** Share of relevant alerts that did not come from official warning apps (target ≥ 60%). */
+  beyondNinaRate: number | null;
+  pushesPerUserPerDay: number;
+  pendingReview: number;
+}
+
+/**
+ * Storage used by the pipeline and the API. Every method is async so the same code runs on
+ * SQLite (tests, demo) and Postgres (production). Location privacy: only the latest point per
+ * user is stored, never a history.
+ */
+export interface Store {
+  // users
+  createUser(pushToken: string | null, prefs?: Partial<UserPrefs>): Promise<{ user: User; token: string }>;
+  userByToken(token: string): Promise<User | null>;
+  getUser(id: string): Promise<User | null>;
+  allUsers(): Promise<User[]>;
+  updatePrefs(userId: string, prefs: UserPrefs): Promise<void>;
+  updatePushToken(userId: string, pushToken: string | null): Promise<void>;
+  updateLocation(userId: string, lat: number, lon: number): Promise<void>;
+  /** GDPR erasure: user, saved places and alerts. */
+  deleteUser(userId: string): Promise<void>;
+
+  // saved places
+  addPlace(userId: string, label: string, lat: number, lon: number, radiusM: number): Promise<SavedPlace>;
+  places(userId: string): Promise<SavedPlace[]>;
+  deletePlace(userId: string, placeId: string): Promise<void>;
+  /**
+   * Users who may be inside an area: their current location (if updated within
+   * LOCATION_MAX_AGE_MS of `now`) is within radius + bufferM, or one of their saved places
+   * overlaps it (radius + place radius). Each comes with all of their saved places.
+   * A superset is allowed (the pipeline's `match` makes the final call); missing a user is not.
+   */
+  usersNear(area: Area, bufferM: number, now: Date): Promise<UserWithPlaces[]>;
+
+  // source items
+  /** Returns true if the item is new (not seen before). */
+  recordSourceItem(item: SourceItem): Promise<boolean>;
+  hasSourceItem(source: string, externalId: string): Promise<boolean>;
+  linkSourceItem(item: SourceItem, eventId: string): Promise<void>;
+  /** The event an earlier source message belongs to (any age), for updates that reference it. */
+  eventIdForSourceRefs(source: string, externalIds: string[]): Promise<string | null>;
+
+  // events
+  saveEvent(e: RiskEvent): Promise<void>;
+  getEvent(id: string): Promise<RiskEvent | null>;
+  /** Events that are not over yet (no end, or end in the future) and started within the lookback. */
+  activeEvents(now: Date, lookbackHours?: number): Promise<RiskEvent[]>;
+  eventsByStatus(status: EventStatus): Promise<RiskEvent[]>;
+  /** Store (or replace) the dedup embedding of an event. Postgres: pgvector. */
+  saveEventEmbedding(eventId: string, model: string, vector: number[]): Promise<void>;
+  /**
+   * Cosine similarity between `vector` and the stored embeddings of these events. Only events with
+   * an embedding from the same model and of the same length are returned.
+   */
+  eventSimilarities(eventIds: string[], model: string, vector: number[]): Promise<Map<string, number>>;
+
+  // alerts
+  /** Returns null if this user already has an alert for this event revision. */
+  insertAlert(a: Omit<Alert, 'id' | 'createdAt' | 'feedback'>): Promise<Alert | null>;
+  hasAlertForEvent(userId: string, eventId: string): Promise<boolean>;
+  /** Everyone who was told about this event (feed or push), and whether any of it reached them as a push. */
+  recipients(eventId: string): Promise<Array<{ userId: string; pushed: boolean }>>;
+  /** Pushes that count toward the daily limit: updates and all-clears (kind != 'new') don't (PRD 5.4). */
+  pushCountSince(userId: string, sinceIso: string): Promise<number>;
+  alertsForUser(userId: string, limit?: number): Promise<Alert[]>;
+  getAlert(userId: string, alertId: string): Promise<Alert | null>;
+  setFeedback(userId: string, alertId: string, feedback: Feedback): Promise<boolean>;
+  /** Per-category relevance history for one user — input to ranking. */
+  feedbackByCategory(userId: string): Promise<Record<string, { relevant: number; notRelevant: number }>>;
+  /** KPIs from PRD Section 13: relevance, beyond-NINA, alerts per user per day. */
+  metrics(sinceIso: string): Promise<Metrics>;
+
+  close(): Promise<void>;
+}
+
+/** Shared by both implementations so the numbers can't drift apart. */
+export function computeMetrics(
+  rows: Array<{ alert: Alert; delivery: string; feedback: string | null }>,
+  sinceIso: string,
+  pendingReview: number,
+  now = Date.now(),
+): Metrics {
+  const users = new Set<string>();
+  let pushed = 0, rated = 0, relevant = 0, relevantNonOfficial = 0;
+  for (const r of rows) {
+    users.add(r.alert.userId);
+    if (r.delivery === 'push') pushed++;
+    if (r.feedback) {
+      rated++;
+      if (r.feedback === 'relevant') { relevant++; if (!r.alert.official) relevantNonOfficial++; }
+    }
+  }
+  const days = Math.max(1, (now - Date.parse(sinceIso)) / 86_400_000);
+  return {
+    alerts: rows.length,
+    pushed,
+    rated,
+    relevantRate: rated ? relevant / rated : null,
+    beyondNinaRate: relevant ? relevantNonOfficial / relevant : null,
+    pushesPerUserPerDay: users.size ? pushed / users.size / days : 0,
+    pendingReview,
+  };
+}

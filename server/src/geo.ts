@@ -1,3 +1,8 @@
+/** A user's current location older than this is not used for matching (saved places still are). */
+export const LOCATION_MAX_AGE_MS = 24 * 3600_000;
+/** Largest radius a saved place may have (API limit; a CHECK constraint in Postgres). */
+export const MAX_PLACE_RADIUS_M = 5000;
+
 const R = 6_371_000;
 const rad = (d: number) => (d * Math.PI) / 180;
 

@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { z } from 'zod';
-import { Store } from '../src/db.js';
+import type { Store } from '../src/store.js';
+import { storeBackends } from './backends.js';
 import { NoLLM, type StructuredLLM } from '../src/llm.js';
 import { GazetteerGeocoder } from '../src/geocode.js';
 import { MemoryPushSender } from '../src/push.js';
@@ -174,28 +175,30 @@ describe('extraction without AI', () => {
   });
 });
 
-describe('end-to-end pipeline', () => {
+describe.each(storeBackends())('end-to-end pipeline ($name)', (backend) => {
   let store: Store, push: MemoryPushSender, pipeline: Pipeline;
-  beforeEach(() => {
-    store = new Store();
+  beforeEach(async () => {
+    store = await backend.make();
     push = new MemoryPushSender();
     pipeline = new Pipeline({ store, llm: new NoLLM(), geocoder: new GazetteerGeocoder(), push, config: cfg, now: () => NOW });
   });
 
-  function userAt(lat: number, lon: number, pushToken = 'ExponentPushToken[abc]') {
-    const { user } = store.createUser(pushToken);
-    store.updateLocation(user.id, lat, lon);
-    return store.getUser(user.id)!;
+  afterEach(async () => { await store.close(); });
+
+  async function userAt(lat: number, lon: number, pushToken = 'ExponentPushToken[abc]') {
+    const { user } = await store.createUser(pushToken);
+    await store.updateLocation(user.id, lat, lon);
+    return (await store.getUser(user.id))!;
   }
 
   it('official warning → alert + push to affected users only', async () => {
-    const near = userAt(FRIEDRICHSHAIN.lat, FRIEDRICHSHAIN.lon);
-    userAt(48.1374, 11.5755); // Munich
+    const near = await userAt(FRIEDRICHSHAIN.lat, FRIEDRICHSHAIN.lon);
+    await userAt(48.1374, 11.5755); // Munich
     const r = await pipeline.ingest([ninaItem()]);
     expect(r.eventsCreated).toBe(1);
     expect(r.alertsCreated).toBe(1);
     expect(push.outbox).toHaveLength(1);
-    const [alert] = store.alertsForUser(near.id);
+    const [alert] = await store.alertsForUser(near.id);
     expect(alert.official).toBe(true);
     expect(alert.severity).toBe(4);
     expect(alert.title.length).toBeLessThanOrEqual(50);
@@ -204,7 +207,7 @@ describe('end-to-end pipeline', () => {
   });
 
   it('is idempotent: re-ingesting the same item creates nothing', async () => {
-    userAt(FRIEDRICHSHAIN.lat, FRIEDRICHSHAIN.lon);
+    await userAt(FRIEDRICHSHAIN.lat, FRIEDRICHSHAIN.lon);
     await pipeline.ingest([ninaItem()]);
     const r = await pipeline.ingest([ninaItem()]);
     expect(r.new).toBe(0);
@@ -212,17 +215,17 @@ describe('end-to-end pipeline', () => {
   });
 
   it('unsure non-official items wait at the Alert Desk until approved', async () => {
-    const u = userAt(52.5031, 13.469);
+    const u = await userAt(52.5031, 13.469);
     const items = parseFeed(fx('police-berlin.rss'), { url: 'x', sourceName: 'Polizei Berlin', categoryHint: 'crime' });
     const r = await pipeline.ingest(items);
     expect(r.ignored).toBe(1); // the witness appeal
     expect(r.sentToReview).toBe(1);
-    expect(store.alertsForUser(u.id)).toHaveLength(0);
+    expect(await store.alertsForUser(u.id)).toHaveLength(0);
 
-    const [pending] = store.eventsByStatus('pending_review');
+    const [pending] = await store.eventsByStatus('pending_review');
     const res = await pipeline.approve(pending.id, { body: 'Bahnhof Ostkreuz bis 11:30 Uhr gesperrt.' });
     expect(res?.alerts).toBe(1);
-    expect(store.alertsForUser(u.id)[0].body).toBe('Bahnhof Ostkreuz bis 11:30 Uhr gesperrt.');
+    expect((await store.alertsForUser(u.id))[0].body).toBe('Bahnhof Ostkreuz bis 11:30 Uhr gesperrt.');
   });
 
   it('merges the same incident from two sources into one event', async () => {
@@ -230,7 +233,7 @@ describe('end-to-end pipeline', () => {
     const transit = parseFeed(fx('transit.rss'), { url: 'y', sourceName: 'S-Bahn Berlin', categoryHint: 'transit' })[0];
     await pipeline.ingest([police, transit]);
     // Different categories (police vs transit) stay separate events — users get the transit impact and the police operation.
-    expect(store.eventsByStatus('pending_review').length + store.eventsByStatus('auto').length).toBe(2);
+    expect((await store.eventsByStatus('pending_review')).length + (await store.eventsByStatus('auto')).length).toBe(2);
     // Same category from two feeds merges:
     const transit2 = { ...transit, externalId: 'other-feed:1', sourceName: 'BVG' };
     const r = await pipeline.ingest([transit2]);
@@ -239,37 +242,37 @@ describe('end-to-end pipeline', () => {
   });
 
   it('saved places get alerts with the place name; feedback is recorded', async () => {
-    const { user } = store.createUser('ExponentPushToken[m]');
-    store.addPlace(user.id, 'Mama', 52.5101, 13.4585, 500);
+    const { user } = await store.createUser('ExponentPushToken[m]');
+    await store.addPlace(user.id, 'Mama', 52.5101, 13.4585, 500);
     await pipeline.ingest([ninaItem()]);
-    const [a] = store.alertsForUser(user.id);
+    const [a] = await store.alertsForUser(user.id);
     expect(a.matchedPlace).toBe('Mama');
     expect(a.title.startsWith('Mama:') || a.title.length > 0).toBe(true);
-    expect(store.setFeedback(user.id, a.id, 'relevant')).toBe(true);
-    expect(store.metrics('2000-01-01T00:00:00Z').relevantRate).toBe(1);
+    expect(await store.setFeedback(user.id, a.id, 'relevant')).toBe(true);
+    expect((await store.metrics('2000-01-01T00:00:00Z')).relevantRate).toBe(1);
   });
 
   it('concierge manual alerts go straight out', async () => {
-    const u = userAt(52.5031, 13.469);
+    const u = await userAt(52.5031, 13.469);
     const r = await pipeline.manualAlert({ category: 'transit', severity: 3, title: 'S5 unterbrochen', body: 'Kein Zugverkehr zwischen Ostkreuz und Lichtenberg.',
       sourceName: 'Hey-Okay Redaktion', lat: 52.5031, lon: 13.469, radiusM: 1000, areaName: 'Ostkreuz' });
     expect(r.alerts).toBe(1);
-    expect(store.alertsForUser(u.id)[0].aiWritten).toBe(false);
+    expect((await store.alertsForUser(u.id))[0].aiWritten).toBe(false);
   });
 
   it('first sync after install fills the feed without a burst of pushes', async () => {
     await pipeline.ingest([ninaItem()]);
-    const { user } = store.createUser('ExponentPushToken[new]');
-    store.updateLocation(user.id, FRIEDRICHSHAIN.lat, FRIEDRICHSHAIN.lon);
-    await pipeline.refreshUser(store.getUser(user.id)!, true);
-    expect(store.alertsForUser(user.id)[0].delivery).toBe('feed');
+    const { user } = await store.createUser('ExponentPushToken[new]');
+    await store.updateLocation(user.id, FRIEDRICHSHAIN.lat, FRIEDRICHSHAIN.lon);
+    await pipeline.refreshUser((await store.getUser(user.id))!, true);
+    expect((await store.alertsForUser(user.id))[0].delivery).toBe('feed');
   });
 
   it('GDPR delete removes the user and their alerts', async () => {
-    const u = userAt(FRIEDRICHSHAIN.lat, FRIEDRICHSHAIN.lon);
+    const u = await userAt(FRIEDRICHSHAIN.lat, FRIEDRICHSHAIN.lon);
     await pipeline.ingest([ninaItem()]);
-    store.deleteUser(u.id);
-    expect(store.getUser(u.id)).toBeNull();
-    expect(store.alertsForUser(u.id)).toHaveLength(0);
+    await store.deleteUser(u.id);
+    expect(await store.getUser(u.id)).toBeNull();
+    expect(await store.alertsForUser(u.id)).toHaveLength(0);
   });
 });
