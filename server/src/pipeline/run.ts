@@ -8,7 +8,7 @@ import { extract } from './extract.js';
 import { DEFAULT_EMBEDDING_MIN_SIMILARITY, findCluster, mergeInto, newEvent, type EmbeddingMatch } from './cluster.js';
 import { embeddingText, type Embedder } from '../embeddings.js';
 import { compose } from './compose.js';
-import { decide, inQuietHours, match } from './rank.js';
+import { decide, inQuietHours, match, isAhead } from './rank.js';
 import { LIFECYCLE, recommendedAction } from './guidance.js';
 import { packFor } from '../countries.js';
 import { M } from '../metrics.js';
@@ -146,6 +146,7 @@ export class Pipeline {
       sourceName: primary?.sourceName ?? 'Hey-Okay', sourceUrl: primary?.url ?? null,
       lat: event.lat, lon: event.lon, radiusM: event.radiusM,
       matchedPlace: f.matchedPlace ?? null, delivery: f.delivery, reason: f.reason, kind,
+      ...(isAhead(event, this.now()) ? { startsAt: event.onsetAt } : {}),
     });
   }
 

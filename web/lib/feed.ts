@@ -11,7 +11,7 @@ export function currentAlerts(alerts: Alert[]): Alert[] {
     if (!seen || Date.parse(a.createdAt) > Date.parse(seen.createdAt)) latest.set(a.eventId, a);
   }
   return [...latest.values()]
-    .filter((a) => !a.ended && a.kind !== 'all_clear')
+    .filter((a) => !a.ended && a.kind !== 'all_clear' && !isAhead(a))
     .sort((x, y) => y.severity - x.severity || Date.parse(y.createdAt) - Date.parse(x.createdAt));
 }
 
@@ -33,3 +33,24 @@ export const SEVERITY_STYLE: Record<number, string> = {
   4: 'bg-orange-500/15 text-orange-300 border-orange-500/30',
   5: 'bg-red-500/15 text-red-300 border-red-500/30',
 };
+
+/** Begins later (more than an hour from now): shown under "Coming up", not "Now". */
+export function isAhead(a: Alert, now = Date.now()): boolean {
+  return !!a.startsAt && Date.parse(a.startsAt) - now > 60 * 60_000;
+}
+
+/** What's coming up for this person, soonest first (newest alert per event). */
+export function aheadAlerts(alerts: Alert[], now = Date.now()): Alert[] {
+  return latestPerEvent(alerts)
+    .filter((a) => !a.ended && a.kind !== 'all_clear' && isAhead(a, now))
+    .sort((x, y) => Date.parse(x.startsAt!) - Date.parse(y.startsAt!));
+}
+
+function latestPerEvent(alerts: Alert[]): Alert[] {
+  const latest = new Map<string, Alert>();
+  for (const a of alerts) {
+    const seen = latest.get(a.eventId);
+    if (!seen || Date.parse(a.createdAt) > Date.parse(seen.createdAt)) latest.set(a.eventId, a);
+  }
+  return [...latest.values()];
+}

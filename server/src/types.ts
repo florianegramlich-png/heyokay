@@ -32,6 +32,8 @@ export interface SourceItem {
   structured?: boolean;
   /** A specific hazard within the category, for the recommended action (e.g. heat within weather). */
   hazard?: Hazard;
+  /** When the hazard begins, if the source says (CAP onset, forecast peak). Future = "coming up". */
+  onsetAt?: string;
   /** ISO country (countries.ts) — decides emergency numbers and units. Missing = inferred from language. */
   country?: CountryCode;
   /** Official warning systems (NINA/MoWaS, DWD via NINA). Official levels override the model. */
@@ -113,6 +115,8 @@ export interface RiskEvent {
   revision: number;
   /** Specific hazard (e.g. heat), for the recommended action. */
   hazard?: Hazard;
+  /** When the hazard begins, if the source says (CAP onset, forecast peak). Future = "coming up". */
+  onsetAt?: string;
   /** ISO country (countries.ts) — decides emergency numbers and units. Missing = inferred from language. */
   country?: CountryCode;
 }
@@ -226,6 +230,8 @@ export interface Alert {
   reason: string;
   /** Missing on alerts created before updates existed = 'new'. */
   kind?: AlertKind;
+  /** Set when the event begins later ("coming up"): the apps list it under Ahead, not Now. */
+  startsAt?: string;
   feedback: Feedback | null;
   createdAt: string;
 }

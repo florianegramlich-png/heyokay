@@ -28,6 +28,12 @@ function inZone(event: RiskEvent, lat: number, lon: number, dCentre: number, mar
   return dCentre <= event.radiusM + marginM;
 }
 
+/** Begins more than an hour from now. */
+export const AHEAD_MS = 60 * 60_000;
+export function isAhead(event: Pick<RiskEvent, 'onsetAt'>, now: Date): boolean {
+  return !!event.onsetAt && Date.parse(event.onsetAt) - now.getTime() > AHEAD_MS;
+}
+
 export interface RankContext {
   now: Date;
   pushesLast24h: number;
@@ -45,6 +51,9 @@ export function decide(user: User, event: RiskEvent, ctx: RankContext): { delive
   if (event.official && event.severity === 5) return { delivery: 'push', reason: 'official extreme warning' };
 
   if (!prefs.categories.includes(event.category)) return { delivery: 'suppressed', reason: 'category turned off' };
+  // Risk outlook (PRD 6.1 #14): something that begins later goes to the feed under "Ahead";
+  // a push comes with the actual warning, not the forecast.
+  if (isAhead(event, ctx.now)) return { delivery: 'feed', reason: 'coming up' };
   if (event.severity <= 1) return { delivery: 'feed', reason: 'information only' };
 
   const relevance = learnedRelevance(ctx.feedback[event.category]);

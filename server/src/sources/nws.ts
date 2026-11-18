@@ -28,6 +28,7 @@ export interface NwsFeature {
     references?: Array<{ identifier: string }>;
     sent?: string;
     effective?: string;
+    onset?: string | null;
     expires?: string;
     ends?: string | null;
     status?: string; // Actual | Exercise | System | Test | Draft
@@ -80,6 +81,7 @@ export function toSourceItem(f: NwsFeature, zoneShapes: Map<string, Geometry>): 
     body: [p.description, p.instruction].filter(Boolean).join('\n\n').trim(),
     url: `https://forecast.weather.gov/MapClick.php?lat=${circle.lat.toFixed(4)}&lon=${circle.lon.toFixed(4)}`,
     publishedAt: p.sent ?? p.effective ?? new Date().toISOString(),
+    ...(p.onset ? { onsetAt: new Date(p.onset).toISOString() } : {}),
     lat: circle.lat, lon: circle.lon, radiusM: Math.round(circle.radiusM),
     areas,
     officialSeverity: mapSeverity(p.severity),

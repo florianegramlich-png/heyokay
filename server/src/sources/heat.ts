@@ -81,6 +81,8 @@ export function heatItem(cell: { lat: number; lon: number }, forecast: Forecast,
     officialSeverity: severity,
     category: 'weather',
     expiresAt: new Date(lastHot).toISOString(),
+    // Heat starts with the first hot forecast slot: tomorrow afternoon = "coming up".
+    onsetAt: new Date(Math.min(...hot.map((s) => s.dt)) * 1000).toISOString(),
     areaName: '',
   };
 }

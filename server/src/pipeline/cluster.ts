@@ -68,6 +68,7 @@ export function newEvent(ext: ExtractedEvent, item: SourceItem, status: EventSta
     copyTitle: null, copyBody: null, copyAction: null, copyIsTemplate: false,
     language: item.language ?? 'de',
     ...(item.hazard ? { hazard: item.hazard } : {}),
+    ...(item.onsetAt ? { onsetAt: item.onsetAt } : {}),
     country: packFor(item).code,
     ...(item.feedKey ? { feedKeys: [item.feedKey] } : {}),
     createdAt: now.toISOString(), updatedAt: now.toISOString(), revision: 1,
@@ -85,6 +86,8 @@ const END_SHIFT_MS = 60 * 60_000;
  */
 export function mergeInto(e: RiskEvent, ext: ExtractedEvent, item: SourceItem, now = new Date()): { escalated: boolean; changed: boolean } {
   const before = e.severity;
+  // The newest report says when it starts; a warning now in effect has no future onset.
+  if (item.onsetAt) e.onsetAt = item.onsetAt; else delete e.onsetAt;
   const endBefore = e.endsAt;
   if (item.official) {
     e.severity = ext.severity;

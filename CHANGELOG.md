@@ -6,6 +6,12 @@
 
 ## 2026-11-18
 
+- **Coming up (risk outlook, MVP)** [PRD 6.1 #14].
+  - Events now carry their start time when the source gives one: CAP `onset` from NWS, FEMA IPAWS and SACHET; for heat, the first hot forecast hour.
+  - Anything that begins more than an hour from now goes to the feed only, never a push (reason "coming up"), and the alert carries `startsAt`.
+  - App and web list these under **"Coming up" / "Demnächst"** with "from Thu 14:00", soonest first, separate from "Now".
+  - When the source then says the warning is in effect (no future start), the event is updated and becomes a normal alert that may push. Official severity-5 warnings still always push.
+  - Verified: server 243/243 on SQLite + Postgres (2 new), web 11/11 (1 new), app and web typecheck clean.
 - **Sign-in screens and an offline feed** (Flori: "continue building consumer facing features") [PRD 5.3].
   - **Sign-in, app and web:** a new "Account" section at the top of Settings (`app/src/components/AccountSection.tsx`, `web/components/account-section.tsx`). Enter an email, get a 6-digit code, and you're signed in: on a new phone the places and settings come back, and places already on this phone are merged in. Once signed in it shows "Signed in as …" with sign out, which gives this device a fresh anonymous identity while the account keeps its data. Optional: everything works as before without it. Calm messages if email isn't set up yet (the server needs `RESEND_API_KEY` + `MAIL_FROM`), too many codes were requested, or the code is wrong. German and English.
   - **Offline feed, phone app:** `app/src/lib/offline.ts` keeps the last 20 alerts and the details of those opened. Without a connection the feed shows them with "No connection. As of …" / "Keine Verbindung. Stand: …" and opened alerts still open. Cleared on sign-out and "Delete all data".
