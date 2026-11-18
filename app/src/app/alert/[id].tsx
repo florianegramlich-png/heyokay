@@ -5,6 +5,7 @@ import MapView, { Circle, Marker } from 'react-native-maps';
 import { SkyScreen } from '../../components/Starfield';
 import { Button, Card, Pill, s } from '../../components/ui';
 import { api } from '../../lib/api';
+import { loadDetail, saveDetail } from '../../lib/offline';
 import { useI18n } from '../../lib/i18n';
 import { categoryColor, colors, severityColor } from '../../lib/theme';
 import type { AlertDetail, Feedback } from '../../lib/types';
@@ -18,8 +19,9 @@ export default function AlertScreen() {
 
   useEffect(() => {
     api.alert(id)
-      .then((d) => { setDetail(d); setFeedback(d.alert.feedback); })
-      .catch(() => setError(true));
+      .then((d) => { setDetail(d); setFeedback(d.alert.feedback); void saveDetail(d); })
+      // Offline: the saved copy, if this alert was opened before.
+      .catch(async () => { const d = await loadDetail(id); if (d) { setDetail(d); setFeedback(d.alert.feedback); } else setError(true); });
   }, [id]);
 
   if (error) return <SkyScreen><Text style={[s.muted, { padding: 24 }]}>{t('alert.gone')}</Text></SkyScreen>;
