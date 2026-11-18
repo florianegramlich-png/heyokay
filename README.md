@@ -5,6 +5,7 @@ Calm, location-aware safety alerts for Germany. One sentence on what's happening
 ```
 heyokay/
 ├── server/   Node 22 · Fastify · Postgres or SQLite (node:sqlite) · Claude API — ingest → AI pipeline → push
+├── web/      Next.js · the browser version (v0 design), same server API — see web/README.md
 └── app/      Expo SDK 58 · expo-router · background location · Expo push
 ```
 
