@@ -61,6 +61,7 @@ export function capToSourceItem(xml: string): SourceItem | null {
     references,
     official: true,
     language: 'de',
+    country: 'DE',
     title: headline,
     body: body.trim(),
     url: text(info, 'web') || 'https://www.dwd.de/warnungen',

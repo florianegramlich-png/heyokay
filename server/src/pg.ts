@@ -6,7 +6,8 @@ import type {
 import { DEFAULT_PREFS } from './types.js';
 import { hashToken } from './db.js';
 import { LOCATION_MAX_AGE_MS, MAX_PLACE_RADIUS_M } from './geo.js';
-import { SCHEDULED_LOOKBACK_H, computeMetrics, type Area, type Metrics, type Store, type UserWithPlaces } from './store.js';
+import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob } from './store.js';
+import type { PushTicket } from './push.js';
 
 /**
  * Schema migrations, applied in order and recorded in `schema_migrations`. Append new entries;
@@ -85,6 +86,54 @@ export const MIGRATIONS: { version: number; sql: string }[] = [
       );
     `,
   },
+  {
+    // Push delivery: one row per push with Expo's ticket, checked against the receipt later.
+    version: 5,
+    sql: `
+      CREATE TABLE push_tickets (
+        id uuid PRIMARY KEY, ticket_id text UNIQUE, alert_id uuid NOT NULL,
+        user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE, token text NOT NULL,
+        status text NOT NULL, error text, attempt integer NOT NULL, created_at timestamptz NOT NULL, checked_at timestamptz
+      );
+      CREATE INDEX push_tickets_pending ON push_tickets(status, created_at);
+    `,
+  },
+  {
+    // Sign-in: devices (bearer tokens) per user, accounts, email codes.
+    version: 6,
+    sql: `
+      CREATE TABLE devices (
+        token_hash text PRIMARY KEY, user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE, created_at timestamptz NOT NULL
+      );
+      CREATE INDEX devices_user ON devices(user_id);
+      INSERT INTO devices (token_hash, user_id, created_at) SELECT token_hash, id, created_at FROM users;
+      CREATE TABLE accounts (
+        id uuid PRIMARY KEY, email text NOT NULL UNIQUE,
+        user_id uuid NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE, created_at timestamptz NOT NULL
+      );
+      CREATE TABLE email_codes (
+        email text PRIMARY KEY, code_hash text NOT NULL, expires_at timestamptz NOT NULL,
+        attempts integer NOT NULL, sends integer NOT NULL, window_start timestamptz NOT NULL
+      );
+    `,
+  },
+  {
+    // Leases: exactly one worker runs ingest and push at a time, across machines (roles.ts).
+    version: 7,
+    sql: `CREATE TABLE leases (name text PRIMARY KEY, holder text NOT NULL, expires_at timestamptz NOT NULL);`,
+  },
+  {
+    // Delivery queue: matching writes one job per push; senders claim batches with SKIP LOCKED.
+    version: 8,
+    sql: `
+      CREATE TABLE push_jobs (
+        id uuid PRIMARY KEY, user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        token text NOT NULL, alert jsonb NOT NULL, attempt integer NOT NULL, created_at timestamptz NOT NULL,
+        locked_by text, locked_until timestamptz
+      );
+      CREATE INDEX push_jobs_order ON push_jobs(created_at);
+    `,
+  },
 ];
 
 /**
@@ -117,8 +166,10 @@ export class PgStore implements Store {
     const pool = new pg.Pool({
       connectionString: url,
       max: opts.max ?? 10,
-      ...(opts.schema ? { options: `-c search_path=${opts.schema},public` } : {}),
     });
+    // Per connection, not as a startup option: poolers like Supabase's Supavisor don't pass startup
+    // options through. node-postgres queues queries per client, so this runs before any other.
+    if (opts.schema) pool.on('connect', (client) => { client.query(`SET search_path = ${opts.schema}, public`).catch(() => {}); });
     const store = new PgStore(pool, opts);
     try {
       await store.migrate();
@@ -166,13 +217,16 @@ export class PgStore implements Store {
       prefs: { ...DEFAULT_PREFS, ...prefs }, lat: null, lon: null,
       locationUpdatedAt: null, createdAt: new Date().toISOString(),
     };
-    await this.q(`INSERT INTO users (id, token_hash, push_token, prefs, created_at) VALUES ($1,$2,$3,$4,$5)`,
-      [user.id, user.tokenHash, pushToken, JSON.stringify(user.prefs), user.createdAt]);
+    await this.tx(async (c) => {
+      await c.query(`INSERT INTO users (id, token_hash, push_token, prefs, created_at) VALUES ($1,$2,$3,$4,$5)`,
+        [user.id, user.tokenHash, pushToken, JSON.stringify(user.prefs), user.createdAt]);
+      await c.query(`INSERT INTO devices (token_hash, user_id, created_at) VALUES ($1,$2,$3)`, [user.tokenHash, user.id, user.createdAt]);
+    });
     return { user, token };
   }
 
   async userByToken(token: string): Promise<User | null> {
-    const { rows } = await this.q(`SELECT * FROM users WHERE token_hash = $1`, [hashToken(token)]);
+    const { rows } = await this.q(`SELECT u.* FROM devices d JOIN users u ON u.id = d.user_id WHERE d.token_hash = $1`, [hashToken(token)]);
     return rows[0] ? rowToUser(rows[0]) : null;
   }
 
@@ -203,6 +257,9 @@ export class PgStore implements Store {
   async deleteUser(userId: string): Promise<void> {
     if (!isUuid(userId)) return;
     await this.tx(async (c) => {
+      await c.query(`DELETE FROM push_tickets WHERE user_id = $1`, [userId]);
+      await c.query(`DELETE FROM accounts WHERE user_id = $1`, [userId]);
+      await c.query(`DELETE FROM devices WHERE user_id = $1`, [userId]);
       await c.query(`DELETE FROM alerts WHERE user_id = $1`, [userId]);
       await c.query(`DELETE FROM saved_places WHERE user_id = $1`, [userId]);
       await c.query(`DELETE FROM users WHERE id = $1`, [userId]);
@@ -252,6 +309,15 @@ export class PgStore implements Store {
       byUser.set(r.user_id, [...(byUser.get(r.user_id) ?? []), { id: r.id, userId: r.user_id, label: r.label, lat: r.lat, lon: r.lon, radiusM: r.radius_m }]);
     }
     return users.map((user) => ({ user, places: byUser.get(user.id) ?? [] }));
+  }
+
+  async locationCells(stepDeg: number, freshSinceIso: string): Promise<Array<{ lat: number; lon: number }>> {
+    const { rows } = await this.q(`
+      SELECT DISTINCT floor(lat / $1::float8) AS y, floor(lon / $1::float8) AS x FROM (
+        SELECT lat, lon FROM saved_places
+        UNION ALL SELECT lat, lon FROM users WHERE lat IS NOT NULL AND location_updated_at >= $2::timestamptz
+      ) p`, [stepDeg, freshSinceIso]);
+    return rows.map((r) => cellOf(Number(r.y) * stepDeg + stepDeg / 2, Number(r.x) * stepDeg + stepDeg / 2, stepDeg));
   }
 
   // ── source items ─────────────────────────────────────────────────────────
@@ -404,11 +470,157 @@ export class PgStore implements Store {
   async metrics(sinceIso: string): Promise<Metrics> {
     const { rows } = await this.q(`SELECT data, delivery, feedback FROM alerts WHERE created_at >= $1`, [sinceIso]);
     const pending = await this.q(`SELECT COUNT(*) AS n FROM events WHERE status = 'pending_review'`);
-    return computeMetrics(
+    const m = computeMetrics(
       rows.map((r) => ({ alert: r.data as Alert, delivery: r.delivery, feedback: r.feedback ?? null })),
       sinceIso,
       Number(pending.rows[0].n),
     );
+    const d = (await this.q(`
+      SELECT COUNT(*) FILTER (WHERE status = 'delivered') AS delivered, COUNT(*) FILTER (WHERE status = 'error') AS failed,
+             COUNT(*) FILTER (WHERE status = 'pending') AS pending
+      FROM push_tickets WHERE created_at >= $1`, [sinceIso])).rows[0];
+    return { ...m, pushDelivery: { delivered: Number(d.delivered), failed: Number(d.failed), pending: Number(d.pending) } };
+  }
+
+  // ── accounts ───────────────────────────────────────────────────────────────
+  async accountForUser(userId: string): Promise<Account | null> {
+    if (!isUuid(userId)) return null;
+    const { rows } = await this.q(`SELECT * FROM accounts WHERE user_id = $1`, [userId]);
+    return rows[0] ? rowToAccount(rows[0]) : null;
+  }
+
+  async accountByEmail(email: string): Promise<Account | null> {
+    const { rows } = await this.q(`SELECT * FROM accounts WHERE email = $1`, [email]);
+    return rows[0] ? rowToAccount(rows[0]) : null;
+  }
+
+  async createAccount(email: string, userId: string): Promise<Account> {
+    const a: Account = { id: randomUUID(), email, userId, createdAt: new Date().toISOString() };
+    await this.q(`INSERT INTO accounts (id, email, user_id, created_at) VALUES ($1,$2,$3,$4)`, [a.id, email, userId, a.createdAt]);
+    return a;
+  }
+
+  async moveDevice(token: string, toUserId: string): Promise<void> {
+    await this.q(`UPDATE devices SET user_id = $1 WHERE token_hash = $2`, [toUserId, hashToken(token)]);
+  }
+
+  async removeDevice(token: string): Promise<void> {
+    await this.q(`DELETE FROM devices WHERE token_hash = $1`, [hashToken(token)]);
+  }
+
+  async deviceCount(userId: string): Promise<number> {
+    if (!isUuid(userId)) return 0;
+    return Number((await this.q(`SELECT COUNT(*) AS n FROM devices WHERE user_id = $1`, [userId])).rows[0].n);
+  }
+
+  async mergeUserInto(fromUserId: string, toUserId: string): Promise<void> {
+    const existing = await this.places(toUserId);
+    for (const p of await this.places(fromUserId)) {
+      const dup = existing.some((e) => e.label === p.label && Math.abs(e.lat - p.lat) < 1e-4 && Math.abs(e.lon - p.lon) < 1e-4);
+      if (!dup && existing.length < 10) { await this.addPlace(toUserId, p.label, p.lat, p.lon, p.radiusM); existing.push(p); }
+    }
+    await this.q(`UPDATE devices SET user_id = $1 WHERE user_id = $2`, [toUserId, fromUserId]);
+    await this.deleteUser(fromUserId);
+  }
+
+  async saveEmailCode(c: EmailCode): Promise<void> {
+    await this.q(`
+      INSERT INTO email_codes (email, code_hash, expires_at, attempts, sends, window_start) VALUES ($1,$2,$3,$4,$5,$6)
+      ON CONFLICT (email) DO UPDATE SET code_hash = excluded.code_hash, expires_at = excluded.expires_at,
+        attempts = excluded.attempts, sends = excluded.sends, window_start = excluded.window_start`,
+      [c.email, c.codeHash, c.expiresAt, c.attempts, c.sends, c.windowStart]);
+  }
+
+  async emailCode(email: string): Promise<EmailCode | null> {
+    const r = (await this.q(`SELECT * FROM email_codes WHERE email = $1`, [email])).rows[0];
+    return r ? { email: r.email, codeHash: r.code_hash, expiresAt: iso(r.expires_at)!, attempts: r.attempts, sends: r.sends, windowStart: iso(r.window_start)! } : null;
+  }
+
+  async deleteEmailCode(email: string): Promise<void> {
+    await this.q(`DELETE FROM email_codes WHERE email = $1`, [email]);
+  }
+
+  // ── delivery queue ───────────────────────────────────────────────────────
+  async enqueuePushJobs(jobs: Array<{ token: string; alert: Alert; attempt: number }>, atIso: string): Promise<void> {
+    const ok = jobs.filter((j) => isUuid(j.alert.userId));
+    // Batches of 1000 rows per statement: 100k jobs are 100 round trips, not 100k.
+    for (let i = 0; i < ok.length; i += 1000) {
+      const chunk = ok.slice(i, i + 1000);
+      await this.q(`
+        INSERT INTO push_jobs (id, user_id, token, alert, attempt, created_at)
+        SELECT * FROM unnest($1::uuid[], $2::uuid[], $3::text[], $4::jsonb[], $5::int[], $6::timestamptz[])`, [
+        chunk.map(() => randomUUID()), chunk.map((j) => j.alert.userId), chunk.map((j) => j.token),
+        chunk.map((j) => JSON.stringify(j.alert)), chunk.map((j) => j.attempt), chunk.map(() => atIso),
+      ]);
+    }
+  }
+
+  async claimPushJobs(holder: string, limit: number, nowIso: string, lockUntilIso: string): Promise<PushJob[]> {
+    const { rows } = await this.q(`
+      UPDATE push_jobs SET locked_by = $1, locked_until = $2::timestamptz
+      WHERE id IN (
+        SELECT id FROM push_jobs WHERE locked_until IS NULL OR locked_until < $3::timestamptz
+        ORDER BY created_at, id LIMIT $4 FOR UPDATE SKIP LOCKED
+      )
+      RETURNING id, token, alert, attempt, created_at`, [holder, lockUntilIso, nowIso, limit]);
+    return rows.map((r) => ({ id: r.id, token: r.token, alert: r.alert, attempt: r.attempt, createdAt: iso(r.created_at)! }))
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+
+  async completePushJobs(ids: string[]): Promise<void> {
+    if (ids.length) await this.q(`DELETE FROM push_jobs WHERE id = ANY($1::uuid[])`, [ids]);
+  }
+
+  async pushQueueDepth(): Promise<number> {
+    return Number((await this.q(`SELECT COUNT(*)::int AS n FROM push_jobs`)).rows[0].n);
+  }
+
+  // ── leases ───────────────────────────────────────────────────────────────
+  async acquireLease(name: string, holder: string, ttlMs: number, now = new Date()): Promise<boolean> {
+    // One statement: the row lock makes concurrent takeovers safe; RETURNING tells us if we won.
+    const { rows } = await this.q(`
+      INSERT INTO leases (name, holder, expires_at) VALUES ($1, $2, $3::timestamptz)
+      ON CONFLICT (name) DO UPDATE SET holder = excluded.holder, expires_at = excluded.expires_at
+      WHERE leases.holder = excluded.holder OR leases.expires_at < $4::timestamptz
+      RETURNING holder`, [name, holder, new Date(now.getTime() + ttlMs).toISOString(), now.toISOString()]);
+    return rows[0]?.holder === holder;
+  }
+
+  async releaseLease(name: string, holder: string): Promise<void> {
+    await this.q(`DELETE FROM leases WHERE name = $1 AND holder = $2`, [name, holder]);
+  }
+
+  // ── push delivery ────────────────────────────────────────────────────────
+  async recordPushTickets(tickets: PushTicket[], attempt: number, atIso: string): Promise<void> {
+    const ok = tickets.filter((t) => isUuid(t.userId) && isUuid(t.alertId));
+    for (let i = 0; i < ok.length; i += 1000) {
+      const c = ok.slice(i, i + 1000);
+      await this.q(
+        `INSERT INTO push_tickets (id, ticket_id, alert_id, user_id, token, status, error, attempt, created_at)
+         SELECT id, ticket_id, alert_id, user_id, token, status, error, $8, $9::timestamptz
+         FROM unnest($1::uuid[], $2::text[], $3::uuid[], $4::uuid[], $5::text[], $6::text[], $7::text[])
+           AS t(id, ticket_id, alert_id, user_id, token, status, error)
+         ON CONFLICT DO NOTHING`,
+        [c.map(() => randomUUID()), c.map((t) => t.ticketId), c.map((t) => t.alertId), c.map((t) => t.userId),
+          c.map((t) => t.token), c.map((t) => t.status), c.map((t) => t.error), attempt, atIso],
+      );
+    }
+  }
+
+  async pushTicketsToCheck(sentBeforeIso: string, limit: number): Promise<StoredPushTicket[]> {
+    const { rows } = await this.q(
+      `SELECT * FROM push_tickets WHERE status = 'pending' AND ticket_id IS NOT NULL AND created_at <= $1 ORDER BY created_at LIMIT $2`,
+      [sentBeforeIso, limit],
+    );
+    return rows.map((r) => ({ ticketId: r.ticket_id, alertId: r.alert_id, userId: r.user_id, token: r.token, attempt: r.attempt, createdAt: iso(r.created_at)! }));
+  }
+
+  async setPushStatus(ticketId: string, status: PushStatus, error: string | null = null): Promise<void> {
+    await this.q(`UPDATE push_tickets SET status = $1, error = $2, checked_at = now() WHERE ticket_id = $3`, [status, error, ticketId]);
+  }
+
+  async clearPushToken(token: string): Promise<number> {
+    return (await this.q(`UPDATE users SET push_token = NULL WHERE push_token = $1`, [token])).rowCount ?? 0;
   }
 
   async close(): Promise<void> {
@@ -439,6 +651,10 @@ function isUuid(s: string) { return UUID.test(s); }
 
 function iso(v: Date | string | null): string | null {
   return v == null ? null : v instanceof Date ? v.toISOString() : new Date(v).toISOString();
+}
+
+function rowToAccount(r: any): Account {
+  return { id: r.id, email: r.email, userId: r.user_id, createdAt: iso(r.created_at)! };
 }
 
 function rowToUser(r: any): User {

@@ -23,6 +23,7 @@ You run once a day, unattended, and keep building Hey-Okay: calm, location-aware
 6. **Record it.**
    - Tick the item off in `ROADMAP.md` and move it to "Done" with today's date.
    - Add a dated entry at the top of `CHANGELOG.md`: what changed, which tests were added, and anything Flori must do. Several items on one day share one dated entry, with a sub-bullet per item.
+   - Update `docs/ARCHITECTURE.md` when the item adds or changes a component, data source, external service, API route or setting. Keep its "Last updated" date current.
    - Commit each item separately, so Flori can review (or revert) them one by one.
 7. **Ship it.**
    - Push `agent/next` once all of today's items are committed.

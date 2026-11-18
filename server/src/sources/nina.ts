@@ -113,6 +113,7 @@ export function toSourceItem(channel: string, entry: NinaMapEntry, warning: Nina
   const areas = warningAreas(geo);
   return {
     source: 'nina',
+    country: 'DE',
     sourceName: CHANNEL_NAMES[channel] ?? `NINA · ${channel}`,
     // Version in the id so updates arrive as new items; the clusterer merges them by id root.
     externalId: `${entry.id}@v${entry.version}`,

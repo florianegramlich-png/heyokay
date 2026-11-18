@@ -1,70 +1,89 @@
-import type { Category, Language, Severity } from '../types.js';
+import type { Category, Hazard, Language, Severity } from '../types.js';
+import { packFor, type CountryPack } from '../countries.js';
 
 /**
  * Recommended actions come from this fixed library (modelled on BBK / DWD public guidance),
- * never from free generation. Reviewed by a human before launch.
+ * never from free generation. Reviewed by a human before launch. Phone numbers come from the
+ * country pack (countries.ts), so the same advice works in every country we cover.
  */
-const LIBRARY: Record<Category, { low: string; high: string }> = {
+type Numbers = CountryPack['numbers'];
+type Advice = { low: (n: Numbers) => string; high: (n: Numbers) => string };
+const t = (s: string) => () => s;
+
+const LIBRARY: Record<Category, Advice> = {
   weather: {
-    low: 'Lose Gegenstände sichern, Aufenthalt im Freien begrenzen.',
-    high: 'Gebäude aufsuchen, Fenster schließen, Bäume und Gerüste meiden.',
+    low: t('Lose Gegenstände sichern, Aufenthalt im Freien begrenzen.'),
+    high: t('Gebäude aufsuchen, Fenster schließen, Bäume und Gerüste meiden.'),
   },
   crime: {
-    low: 'Bereich meiden und Hinweise der Polizei beachten.',
-    high: 'Bereich meiden, Anweisungen der Polizei folgen. Notruf 110.',
+    low: t('Bereich meiden und Hinweise der Polizei beachten.'),
+    high: (n) => `Bereich meiden, Anweisungen der Polizei folgen. Notruf ${n.police}.`,
   },
   transit: {
-    low: 'Mehr Zeit einplanen oder Alternative prüfen.',
-    high: 'Alternative Verbindung wählen, Bereich meiden.',
+    low: t('Mehr Zeit einplanen oder Alternative prüfen.'),
+    high: t('Alternative Verbindung wählen, Bereich meiden.'),
   },
   public_safety: {
-    low: 'Bereich meiden und Hinweise der Behörden beachten.',
-    high: 'Bereich meiden, Fenster und Türen schließen. Anweisungen der Einsatzkräfte folgen.',
+    low: t('Bereich meiden und Hinweise der Behörden beachten.'),
+    high: t('Bereich meiden, Fenster und Türen schließen. Anweisungen der Einsatzkräfte folgen.'),
   },
   health: {
-    low: 'Hinweise des Gesundheitsamts beachten.',
-    high: 'Hinweise des Gesundheitsamts sofort befolgen. Bei Beschwerden 116 117, im Notfall 112.',
+    low: t('Hinweise des Gesundheitsamts beachten.'),
+    high: (n) => `Hinweise des Gesundheitsamts sofort befolgen. ${n.medical ? `Bei Beschwerden ${n.medical}, im Notfall ${n.emergency}.` : `Im Notfall ${n.emergency}.`}`,
   },
   infrastructure: {
-    low: 'Mit Einschränkungen rechnen.',
-    high: 'Bereich meiden. Bei Gasgeruch Gebäude verlassen und 112 anrufen.',
+    low: t('Mit Einschränkungen rechnen.'),
+    high: (n) => `Bereich meiden. Bei Gasgeruch Gebäude verlassen und ${n.emergency} anrufen.`,
   },
 };
 
-/**
- * English library. Today the only English sources are US (NWS), so emergency numbers are US ones.
- * When English is offered in Germany (Phase 2 i18n), key this by country as well.
- */
-const LIBRARY_EN: Record<Category, { low: string; high: string }> = {
+const LIBRARY_EN: Record<Category, Advice> = {
   weather: {
-    low: 'Secure loose objects and limit time outdoors.',
-    high: 'Stay indoors, away from windows. Avoid trees and travel if you can.',
+    low: t('Secure loose objects and limit time outdoors.'),
+    high: t('Stay indoors, away from windows. Avoid trees and travel if you can.'),
   },
   crime: {
-    low: 'Avoid the area and follow police instructions.',
-    high: 'Avoid the area and follow police instructions. Emergency: 911.',
+    low: t('Avoid the area and follow police instructions.'),
+    high: (n) => `Avoid the area and follow police instructions. Emergency: ${n.police}.`,
   },
   transit: {
-    low: 'Allow extra time or check another route.',
-    high: 'Choose another route and avoid the area.',
+    low: t('Allow extra time or check another route.'),
+    high: t('Choose another route and avoid the area.'),
   },
   public_safety: {
-    low: 'Avoid the area and follow official guidance.',
-    high: 'Avoid the area, close windows and doors, and follow emergency crews.',
+    low: t('Avoid the area and follow official guidance.'),
+    high: t('Avoid the area, close windows and doors, and follow emergency crews.'),
   },
   health: {
-    low: 'Follow guidance from your local health department.',
-    high: 'Follow health department guidance now. Emergency: 911.',
+    low: t('Follow guidance from your local health department.'),
+    high: (n) => `Follow health department guidance now. ${n.medical ? `Advice: ${n.medical}. ` : ''}Emergency: ${n.emergency}.`,
   },
   infrastructure: {
-    low: 'Expect disruptions.',
-    high: 'Avoid the area. If you smell gas, leave the building and call 911.',
+    low: t('Expect disruptions.'),
+    high: (n) => `Avoid the area. If you smell gas, leave the building and call ${n.emergency}.`,
   },
 };
 
-export function recommendedAction(category: Category, severity: Severity, language: Language = 'de'): string {
-  const lib = language === 'en' ? LIBRARY_EN : LIBRARY;
-  return severity >= 4 ? lib[category].high : lib[category].low;
+/** Hazard-specific actions, where the category's general advice would be wrong (storm advice for heat). */
+const HAZARD: Record<Hazard, Record<Language, Advice>> = {
+  heat: {
+    de: {
+      low: t('Viel trinken, Mittagshitze meiden, Räume tagsüber abdunkeln.'),
+      high: (n) => `Viel trinken, drinnen bleiben, nach Älteren und Kranken sehen. Bei Hitzschlag ${n.emergency}.`,
+    },
+    en: {
+      low: t('Drink plenty, avoid the midday heat, keep rooms shaded.'),
+      high: (n) => `Drink plenty, stay indoors, check on older or sick people. Heat stroke: call ${n.emergency}.`,
+    },
+  },
+};
+
+export function recommendedAction(
+  category: Category, severity: Severity, language: Language = 'de', hazard?: Hazard, country: CountryPack = packFor({ language }),
+): string {
+  const lib = hazard ? HAZARD[hazard][language] : (language === 'en' ? LIBRARY_EN : LIBRARY)[category];
+  const high = hazard ? severity >= 3 : severity >= 4;
+  return (high ? lib.high : lib.low)(country.numbers);
 }
 
 export const CATEGORY_LABEL_DE: Record<Category, string> = {

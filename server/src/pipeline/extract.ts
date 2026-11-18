@@ -43,12 +43,13 @@ export async function extract(item: SourceItem, deps: ExtractDeps): Promise<Extr
   const now = deps.now ?? new Date();
   if (!item.official && now.getTime() - Date.parse(item.publishedAt) > MAX_AGE_H * 3600_000) return null;
 
-  // Official feeds are already structured. Their severity is authoritative.
-  if (item.official && item.lat != null && item.lon != null) {
+  // Official feeds are already structured. Their severity is authoritative. Machine-made structured
+  // items (heat from a forecast) are mapped the same way, with slightly lower confidence.
+  if ((item.official || item.structured) && item.lat != null && item.lon != null) {
     return {
       category: item.category ?? 'public_safety',
       severity: item.officialSeverity ?? 2,
-      confidence: 1,
+      confidence: item.official ? 1 : 0.9,
       title: item.title,
       summary: firstSentences(item.body, 2),
       areaName: item.areaName ?? '',

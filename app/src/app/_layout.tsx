@@ -7,7 +7,8 @@ import { Pressable, Text } from 'react-native';
 import { ErrorScreen } from '../components/ErrorScreen';
 import { initCrashReporting } from '../lib/crash';
 import { loadLanguage, useI18n } from '../lib/i18n';
-import { alertIdFrom, setupChannels } from '../lib/notifications';
+import { flushPendingFeedback } from '../lib/feedback-queue';
+import { handleResponse, registerNotificationTask, setupCategories, setupChannels } from '../lib/notifications';
 import { colors } from '../lib/theme';
 
 // expo-router renders this when any screen below throws (PRD 5.3 crash reporting).
@@ -22,12 +23,15 @@ export default function RootLayout() {
   }, []);
   useEffect(() => {
     setupChannels(lang);
+    setupCategories(lang);
   }, [lang]);
 
   useEffect(() => {
     void initCrashReporting();
-    const open = (r: Notifications.NotificationResponse | null) => {
-      const id = r && alertIdFrom(r);
+    void registerNotificationTask();
+    void flushPendingFeedback(); // ratings tapped while offline or in the background
+    const open = async (r: Notifications.NotificationResponse | null) => {
+      const id = r && (await handleResponse(r)); // a rating button records it; a tap opens the alert
       if (id) router.push({ pathname: '/alert/[id]', params: { id } });
     };
     // Cold start from a notification tap, then taps while running.

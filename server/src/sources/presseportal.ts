@@ -174,6 +174,7 @@ export async function fetchAgency(
       publishedAt: e.publishedAt,
       category: agency.categoryHint,
       language: 'de',
+      country: 'DE',
     });
   }
   return out;

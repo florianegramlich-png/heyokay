@@ -2,7 +2,7 @@ import type { Config } from '../config.js';
 import type { Store } from '../store.js';
 import type { Geocoder } from '../geocode.js';
 import type { StructuredLLM } from '../llm.js';
-import type { PushSender } from '../push.js';
+import { TRANSIENT_PUSH_ERRORS, type PushMessage, type PushSender, type PushTicket } from '../push.js';
 import type { Alert, AlertKind, Category, RiskEvent, Severity, SourceItem, User } from '../types.js';
 import { extract } from './extract.js';
 import { DEFAULT_EMBEDDING_MIN_SIMILARITY, findCluster, mergeInto, newEvent, type EmbeddingMatch } from './cluster.js';
@@ -10,6 +10,7 @@ import { embeddingText, type Embedder } from '../embeddings.js';
 import { compose } from './compose.js';
 import { decide, inQuietHours, match } from './rank.js';
 import { LIFECYCLE, recommendedAction } from './guidance.js';
+import { packFor } from '../countries.js';
 
 export interface PipelineDeps {
   store: Store;
@@ -20,7 +21,12 @@ export interface PipelineDeps {
   /** Dedup embeddings. Missing or disabled = word overlap only. */
   embedder?: Embedder;
   now?: () => Date;
+  /** Delivery queue: who claims jobs (machine id), sends in flight, jobs per send. */
+  delivery?: { holder?: string; concurrency?: number; batch?: number };
 }
+
+/** A claimed job not finished in this time (sender died) goes back to the queue. */
+export const PUSH_JOB_LOCK_MS = 5 * 60_000;
 
 export interface IngestReport {
   received: number;
@@ -195,7 +201,7 @@ export class Pipeline {
       alerts++;
       if (push) outbox.push({ token: user.pushToken!, alert: a });
     }
-    const res = outbox.length ? await this.d.push.send(outbox) : { sent: 0 };
+    const res = { sent: await this.sendPush(outbox) };
     return { alerts, pushes: res.sent };
   }
 
@@ -262,8 +268,93 @@ export class Pipeline {
       alerts++;
       if (delivery === 'push' && user.pushToken) outbox.push({ token: user.pushToken, alert });
     }
-    const res = outbox.length ? await this.d.push.send(outbox) : { sent: 0 };
+    const res = { sent: await this.sendPush(outbox) };
     return { alerts, pushes: res.sent };
+  }
+
+  /**
+   * Queue the pushes, then send right away. The queue (PRD 6.2 step 9) makes delivery survive a
+   * crash between matching and sending, and lets several senders share a big fan-out.
+   */
+  private async sendPush(outbox: PushMessage[], attempt = 0): Promise<number> {
+    if (!outbox.length) return 0;
+    await this.d.store.enqueuePushJobs(outbox.map((m) => ({ token: m.token, alert: m.alert, attempt })), this.now().toISOString());
+    return (await this.drainPushQueue()).sent;
+  }
+
+  /**
+   * Sends everything in the delivery queue: `concurrency` senders, each claiming `batch` jobs at a
+   * time (Expo takes 100 per request; ExpoPushSender splits). Keeps the tickets for the receipt
+   * check and forgets tokens of uninstalled apps right away. Jobs whose send throws stay claimed
+   * until their lock runs out, then the next drain retries them.
+   */
+  async drainPushQueue(): Promise<{ sent: number; errors: number; jobs: number }> {
+    const { holder = 'pipeline', concurrency = 4, batch = 500 } = this.d.delivery ?? {};
+    const out = { sent: 0, errors: 0, jobs: 0 };
+    const sender = async () => {
+      for (;;) {
+        const now = this.now();
+        const jobs = await this.d.store.claimPushJobs(holder, batch, now.toISOString(), new Date(now.getTime() + PUSH_JOB_LOCK_MS).toISOString());
+        if (!jobs.length) return;
+        for (const attempt of new Set(jobs.map((j) => j.attempt))) {
+          const group = jobs.filter((j) => j.attempt === attempt);
+          const res = await this.d.push.send(group.map((j) => ({ token: j.token, alert: j.alert })));
+          await this.d.store.recordPushTickets(res.tickets, attempt, this.now().toISOString());
+          await this.forgetUninstalled(res.tickets.filter((t) => t.error === 'DeviceNotRegistered'));
+          out.sent += res.sent;
+          out.errors += res.errors;
+        }
+        await this.d.store.completePushJobs(jobs.map((j) => j.id));
+        out.jobs += jobs.length;
+      }
+    };
+    await Promise.all(Array.from({ length: Math.max(1, concurrency) }, sender));
+    return out;
+  }
+
+  private async forgetUninstalled(tickets: Array<Pick<PushTicket, 'token'>>) {
+    for (const token of new Set(tickets.map((t) => t.token))) await this.d.store.clearPushToken(token);
+  }
+
+  /**
+   * Push receipts (PRD 5.4, 6.2 step 9). About 15 minutes after sending, ask Expo whether Apple/Google
+   * took each push: delivered → done; DeviceNotRegistered → the app is gone, forget the token;
+   * a transient error → send again (twice at most, the receipt check backs off between tries);
+   * no receipt a day later → unknown. Run regularly; cheap when there's nothing to check.
+   */
+  async checkPushReceipts(opts: { waitMin?: number; maxResends?: number } = {}) {
+    const out = { checked: 0, delivered: 0, failed: 0, resent: 0, tokensCleared: 0, unknown: 0 };
+    const now = this.now().getTime();
+    const tickets = await this.d.store.pushTicketsToCheck(new Date(now - (opts.waitMin ?? 15) * 60_000).toISOString(), 1000);
+    if (!tickets.length) return out;
+    const receipts = await this.d.push.getReceipts(tickets.map((t) => t.ticketId));
+    const resend: Array<{ msg: PushMessage; attempt: number }> = [];
+    for (const t of tickets) {
+      const r = receipts.get(t.ticketId);
+      if (!r) {
+        if (now - Date.parse(t.createdAt) > 24 * 3600_000) { await this.d.store.setPushStatus(t.ticketId, 'unknown'); out.unknown++; }
+        continue;
+      }
+      out.checked++;
+      if (r.status === 'ok') { await this.d.store.setPushStatus(t.ticketId, 'delivered'); out.delivered++; continue; }
+      if (r.error === 'DeviceNotRegistered') {
+        out.tokensCleared += await this.d.store.clearPushToken(t.token);
+      } else if (TRANSIENT_PUSH_ERRORS.has(r.error) && t.attempt < (opts.maxResends ?? 2)) {
+        const user = await this.d.store.getUser(t.userId);
+        const alert = user?.pushToken ? await this.d.store.getAlert(t.userId, t.alertId) : null;
+        if (user?.pushToken && alert) {
+          await this.d.store.setPushStatus(t.ticketId, 'retried', r.error);
+          resend.push({ msg: { token: user.pushToken, alert }, attempt: t.attempt + 1 });
+          continue;
+        }
+      }
+      await this.d.store.setPushStatus(t.ticketId, 'error', r.error);
+      out.failed++;
+    }
+    for (const attempt of new Set(resend.map((r) => r.attempt))) {
+      out.resent += await this.sendPush(resend.filter((r) => r.attempt === attempt).map((r) => r.msg), attempt);
+    }
+    return out;
   }
 
   /** New location or new saved place: check currently active events for this user. */
@@ -323,7 +414,7 @@ export class Pipeline {
     event.copyTitle = input.title.slice(0, 50);
     event.copyBody = input.body.slice(0, 100);
     event.copyIsTemplate = true;
-    event.copyAction = recommendedAction(event.category, event.severity, event.language);
+    event.copyAction = recommendedAction(event.category, event.severity, event.language, undefined, packFor(event));
     await this.d.store.saveEvent(event);
     const out = await this.deliver(event);
     return { eventId: event.id, ...out };

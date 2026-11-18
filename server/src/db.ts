@@ -4,7 +4,8 @@ import type {
   Alert, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
 } from './types.js';
 import { DEFAULT_PREFS } from './types.js';
-import { SCHEDULED_LOOKBACK_H, computeMetrics, type Area, type Metrics, type Store, type UserWithPlaces } from './store.js';
+import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob } from './store.js';
+import type { PushTicket } from './push.js';
 import { distanceM, LOCATION_MAX_AGE_MS } from './geo.js';
 import { cosine } from './embeddings.js';
 
@@ -51,6 +52,34 @@ export class SqliteStore implements Store {
         event_id TEXT PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
         model TEXT NOT NULL, vector TEXT NOT NULL, updated_at TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS push_tickets (
+        id TEXT PRIMARY KEY, ticket_id TEXT UNIQUE, alert_id TEXT NOT NULL,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, token TEXT NOT NULL,
+        status TEXT NOT NULL, error TEXT, attempt INTEGER NOT NULL, created_at TEXT NOT NULL, checked_at TEXT
+      );
+      CREATE INDEX IF NOT EXISTS push_tickets_pending ON push_tickets(status, created_at);
+      CREATE TABLE IF NOT EXISTS devices (
+        token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS devices_user ON devices(user_id);
+      CREATE TABLE IF NOT EXISTS accounts (
+        id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, user_id TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS email_codes (
+        email TEXT PRIMARY KEY, code_hash TEXT NOT NULL, expires_at TEXT NOT NULL,
+        attempts INTEGER NOT NULL, sends INTEGER NOT NULL, window_start TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS push_jobs (
+        id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        token TEXT NOT NULL, alert TEXT NOT NULL, attempt INTEGER NOT NULL, created_at TEXT NOT NULL,
+        locked_by TEXT, locked_until TEXT
+      );
+      CREATE INDEX IF NOT EXISTS push_jobs_order ON push_jobs(created_at);
+      CREATE TABLE IF NOT EXISTS leases (name TEXT PRIMARY KEY, holder TEXT NOT NULL, expires_at TEXT NOT NULL);
+      -- Users from before devices existed sign in with their original token.
+      INSERT OR IGNORE INTO devices (token_hash, user_id, created_at) SELECT token_hash, id, created_at FROM users;
       PRAGMA foreign_keys = ON;
     `);
   }
@@ -65,11 +94,12 @@ export class SqliteStore implements Store {
     };
     this.db.prepare(`INSERT INTO users (id, token_hash, push_token, prefs, created_at) VALUES (?,?,?,?,?)`)
       .run(user.id, user.tokenHash, pushToken, JSON.stringify(user.prefs), user.createdAt);
+    this.db.prepare(`INSERT INTO devices (token_hash, user_id, created_at) VALUES (?,?,?)`).run(user.tokenHash, user.id, user.createdAt);
     return { user, token };
   }
 
   async userByToken(token: string): Promise<User | null> {
-    const row = this.db.prepare(`SELECT * FROM users WHERE token_hash = ?`).get(hashToken(token));
+    const row = this.db.prepare(`SELECT u.* FROM devices d JOIN users u ON u.id = d.user_id WHERE d.token_hash = ?`).get(hashToken(token));
     return row ? rowToUser(row) : null;
   }
 
@@ -97,6 +127,9 @@ export class SqliteStore implements Store {
 
   /** GDPR erasure: user, places and alerts (cascade). */
   async deleteUser(userId: string): Promise<void> {
+    this.db.prepare(`DELETE FROM push_tickets WHERE user_id = ?`).run(userId);
+    this.db.prepare(`DELETE FROM accounts WHERE user_id = ?`).run(userId);
+    this.db.prepare(`DELETE FROM devices WHERE user_id = ?`).run(userId);
     this.db.prepare(`DELETE FROM alerts WHERE user_id = ?`).run(userId);
     this.db.prepare(`DELETE FROM saved_places WHERE user_id = ?`).run(userId);
     this.db.prepare(`DELETE FROM users WHERE id = ?`).run(userId);
@@ -140,6 +173,16 @@ export class SqliteStore implements Store {
       if (here || atPlace) out.push({ user, places });
     }
     return out;
+  }
+
+  async locationCells(stepDeg: number, freshSinceIso: string): Promise<Array<{ lat: number; lon: number }>> {
+    const pts = [
+      ...(this.db.prepare(`SELECT lat, lon FROM saved_places`).all() as any[]),
+      ...(this.db.prepare(`SELECT lat, lon FROM users WHERE lat IS NOT NULL AND location_updated_at >= ?`).all(freshSinceIso) as any[]),
+    ];
+    const cells = new Map<string, { lat: number; lon: number }>();
+    for (const p of pts) { const c = cellOf(p.lat, p.lon, stepDeg); cells.set(`${c.lat},${c.lon}`, c); }
+    return [...cells.values()];
   }
 
   // ── source items ─────────────────────────────────────────────────────────
@@ -285,7 +328,132 @@ export class SqliteStore implements Store {
   async metrics(sinceIso: string): Promise<Metrics> {
     const rows = (this.db.prepare(`SELECT data, delivery, feedback FROM alerts WHERE created_at >= ?`).all(sinceIso) as any[])
       .map((r) => ({ alert: JSON.parse(r.data) as Alert, delivery: r.delivery as string, feedback: (r.feedback ?? null) as string | null }));
-    return computeMetrics(rows, sinceIso, (await this.eventsByStatus('pending_review')).length);
+    const m = computeMetrics(rows, sinceIso, (await this.eventsByStatus('pending_review')).length);
+    const d = this.db.prepare(`
+      SELECT SUM(status = 'delivered') AS delivered, SUM(status = 'error') AS failed, SUM(status = 'pending') AS pending
+      FROM push_tickets WHERE created_at >= ?`).get(sinceIso) as any;
+    return { ...m, pushDelivery: { delivered: Number(d?.delivered ?? 0), failed: Number(d?.failed ?? 0), pending: Number(d?.pending ?? 0) } };
+  }
+
+  // ── accounts ───────────────────────────────────────────────────────────────
+  async accountForUser(userId: string): Promise<Account | null> {
+    const r: any = this.db.prepare(`SELECT * FROM accounts WHERE user_id = ?`).get(userId);
+    return r ? rowToAccount(r) : null;
+  }
+
+  async accountByEmail(email: string): Promise<Account | null> {
+    const r: any = this.db.prepare(`SELECT * FROM accounts WHERE email = ?`).get(email);
+    return r ? rowToAccount(r) : null;
+  }
+
+  async createAccount(email: string, userId: string): Promise<Account> {
+    const a: Account = { id: randomUUID(), email, userId, createdAt: new Date().toISOString() };
+    this.db.prepare(`INSERT INTO accounts (id, email, user_id, created_at) VALUES (?,?,?,?)`).run(a.id, email, userId, a.createdAt);
+    return a;
+  }
+
+  async moveDevice(token: string, toUserId: string): Promise<void> {
+    this.db.prepare(`UPDATE devices SET user_id = ? WHERE token_hash = ?`).run(toUserId, hashToken(token));
+  }
+
+  async removeDevice(token: string): Promise<void> {
+    this.db.prepare(`DELETE FROM devices WHERE token_hash = ?`).run(hashToken(token));
+  }
+
+  async deviceCount(userId: string): Promise<number> {
+    return Number((this.db.prepare(`SELECT COUNT(*) AS n FROM devices WHERE user_id = ?`).get(userId) as any).n);
+  }
+
+  async mergeUserInto(fromUserId: string, toUserId: string): Promise<void> {
+    const existing = await this.places(toUserId);
+    for (const p of await this.places(fromUserId)) {
+      const dup = existing.some((e) => e.label === p.label && Math.abs(e.lat - p.lat) < 1e-4 && Math.abs(e.lon - p.lon) < 1e-4);
+      if (!dup && existing.length < 10) { await this.addPlace(toUserId, p.label, p.lat, p.lon, p.radiusM); existing.push(p); }
+    }
+    this.db.prepare(`UPDATE devices SET user_id = ? WHERE user_id = ?`).run(toUserId, fromUserId);
+    await this.deleteUser(fromUserId);
+  }
+
+  async saveEmailCode(c: EmailCode): Promise<void> {
+    this.db.prepare(`INSERT OR REPLACE INTO email_codes (email, code_hash, expires_at, attempts, sends, window_start) VALUES (?,?,?,?,?,?)`)
+      .run(c.email, c.codeHash, c.expiresAt, c.attempts, c.sends, c.windowStart);
+  }
+
+  async emailCode(email: string): Promise<EmailCode | null> {
+    const r: any = this.db.prepare(`SELECT * FROM email_codes WHERE email = ?`).get(email);
+    return r ? { email: r.email, codeHash: r.code_hash, expiresAt: r.expires_at, attempts: r.attempts, sends: r.sends, windowStart: r.window_start } : null;
+  }
+
+  async deleteEmailCode(email: string): Promise<void> {
+    this.db.prepare(`DELETE FROM email_codes WHERE email = ?`).run(email);
+  }
+
+  // ── delivery queue ───────────────────────────────────────────────────────
+  async enqueuePushJobs(jobs: Array<{ token: string; alert: Alert; attempt: number }>, atIso: string): Promise<void> {
+    const ins = this.db.prepare(`INSERT INTO push_jobs (id, user_id, token, alert, attempt, created_at) VALUES (?,?,?,?,?,?)`);
+    this.db.exec('BEGIN');
+    try {
+      for (const j of jobs) ins.run(randomUUID(), j.alert.userId, j.token, JSON.stringify(j.alert), j.attempt, atIso);
+      this.db.exec('COMMIT');
+    } catch (err) { this.db.exec('ROLLBACK'); throw err; }
+  }
+
+  async claimPushJobs(holder: string, limit: number, nowIso: string, lockUntilIso: string): Promise<PushJob[]> {
+    // One process per SQLite file, and this runs synchronously: no other claim can interleave.
+    const rows = this.db.prepare(`
+      UPDATE push_jobs SET locked_by = ?, locked_until = ?
+      WHERE id IN (SELECT id FROM push_jobs WHERE locked_until IS NULL OR locked_until < ? ORDER BY created_at, id LIMIT ?)
+      RETURNING id, token, alert, attempt, created_at`).all(holder, lockUntilIso, nowIso, limit) as any[];
+    return rows.map((r) => ({ id: r.id, token: r.token, alert: JSON.parse(r.alert), attempt: r.attempt, createdAt: r.created_at }))
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+
+  async completePushJobs(ids: string[]): Promise<void> {
+    const del = this.db.prepare(`DELETE FROM push_jobs WHERE id = ?`);
+    for (const id of ids) del.run(id);
+  }
+
+  async pushQueueDepth(): Promise<number> {
+    return Number((this.db.prepare(`SELECT COUNT(*) AS n FROM push_jobs`).get() as any).n);
+  }
+
+  // ── leases ───────────────────────────────────────────────────────────────
+  async acquireLease(name: string, holder: string, ttlMs: number, now = new Date()): Promise<boolean> {
+    const until = new Date(now.getTime() + ttlMs).toISOString();
+    this.db.prepare(`
+      INSERT INTO leases (name, holder, expires_at) VALUES (?,?,?)
+      ON CONFLICT (name) DO UPDATE SET holder = excluded.holder, expires_at = excluded.expires_at
+      WHERE leases.holder = excluded.holder OR leases.expires_at < ?`).run(name, holder, until, now.toISOString());
+    const r: any = this.db.prepare(`SELECT holder FROM leases WHERE name = ?`).get(name);
+    return r?.holder === holder;
+  }
+
+  async releaseLease(name: string, holder: string): Promise<void> {
+    this.db.prepare(`DELETE FROM leases WHERE name = ? AND holder = ?`).run(name, holder);
+  }
+
+  // ── push delivery ────────────────────────────────────────────────────────
+  async recordPushTickets(tickets: PushTicket[], attempt: number, atIso: string): Promise<void> {
+    const now = atIso;
+    const ins = this.db.prepare(`INSERT OR IGNORE INTO push_tickets (id, ticket_id, alert_id, user_id, token, status, error, attempt, created_at) VALUES (?,?,?,?,?,?,?,?,?)`);
+    for (const t of tickets) ins.run(randomUUID(), t.ticketId, t.alertId, t.userId, t.token, t.status, t.error, attempt, now);
+  }
+
+  async pushTicketsToCheck(sentBeforeIso: string, limit: number): Promise<StoredPushTicket[]> {
+    return (this.db.prepare(
+      `SELECT * FROM push_tickets WHERE status = 'pending' AND ticket_id IS NOT NULL AND created_at <= ? ORDER BY created_at LIMIT ?`,
+    ).all(sentBeforeIso, limit) as any[]).map((r) => ({
+      ticketId: r.ticket_id, alertId: r.alert_id, userId: r.user_id, token: r.token, attempt: r.attempt, createdAt: r.created_at,
+    }));
+  }
+
+  async setPushStatus(ticketId: string, status: PushStatus, error: string | null = null): Promise<void> {
+    this.db.prepare(`UPDATE push_tickets SET status = ?, error = ?, checked_at = ? WHERE ticket_id = ?`)
+      .run(status, error, new Date().toISOString(), ticketId);
+  }
+
+  async clearPushToken(token: string): Promise<number> {
+    return Number(this.db.prepare(`UPDATE users SET push_token = NULL WHERE push_token = ?`).run(token).changes);
   }
 
   async close(): Promise<void> {
@@ -301,6 +469,10 @@ function iso(t: string): string {
 
 export function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
+}
+
+function rowToAccount(r: any): Account {
+  return { id: r.id, email: r.email, userId: r.user_id, createdAt: r.created_at };
 }
 
 function rowToUser(r: any): User {

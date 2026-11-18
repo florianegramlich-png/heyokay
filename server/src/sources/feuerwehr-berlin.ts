@@ -67,6 +67,7 @@ export function toSourceItem(r: FireReport): SourceItem {
     publishedAt: r.publishedAt,
     category: 'public_safety',
     language: 'de',
+    country: 'DE',
   };
 }
 

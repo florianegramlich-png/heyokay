@@ -1,3 +1,4 @@
+import type { CountryCode } from './countries.js';
 // Shared domain types. app/src/lib/types.ts mirrors the client-facing parts — keep them in sync.
 
 export const CATEGORIES = ['weather', 'crime', 'transit', 'public_safety', 'health', 'infrastructure'] as const;
@@ -6,9 +7,11 @@ export type Category = (typeof CATEGORIES)[number];
 /** 1 = info, 2 = minor, 3 = moderate, 4 = severe, 5 = extreme. Same meaning across all sources. */
 export type Severity = 1 | 2 | 3 | 4 | 5;
 
-export type SourceKind = 'nina' | 'dwd' | 'nws' | 'rss' | 'presseportal' | 'manual';
+export type SourceKind = 'nina' | 'dwd' | 'nws' | 'rss' | 'presseportal' | 'owm' | 'manual';
 
 export type Language = 'de' | 'en';
+
+export type Hazard = 'heat';
 
 /** A raw item as it arrives from a source, before the AI pipeline touches it. */
 export interface SourceItem {
@@ -22,6 +25,12 @@ export interface SourceItem {
   language?: Language;
   /** The polled feed this item came from (e.g. 'nws:CA'); see RiskEvent.feedKeys. */
   feedKey?: string;
+  /** Machine-generated, already structured items (e.g. heat from a forecast): mapped directly, no model. */
+  structured?: boolean;
+  /** A specific hazard within the category, for the recommended action (e.g. heat within weather). */
+  hazard?: Hazard;
+  /** ISO country (countries.ts) — decides emergency numbers and units. Missing = inferred from language. */
+  country?: CountryCode;
   /** Official warning systems (NINA/MoWaS, DWD via NINA). Official levels override the model. */
   official: boolean;
   title: string;
@@ -99,6 +108,10 @@ export interface RiskEvent {
   feedKeys?: string[];
   /** Bumped when severity rises or a new source changes the event, so users get an update. */
   revision: number;
+  /** Specific hazard (e.g. heat), for the recommended action. */
+  hazard?: Hazard;
+  /** ISO country (countries.ts) — decides emergency numbers and units. Missing = inferred from language. */
+  country?: CountryCode;
 }
 
 export interface AlertCopy {

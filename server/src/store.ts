@@ -1,3 +1,4 @@
+import type { PushTicket } from './push.js';
 import type {
   Alert, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
 } from './types.js';
@@ -8,6 +9,27 @@ export const SCHEDULED_LOOKBACK_H = 24 * 14;
 export interface Area { lat: number; lon: number; radiusM: number }
 export interface UserWithPlaces { user: User; places: SavedPlace[] }
 
+/** One push waiting in the delivery queue: the message itself, so sending needs no lookups. */
+export interface PushJob { id: string; token: string; alert: Alert; attempt: number; createdAt: string }
+
+/** A push ticket as stored: status of one push to one device. */
+export interface StoredPushTicket {
+  ticketId: string;
+  alertId: string;
+  userId: string;
+  token: string;
+  /** 0 for the first send, 1+ for resends after a transient error. */
+  attempt: number;
+  createdAt: string;
+}
+
+/** pending = accepted by Expo, receipt not checked yet; retried = resent after a transient error. */
+export type PushStatus = 'pending' | 'delivered' | 'error' | 'retried' | 'unknown';
+
+export interface Account { id: string; email: string; userId: string; createdAt: string }
+
+export interface EmailCode { email: string; codeHash: string; expiresAt: string; attempts: number; sends: number; windowStart: string }
+
 export interface Metrics {
   alerts: number;
   pushed: number;
@@ -17,6 +39,8 @@ export interface Metrics {
   beyondNinaRate: number | null;
   pushesPerUserPerDay: number;
   pendingReview: number;
+  /** Push receipts in the period: delivered to Apple/Google, failed, or not checked yet. */
+  pushDelivery?: { delivered: number; failed: number; pending: number };
 }
 
 /**
@@ -47,6 +71,12 @@ export interface Store {
    * A superset is allowed (the pipeline's `match` makes the final call); missing a user is not.
    */
   usersNear(area: Area, bufferM: number, now: Date): Promise<UserWithPlaces[]>;
+  /**
+   * Grid cells (centre of a `stepDeg` square) that contain a saved place or a current location
+   * (updated since `freshSinceIso`). Used to ask weather services about areas, never about a person's
+   * exact place: many people share one cell.
+   */
+  locationCells(stepDeg: number, freshSinceIso: string): Promise<Array<{ lat: number; lon: number }>>;
 
   // source items
   /** Returns true if the item is new (not seen before). */
@@ -91,10 +121,62 @@ export interface Store {
   /** KPIs from PRD Section 13: relevance, beyond-NINA, alerts per user per day. */
   metrics(sinceIso: string): Promise<Metrics>;
 
+  // push delivery (receipts)
+  /** Stores one row per push; `attempt` counts resends. */
+  recordPushTickets(tickets: PushTicket[], attempt: number, atIso: string): Promise<void>;
+  /** Pending tickets (with an Expo ticket id) sent before `sentBeforeIso`, oldest first. */
+  pushTicketsToCheck(sentBeforeIso: string, limit: number): Promise<StoredPushTicket[]>;
+  setPushStatus(ticketId: string, status: PushStatus, error?: string | null): Promise<void>;
+  /** A device that uninstalled the app: forget its push token. Returns how many users had it. */
+  clearPushToken(token: string): Promise<number>;
+
+  // accounts (sign-in). A user is the person's data (prefs, places, alerts); devices are the
+  // sign-ins (bearer tokens). An anonymous user has one device; an account can have several.
+  accountForUser(userId: string): Promise<Account | null>;
+  accountByEmail(email: string): Promise<Account | null>;
+  createAccount(email: string, userId: string): Promise<Account>;
+  /** Points this device token at another user (signing in on a phone that already has an account elsewhere). */
+  moveDevice(token: string, toUserId: string): Promise<void>;
+  /** Removes one device token (signing out); the user and other devices stay. */
+  removeDevice(token: string): Promise<void>;
+  deviceCount(userId: string): Promise<number>;
+  /** Moves saved places (skipping duplicates) from one user to another, then deletes the first. */
+  mergeUserInto(fromUserId: string, toUserId: string): Promise<void>;
+  saveEmailCode(c: EmailCode): Promise<void>;
+  emailCode(email: string): Promise<EmailCode | null>;
+  deleteEmailCode(email: string): Promise<void>;
+
+  // delivery queue (pipeline/run.ts → drainPushQueue). Matching writes jobs; senders claim batches.
+  enqueuePushJobs(jobs: Array<{ token: string; alert: Alert; attempt: number }>, atIso: string): Promise<void>;
+  /**
+   * Claims up to `limit` jobs, oldest first, for `holder` until `lockUntilIso`. Jobs claimed by a
+   * sender that died become claimable again once their lock runs out. Two concurrent claims never
+   * get the same job (Postgres: FOR UPDATE SKIP LOCKED).
+   */
+  claimPushJobs(holder: string, limit: number, nowIso: string, lockUntilIso: string): Promise<PushJob[]>;
+  /** Sent (or refused for good): remove from the queue. */
+  completePushJobs(ids: string[]): Promise<void>;
+  pushQueueDepth(): Promise<number>;
+
+  // leases (one worker at a time across machines; see roles.ts)
+  /**
+   * Takes or renews the lease `name` for `holder` until now + ttlMs. True when `holder` holds it
+   * afterwards: it was free, expired, or already this holder's. Atomic across processes.
+   */
+  acquireLease(name: string, holder: string, ttlMs: number, now?: Date): Promise<boolean>;
+  /** Gives the lease up early (clean shutdown), so another worker can take over at once. */
+  releaseLease(name: string, holder: string): Promise<void>;
+
   close(): Promise<void>;
 }
 
 /** Shared by both implementations so the numbers can't drift apart. */
+/** Centre of the grid cell containing a point (also used to build the cell list in both stores). */
+export function cellOf(lat: number, lon: number, stepDeg: number) {
+  const c = (x: number) => Math.round((Math.floor(x / stepDeg) * stepDeg + stepDeg / 2) * 1e6) / 1e6;
+  return { lat: c(lat), lon: c(lon) };
+}
+
 export function computeMetrics(
   rows: Array<{ alert: Alert; delivery: string; feedback: string | null }>,
   sinceIso: string,
