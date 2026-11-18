@@ -29,7 +29,8 @@ export interface ApiDeps {
 
 export function buildApi({ store, pipeline, adminToken, runIngest, errorSink = stderrSink }: ApiDeps) {
   const app = Fastify({ logger: false });
-  app.register(cors, { origin: true });
+  // Any origin may call the API: it uses bearer tokens, never cookies. The web app needs PUT and DELETE too.
+  app.register(cors, { origin: true, methods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE'] });
 
   app.setErrorHandler((err, req, reply) => {
     if (err instanceof z.ZodError) return reply.code(400).send({ error: 'invalid_request', details: err.issues });
