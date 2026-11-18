@@ -15,7 +15,8 @@ Items that need accounts or keys (Firebase, RevenueCat or App Store products, Ap
 - [ ] **Managed Postgres in production** [10.4]: a one-off SQLite → Postgres copy script (users, devices, accounts, places, events, alerts, tickets), a runbook, and `DATABASE_URL` on Fly. Needs Flori's choice of provider (see CHANGELOG → Open questions).
 - [x] **API and worker roles + leader** [10.4]: `ROLE=api|worker|all` (default `all`), a worker lease in the database (takeover when the holder dies, handover on clean stop), role and lease on `/health`. Tests with 8 racing workers: one wins. (2026-11-18; Fly process groups follow with managed Postgres, see ARCHITECTURE §8.)
 - [ ] **Delivery queue** [6.2 step 9]: a Postgres job table (`FOR UPDATE SKIP LOCKED`) between matching and push; workers send in parallel with retries; queue depth on `/health`. Load test: 100k matched users for one event.
-- [ ] **Country packs** [8.1]: per-country config (sources, emergency numbers, advice, language, units) instead of hard-coded DE/US; `COUNTRIES` setting; together with "Source registry + health".
+- [x] **Country packs, part 1** [8.1]: `server/src/countries.ts` with DE, AT, CH, US (language, emergency/police/medical numbers, units); every source tags its items with a country, events keep it, and the recommended actions name that country's numbers. (2026-11-18)
+- [ ] **Country packs, part 2** [8.1]: `COUNTRIES=DE,AT` setting that switches each country's sources on (with "Source registry + health"); first non-German sources for Austria (e.g. Austrian warnings via the EU-Alert/CAP feeds) once Flori picks the next country.
 - [ ] **Observability** [13]: Prometheus-style metrics endpoint (event-to-push latency, source lag, queue depth, push delivery), error tracking (Sentry, EU), uptime checks.
 - [ ] **Staging and release channels** [10.4]: staging Fly app and database, Vercel previews against staging, EAS Update channels (preview/production), documented secrets.
 

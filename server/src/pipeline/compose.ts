@@ -1,3 +1,4 @@
+import { packFor } from '../countries.js';
 import { z } from 'zod';
 import type { AlertCopy, Language, RiskEvent } from '../types.js';
 import type { StructuredLLM } from '../llm.js';
@@ -24,7 +25,7 @@ Hard rules:
 /** Write and verify alert copy for an event. Falls back to a template built from source text. */
 export async function compose(event: RiskEvent, llm: StructuredLLM): Promise<AlertCopy & { isTemplate: boolean }> {
   const language = event.language ?? 'de';
-  const action = recommendedAction(event.category, event.severity, language, event.hazard);
+  const action = recommendedAction(event.category, event.severity, language, event.hazard, packFor(event));
   if (llm.enabled) {
     let feedback = '';
     for (let attempt = 0; attempt < 2; attempt++) {

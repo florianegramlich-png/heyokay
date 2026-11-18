@@ -10,6 +10,7 @@ import { embeddingText, type Embedder } from '../embeddings.js';
 import { compose } from './compose.js';
 import { decide, inQuietHours, match } from './rank.js';
 import { LIFECYCLE, recommendedAction } from './guidance.js';
+import { packFor } from '../countries.js';
 
 export interface PipelineDeps {
   store: Store;
@@ -377,7 +378,7 @@ export class Pipeline {
     event.copyTitle = input.title.slice(0, 50);
     event.copyBody = input.body.slice(0, 100);
     event.copyIsTemplate = true;
-    event.copyAction = recommendedAction(event.category, event.severity, event.language);
+    event.copyAction = recommendedAction(event.category, event.severity, event.language, undefined, packFor(event));
     await this.d.store.saveEvent(event);
     const out = await this.deliver(event);
     return { eventId: event.id, ...out };

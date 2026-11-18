@@ -1,3 +1,4 @@
+import type { CountryCode } from './countries.js';
 // Shared domain types. app/src/lib/types.ts mirrors the client-facing parts — keep them in sync.
 
 export const CATEGORIES = ['weather', 'crime', 'transit', 'public_safety', 'health', 'infrastructure'] as const;
@@ -28,6 +29,8 @@ export interface SourceItem {
   structured?: boolean;
   /** A specific hazard within the category, for the recommended action (e.g. heat within weather). */
   hazard?: Hazard;
+  /** ISO country (countries.ts) — decides emergency numbers and units. Missing = inferred from language. */
+  country?: CountryCode;
   /** Official warning systems (NINA/MoWaS, DWD via NINA). Official levels override the model. */
   official: boolean;
   title: string;
@@ -107,6 +110,8 @@ export interface RiskEvent {
   revision: number;
   /** Specific hazard (e.g. heat), for the recommended action. */
   hazard?: Hazard;
+  /** ISO country (countries.ts) — decides emergency numbers and units. Missing = inferred from language. */
+  country?: CountryCode;
 }
 
 export interface AlertCopy {

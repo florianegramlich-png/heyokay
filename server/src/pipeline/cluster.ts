@@ -1,3 +1,4 @@
+import { packFor } from '../countries.js';
 import { randomUUID } from 'node:crypto';
 import type { EventStatus, ExtractedEvent, RiskEvent, SourceItem } from '../types.js';
 import { distanceM } from '../geo.js';
@@ -65,6 +66,7 @@ export function newEvent(ext: ExtractedEvent, item: SourceItem, status: EventSta
     copyTitle: null, copyBody: null, copyAction: null, copyIsTemplate: false,
     language: item.language ?? 'de',
     ...(item.hazard ? { hazard: item.hazard } : {}),
+    country: packFor(item).code,
     ...(item.feedKey ? { feedKeys: [item.feedKey] } : {}),
     createdAt: now.toISOString(), updatedAt: now.toISOString(), revision: 1,
   };

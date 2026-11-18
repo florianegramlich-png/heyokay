@@ -75,6 +75,7 @@ export function toSourceItem(f: NwsFeature, zoneShapes: Map<string, Geometry>): 
     references: (p.references ?? []).map((r) => r.identifier),
     official: true,
     language: 'en',
+    country: 'US',
     title: cleanHeadline(p.headline, p.event),
     body: [p.description, p.instruction].filter(Boolean).join('\n\n').trim(),
     url: `https://forecast.weather.gov/MapClick.php?lat=${circle.lat.toFixed(4)}&lon=${circle.lon.toFixed(4)}`,
