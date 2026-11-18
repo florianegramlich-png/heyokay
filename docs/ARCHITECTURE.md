@@ -129,6 +129,7 @@ Health: `GET /health` (per-source status, no error texts). CORS: any origin, bea
 | `GEOCODER_URL`, `GEOCODER_USER_AGENT` | Nominatim | Geocoding |
 | `EXPO_PUSH_URL` | Expo | Push endpoint |
 | `EXPO_ACCESS_TOKEN` | – | Only if Expo "enhanced push security" is on |
+| `DATABASE_SCHEMA` | – | Postgres schema for our tables; `heyokay` on Supabase (keeps them off Supabase's public Data API) |
 | `ROLE` | `all` | `api`, `worker` or `all` (see Roles). Separate roles need `DATABASE_URL` |
 | `MATCH_BUFFER_M` | 1500 | Buffer around an event for current locations |
 | `REVIEW_CONFIDENCE`, `REVIEW_SEVERITY` | 0.6, 4 | Alert Desk thresholds |
@@ -156,7 +157,7 @@ Target, in this order (each is a roadmap item under "Scale foundation"):
 
 | # | Step | Why | Unlocks |
 |---|---|---|---|
-| 1 | **Managed Postgres** (PostGIS + pgvector) in Frankfurt; switch `DATABASE_URL`, migrate the SQLite data once | The code already runs on Postgres; the disk-bound SQLite is the one thing that keeps us on a single machine | Backups, point-in-time restore, more machines |
+| 1 | 🟡 **Managed Postgres: Supabase** (Flori, 2026-11-18; copy tool and runbook ready: `docs/runbooks/supabase-postgres.md`) (PostGIS + pgvector) in Frankfurt; switch `DATABASE_URL`, migrate the SQLite data once | The code already runs on Postgres; the disk-bound SQLite is the one thing that keeps us on a single machine | Backups, point-in-time restore, more machines |
 | 2 | ✅ **API and worker roles** (built 2026-11-18) (`ROLE=api` / `worker`) plus a worker lease in the database, so exactly one worker polls and sends at a time, with automatic takeover | Several API machines behind Fly's load balancer; one worker never double-sends | Horizontal API scaling, zero-downtime deploys |
 | 3 | **Delivery queue** in Postgres (`FOR UPDATE SKIP LOCKED`): matching writes jobs, workers send pushes in parallel with retries | A severe warning for a big city means hundreds of thousands of pushes in minutes | Several workers sharing the load |
 | 4 | 🟡 **Country packs** (part 1 built 2026-11-18: packs, country tags, numbers in advice): sources, emergency numbers, advice, language and units per country (`COUNTRIES=DE,AT,CH`), source registry with health | Today Germany and the US test are wired in code (112/110, 911) | New country = config + source adapters |
