@@ -3,7 +3,7 @@ import cors from '@fastify/cors';
 import { z } from 'zod';
 import type { Store } from './store.js';
 import type { Pipeline } from './pipeline/run.js';
-import { CATEGORIES, DEFAULT_PREFS, type User } from './types.js';
+import { CATEGORIES, DEFAULT_PREFS, stampConsent, type User } from './types.js';
 import { DESK_HTML } from './desk.js';
 import { sourceReport } from './sources/registry.js';
 import { MAX_PLACE_RADIUS_M } from './geo.js';
@@ -17,6 +17,7 @@ const PrefsSchema = z.object({
   dailyLimit: z.number().int().min(1).max(20),
   timezone: z.string(),
   language: z.enum(['de', 'en']),
+  insightsConsent: z.boolean(),
 }).partial();
 
 const Coord = { lat: z.number().min(-90).max(90), lon: z.number().min(-180).max(180) };
@@ -33,12 +34,14 @@ export interface ApiDeps {
   /** Role and worker-lease state for /health (multi-machine setups). */
   /** For source health on the Alert Desk (stale after 3 intervals). */
   pollIntervalSec?: number;
+  /** Daily AI budget, shown next to the spend on the Alert Desk. */
+  aiBudgetEur?: number;
   roleStatus?: () => Record<string, unknown> | Promise<Record<string, unknown>>;
   /** Where unexpected errors are logged (default: JSON lines on stderr). */
   errorSink?: ErrorSink;
 }
 
-export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus, roleStatus, pollIntervalSec = 120, mailer = null, errorSink = defaultSink }: ApiDeps) {
+export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus, roleStatus, pollIntervalSec = 120, aiBudgetEur = 0, mailer = null, errorSink = defaultSink }: ApiDeps) {
   const app = Fastify({ logger: false });
   // Request metrics by route pattern (never the URL itself: no ids or tokens in labels).
   app.addHook('onResponse', async (req, reply) => {
@@ -83,7 +86,7 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
   // ── device / user ────────────────────────────────────────────────────────
   app.post('/v1/devices', async (req) => {
     const body = z.object({ pushToken: z.string().nullable().optional(), prefs: PrefsSchema.optional() }).parse(req.body ?? {});
-    const { user, token } = await store.createUser(body.pushToken ?? null, body.prefs);
+    const { user, token } = await store.createUser(body.pushToken ?? null, stampConsent(null, { ...DEFAULT_PREFS, ...body.prefs }));
     return { userId: user.id, token, prefs: user.prefs };
   });
 
@@ -95,7 +98,7 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
 
   app.put('/v1/me/prefs', async (req, reply) => {
     const u = await authed(req, reply); if (!u) return;
-    const prefs = { ...DEFAULT_PREFS, ...u.prefs, ...PrefsSchema.parse(req.body) };
+    const prefs = stampConsent(u.prefs, { ...DEFAULT_PREFS, ...u.prefs, ...PrefsSchema.parse(req.body) });
     await store.updatePrefs(u.id, prefs);
     return { prefs };
   });
@@ -264,6 +267,22 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
   app.get('/admin/api/sources', async (req, reply) => {
     if (!admin(req, reply)) return;
     return { sources: sourceReport(await store.sourceStatuses(), pollIntervalSec) };
+  });
+
+  app.get('/admin/api/ai-usage', async (req, reply) => {
+    if (!admin(req, reply)) return;
+    const from = new Date(Date.now() - 29 * 86_400_000).toISOString().slice(0, 10);
+    const days = await store.llmUsage(from);
+    const today = new Date().toISOString().slice(0, 10);
+    const total = days.reduce((s, d) => s + d.eur, 0);
+    const users = (await store.allUsers()).length;
+    return {
+      budgetEur: aiBudgetEur,
+      today: days.find((d) => d.day === today) ?? { day: today, calls: 0, inputTokens: 0, outputTokens: 0, eur: 0, skipped: 0 },
+      last30Eur: Math.round(total * 100) / 100,
+      perUser30dEur: users ? Math.round((total / users) * 10_000) / 10_000 : null,
+      days,
+    };
   });
 
   app.get('/admin/api/metrics', async (req, reply) => {

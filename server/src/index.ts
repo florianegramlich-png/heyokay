@@ -1,6 +1,7 @@
 import { loadConfig } from './config.js';
 import { createStore, storeKind } from './create-store.js';
 import { AnthropicLLM } from './llm.js';
+import { BudgetedLLM } from './llm-budget.js';
 import { NominatimGeocoder, GazetteerGeocoder } from './geocode.js';
 import { ExpoPushSender } from './push.js';
 import { Pipeline } from './pipeline/run.js';
@@ -34,7 +35,9 @@ if (process.env.NODE_ENV === 'production' && config.adminToken === 'change-me') 
   process.exit(1);
 }
 const store = await createStore(config);
-const llm = new AnthropicLLM(config.anthropicApiKey, config.model);
+const llm = new BudgetedLLM(new AnthropicLLM(config.anthropicApiKey, config.model), store, {
+  dailyBudgetEur: config.llmDailyBudgetEur, priceInPerMTok: config.llmPriceInPerMTok, priceOutPerMTok: config.llmPriceOutPerMTok,
+});
 const geocoder = config.geocoderUrl ? new NominatimGeocoder(config.geocoderUrl, config.geocoderUserAgent) : new GazetteerGeocoder();
 const embedder = createEmbedder(config);
 const pipeline = new Pipeline({ store, llm, geocoder, embedder, push: new ExpoPushSender(config.expoPushUrl, { accessToken: config.expoAccessToken }), config,
@@ -141,7 +144,7 @@ const roleStatus = async () => ({
 const mailer = config.resendApiKey && config.mailFrom ? new ResendMailer(config.resendApiKey, config.mailFrom) : null;
 let app;
 if (runsApi(config.role)) {
-  app = buildApi({ store, pipeline, adminToken: config.adminToken, runIngest, ingestStatus: worker ? () => scheduler.snapshot() : undefined, roleStatus, mailer, pollIntervalSec: config.pollIntervalSec });
+  app = buildApi({ store, pipeline, adminToken: config.adminToken, runIngest, ingestStatus: worker ? () => scheduler.snapshot() : undefined, roleStatus, mailer, pollIntervalSec: config.pollIntervalSec, aiBudgetEur: config.llmDailyBudgetEur });
 } else {
   // Worker only: no public routes, just the health check the platform polls.
   app = Fastify({ logger: false });

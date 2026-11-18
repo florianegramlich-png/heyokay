@@ -55,6 +55,10 @@ export interface Config {
   expoAccessToken: string | null;
   /** api: HTTP only · worker: ingest + push only · all: both (default, one machine). */
   role: Role;
+  /** AI cost guard: daily cap in EUR (0 = off) and prices per million tokens. */
+  llmDailyBudgetEur: number;
+  llmPriceInPerMTok: number;
+  llmPriceOutPerMTok: number;
   /** FEMA IPAWS public feed (US). "off" or a URL override via IPAWS_URL. */
   ipaws: string | null;
   /** NDMA SACHET RSS (India). "off" or a URL override via SACHET_RSS_URL. */
@@ -112,6 +116,9 @@ export function loadConfig(env = process.env): Config {
     expoPushUrl: env.EXPO_PUSH_URL ?? 'https://exp.host/--/api/v2/push/send',
     expoAccessToken: env.EXPO_ACCESS_TOKEN || null,
     role: parseRole(env.ROLE),
+    llmDailyBudgetEur: Number(env.LLM_DAILY_BUDGET_EUR ?? 5),
+    llmPriceInPerMTok: Number(env.LLM_PRICE_IN_EUR_PER_MTOK ?? 1),
+    llmPriceOutPerMTok: Number(env.LLM_PRICE_OUT_EUR_PER_MTOK ?? 5),
     ipaws: /^off$/i.test(env.IPAWS_URL ?? '') ? null : (env.IPAWS_URL || IPAWS_URL),
     sachet: /^off$/i.test(env.SACHET_RSS_URL ?? '') ? null : (env.SACHET_RSS_URL || SACHET_RSS_URL),
     statusPages: parseStatusPages(env.STATUS_PAGES),

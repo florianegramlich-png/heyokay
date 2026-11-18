@@ -6,6 +6,10 @@
 
 ## 2026-11-18
 
+- **AI cost guard** [PRD 6.6]. `server/src/llm-budget.ts` wraps the model. Every call is priced from its token counts (`LLM_PRICE_IN_EUR_PER_MTOK`, default €1; `LLM_PRICE_OUT_EUR_PER_MTOK`, default €5; set them to the contract price) and added to today's spend in the database (`llm_usage`; Postgres migration 10), so all machines share one budget. Above `LLM_DAILY_BUDGET_EUR` (default €5/day) calls are skipped and alerts use the existing templates. At 80% one warning goes to the error log, and to Sentry once it's set up. Alert Desk: AI spend today vs budget, calls (and how many were over budget), last 30 days, per user. Prometheus: `heyokay_llm_spend_eur_today`, `heyokay_llm_calls_total`. Also: Postgres sessions now set the schema in the pool's `onConnect` hook, which fixes a node-postgres deprecation warning.
+- **Data-insights consent** [PRD 5.5, Decision 25]. An optional switch "Support safety insights", off by default, on the last onboarding screen and under Settings → Privacy, in app and web. The server records when it changed (`insightsConsent`, `insightsConsentAt`). The text says plainly that nothing is shared yet.
+- **US sources part 2 (a California city police/fire feed)** skipped: it needs a feed with clear terms and a live format check, which this sandbox can't do.
+- Verified: server 241/241 on SQLite + Postgres (8 new), web 10/10, app and web typecheck clean.
 - **Language dropdown, English by default** (Flori: "a better solution for language. A language dropdown, English default for now").
   - App: new `LanguagePicker` (shows the current language; tapping opens a list with a checkmark) in onboarding and Settings, replacing the "Deutsch · English" switch and buttons. Web: `LanguageSelect`, a native `<select>`, in the header and Settings, replacing the toggle.
   - One list of languages (`LANGUAGES`, each named in its own language) in app and web, so adding Hindi later is one entry plus its strings.

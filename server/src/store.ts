@@ -31,6 +31,8 @@ export interface Account { id: string; email: string; userId: string; createdAt:
 
 export interface EmailCode { email: string; codeHash: string; expiresAt: string; attempts: number; sends: number; windowStart: string }
 
+export interface LlmUsageDay { day: string; calls: number; inputTokens: number; outputTokens: number; eur: number; skipped: number }
+
 export interface Metrics {
   alerts: number;
   pushed: number;
@@ -162,6 +164,10 @@ export interface Store {
   // source health, written by the worker after each poll, read by any API machine (Alert Desk)
   saveSourceStatuses(statuses: Record<string, SourceStatus>): Promise<void>;
   sourceStatuses(): Promise<Record<string, SourceStatus>>;
+
+  // AI spend per UTC day (llm-budget.ts), shared by all machines
+  addLlmUsage(day: string, u: { calls: number; inputTokens: number; outputTokens: number; eur: number; skipped: number }): Promise<void>;
+  llmUsage(fromDay: string): Promise<LlmUsageDay[]>;
 
   // leases (one worker at a time across machines; see roles.ts)
   /**

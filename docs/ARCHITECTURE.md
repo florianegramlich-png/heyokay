@@ -2,7 +2,7 @@
 
 Living document. The build agent updates it whenever a component, source, integration or setting changes (see `AGENT.md`). A copy lives in the Claude project "Hey Okey" (`claude/architecture.md`).
 
-Last updated: 2026-11-18 (India pack + SACHET, FEMA IPAWS; technology outages US; scaling plan; worker roles; country packs; Supabase; delivery queue; source registry; observability; staging + EAS Update).
+Last updated: 2026-11-18 (AI cost guard, insights consent, language dropdown; India pack + SACHET, FEMA IPAWS; technology outages US; scaling plan; worker roles; country packs; Supabase; delivery queue; source registry; observability; staging + EAS Update).
 
 ## 1. System overview
 
@@ -51,7 +51,7 @@ Live URLs: API `https://heyokay.fly.dev` (health: `/health`, Alert Desk: `/admin
 ### Storage (`store.ts`, `db.ts`, `pg.ts`)
 
 - `Store` interface with two implementations: `SqliteStore` (tests, demo, production today on the Fly volume `/data/heyokay.db`) and `PgStore` (used when `DATABASE_URL` is set; numbered migrations under an advisory lock; PostGIS for matching, pgvector for embeddings).
-- Tables: `users` (a person's data: prefs, last location only, push token), `devices` (hashed bearer tokens; several per signed-in person), `accounts` (email, one per user), `email_codes` (hashed sign-in codes), `saved_places`, `source_items`, `events` (+ `event_embeddings`), `alerts`, `push_tickets` (delivery status per push), `leases` (which worker runs ingest and push), `push_jobs` (delivery queue), `source_status` (per-source health written by the worker).
+- Tables: `users` (a person's data: prefs, last location only, push token), `devices` (hashed bearer tokens; several per signed-in person), `accounts` (email, one per user), `email_codes` (hashed sign-in codes), `saved_places`, `source_items`, `events` (+ `event_embeddings`), `alerts`, `push_tickets` (delivery status per push), `leases` (which worker runs ingest and push), `push_jobs` (delivery queue), `source_status` (per-source health written by the worker), `llm_usage` (AI spend per day).
 - Privacy by design: only the latest location (rounded ~100 m on the device), no history; device tokens hashed; `DELETE /v1/me` erases everything; the model never sees user data.
 
 ### Countries (`countries.ts`)
@@ -134,6 +134,8 @@ Health: `GET /health` (per-source status, no error texts). CORS: any origin, bea
 | `EXPO_ACCESS_TOKEN` | – | Only if Expo "enhanced push security" is on |
 | `DATABASE_SCHEMA` | – | Postgres schema for our tables; `heyokay` on Supabase (keeps them off Supabase's public Data API) |
 | `IPAWS_URL` / `SACHET_RSS_URL` | built-in | Override or `off` for the US and India official feeds |
+| `LLM_DAILY_BUDGET_EUR` | `5` | AI spend cap per UTC day (0 = off); above it templates are used |
+| `LLM_PRICE_IN_EUR_PER_MTOK` / `LLM_PRICE_OUT_EUR_PER_MTOK` | `1` / `5` | Model prices for the cost guard; set to the contract price |
 | `STATUS_PAGES` | US list | Status pages for technology outages (JSON array of `{key,name,url,country,kind}`) or `off` |
 | `COUNTRIES` | all | Countries whose sources run, e.g. `DE,AT` (registry in `sources/registry.ts`) |
 | `METRICS_PORT` | `9091` | Internal Prometheus port (0 = off) |

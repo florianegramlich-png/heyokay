@@ -4,7 +4,7 @@ import type {
   Alert, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
 } from './types.js';
 import { DEFAULT_PREFS, normalizePrefs, savedPrefs } from './types.js';
-import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob } from './store.js';
+import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob, type LlmUsageDay } from './store.js';
 import type { PushTicket } from './push.js';
 import type { SourceStatus } from './ingest.js';
 import { distanceM, LOCATION_MAX_AGE_MS } from './geo.js';
@@ -79,6 +79,7 @@ export class SqliteStore implements Store {
       );
       CREATE INDEX IF NOT EXISTS push_jobs_order ON push_jobs(created_at);
       CREATE TABLE IF NOT EXISTS source_status (key TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS llm_usage (day TEXT PRIMARY KEY, calls INTEGER NOT NULL, input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL, eur REAL NOT NULL, skipped INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS leases (name TEXT PRIMARY KEY, holder TEXT NOT NULL, expires_at TEXT NOT NULL);
       -- Users from before devices existed sign in with their original token.
       INSERT OR IGNORE INTO devices (token_hash, user_id, created_at) SELECT token_hash, id, created_at FROM users;
@@ -428,6 +429,20 @@ export class SqliteStore implements Store {
 
   async sourceStatuses(): Promise<Record<string, SourceStatus>> {
     return Object.fromEntries((this.db.prepare(`SELECT key, data FROM source_status`).all() as any[]).map((r) => [r.key, JSON.parse(r.data)]));
+  }
+
+  // ── AI spend ─────────────────────────────────────────────────────────────
+  async addLlmUsage(day: string, u: { calls: number; inputTokens: number; outputTokens: number; eur: number; skipped: number }): Promise<void> {
+    this.db.prepare(`
+      INSERT INTO llm_usage (day, calls, input_tokens, output_tokens, eur, skipped) VALUES (?,?,?,?,?,?)
+      ON CONFLICT (day) DO UPDATE SET calls = calls + excluded.calls, input_tokens = input_tokens + excluded.input_tokens,
+        output_tokens = output_tokens + excluded.output_tokens, eur = eur + excluded.eur, skipped = skipped + excluded.skipped`)
+      .run(day, u.calls, u.inputTokens, u.outputTokens, u.eur, u.skipped);
+  }
+
+  async llmUsage(fromDay: string): Promise<LlmUsageDay[]> {
+    return (this.db.prepare(`SELECT * FROM llm_usage WHERE day >= ? ORDER BY day`).all(fromDay) as any[])
+      .map((r) => ({ day: r.day, calls: r.calls, inputTokens: r.input_tokens, outputTokens: r.output_tokens, eur: r.eur, skipped: r.skipped }));
   }
 
   // ── leases ───────────────────────────────────────────────────────────────

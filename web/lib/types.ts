@@ -16,6 +16,9 @@ export interface UserPrefs {
   dailyLimit: number;
   timezone: string;
   language: 'de' | 'en';
+  /** Optional: aggregated, anonymous safety insights. Off by default. */
+  insightsConsent?: boolean;
+  insightsConsentAt?: string | null;
 }
 
 export const DEFAULT_PREFS: UserPrefs = {

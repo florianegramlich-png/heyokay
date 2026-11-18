@@ -23,6 +23,7 @@ export default function Onboarding() {
   const router = useRouter();
   const { t, lang, categoryLabel, categoryHint } = useI18n();
   const [step, setStep] = useState<Step>('value');
+  const [insights, setInsights] = useState(false); // optional, off unless chosen
   const [coords, setCoords] = useState<{ lat: number; lon: number } | null>(null);
   const [locating, setLocating] = useState(false);
   const [categories, setCategories] = useState<Category[]>(DEFAULT_PREFS.categories);
@@ -43,7 +44,7 @@ export default function Onboarding() {
     setBusy(true); setError(false);
     try {
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Berlin';
-      const { token } = await api.register({ ...DEFAULT_PREFS, categories, language: lang, timezone });
+      const { token } = await api.register({ ...DEFAULT_PREFS, categories, language: lang, timezone, insightsConsent: insights });
       session.setToken(token);
       // First sync fills the feed with what's going on, without counting as alerts.
       if (coords) await api.sendLocation(coords.lat, coords.lon, true).catch(() => {});
@@ -107,6 +108,10 @@ export default function Onboarding() {
           <ShieldCheck className="h-8 w-8 text-emerald-400" aria-hidden />
           <h1 className="text-2xl font-semibold">{t('onb.consent.title')}</h1>
           <p className="text-muted-foreground">{t('onb.consent.text')}</p>
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border/50 p-3">
+            <Switch checked={insights} onCheckedChange={setInsights} aria-label={t('consent.insights.label')} />
+            <span><span className="block text-sm font-medium">{t('consent.insights.label')}</span><span className="block text-xs text-muted-foreground">{t('consent.insights.hint')}</span></span>
+          </label>
           {error && <p role="alert" className="text-sm text-orange-300">{t('onb.error')}</p>}
           <Button size="lg" className="w-full" onClick={finish} disabled={busy}>{busy ? t('onb.consent.busy') : t('onb.consent.cta')}</Button>
         </CardContent></Card>
