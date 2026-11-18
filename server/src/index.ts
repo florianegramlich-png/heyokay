@@ -8,6 +8,7 @@ import { fetchNinaChannel } from './sources/nina.js';
 import { fetchFeed } from './sources/rss.js';
 import { fetchAgency } from './sources/presseportal.js';
 import { fetchDwdSnapshot } from './sources/dwd.js';
+import { CELL_DEG, fetchHeat, owmFetcher } from './sources/heat.js';
 import { FEUERWEHR_BERLIN_AREA, fetchFeuerwehrBerlin } from './sources/feuerwehr-berlin.js';
 import { fetchNwsArea, nwsFetcher } from './sources/nws.js';
 import { buildApi } from './api.js';
@@ -47,6 +48,8 @@ function ninaDwdFailing(): boolean {
   return !s.lastOkAt || Date.now() - Date.parse(s.lastOkAt) > NINA_DWD_STALE_MS;
 }
 
+const heatChecked = new Map<string, number>();
+
 const tasks: SourceTask[] = [
   // Not a source, but runs on the same clock: delivery receipts for pushes sent 15+ minutes ago.
   { key: 'push:receipts', run: () => ingestLock.run(() => pipeline.checkPushReceipts()) },
@@ -72,6 +75,15 @@ const tasks: SourceTask[] = [
   ...(config.feuerwehrBerlin ? [{
     key: 'feuerwehr-berlin',
     run: async () => ingest(await fetchFeuerwehrBerlin(seen('rss')), FEUERWEHR_BERLIN_AREA),
+  }] : []),
+  ...(config.openWeatherApiKey ? [{
+    key: 'owm:heat',
+    run: async () => {
+      // Cells with a saved place or a location from the last 24 hours; each cell at most every 3 hours.
+      const cells = await store.locationCells(CELL_DEG, new Date(Date.now() - 24 * 3600_000).toISOString());
+      const r = await fetchHeat(cells, seen('owm'), owmFetcher(config.openWeatherApiKey!), { thresholdC: config.heatThresholdC, lastChecked: heatChecked });
+      return { cells: cells.length, checked: r.checked, ...(await ingest(r.items)) };
+    },
   }] : []),
   ...config.nwsAreas.map((area) => ({
     key: `nws:${area}`,

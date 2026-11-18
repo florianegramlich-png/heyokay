@@ -24,7 +24,7 @@ Hard rules:
 /** Write and verify alert copy for an event. Falls back to a template built from source text. */
 export async function compose(event: RiskEvent, llm: StructuredLLM): Promise<AlertCopy & { isTemplate: boolean }> {
   const language = event.language ?? 'de';
-  const action = recommendedAction(event.category, event.severity, language);
+  const action = recommendedAction(event.category, event.severity, language, event.hazard);
   if (llm.enabled) {
     let feedback = '';
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -53,6 +53,8 @@ export function template(event: RiskEvent): { title: string; body: string } {
   const src = [...event.sources].reverse().find((s) => s.official) ?? event.sources[0];
   const label = (event.language === 'en' ? CATEGORY_LABEL_EN : CATEGORY_LABEL_DE)[event.category];
   const srcTitle = src?.title || event.title;
+  // Heat from a forecast: our own grounded text already says what and how hot ("Hitze: bis 36 °C gefühlt").
+  if (event.hazard === 'heat') return { title: truncate(srcTitle, TITLE_MAX), body: truncate(event.summary || srcTitle, BODY_MAX) };
   // NWS lists several forecast zones ("San Francisco; Coastal North Bay; …"). Naming only the first
   // would mislead people in the others, so name the warning instead: "Weather: Wind Advisory".
   if (event.areaName.includes(';')) {

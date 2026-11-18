@@ -73,7 +73,7 @@ Health: `GET /health` (per-source status, no error texts). CORS: any origin, bea
 | Generic RSS/Atom | e.g. Polizei Berlin (berlin.de) | `sources/rss.ts` | Public | `RSS_FEEDS` (JSON) | |
 | Manual (Alert Desk) | Curated alerts | `pipeline/run.ts` | Admin token | — | Concierge pilot |
 | BVG / VBB | Transit disruptions | — | Not built | — | Needs VBB API access or BVG permission |
-| OpenWeatherMap | Heat at saved places | planned | Key | — | Roadmap |
+| OpenWeatherMap | Heat at saved places and current locations (5-day forecast) | `sources/heat.ts` | Free key | Off until `OPENWEATHER_API_KEY` | Grid cells (0.1°) only; felt ≥ 32/35/38 °C → 1/2/3 |
 
 ## 4. External services and integrations
 
@@ -90,6 +90,7 @@ Health: `GET /health` (per-source status, no error texts). CORS: any origin, bea
 | OS geocoder | Addresses for saved places (phone) | expo-location | Live | Address, on the device's provider |
 | Apple Maps / Google Maps | Map in alert detail | react-native-maps | Live | Map tiles |
 | Postgres + PostGIS + pgvector | Production DB option | `DATABASE_URL`, `server/docker-compose.yml` | Ready, not switched on | — |
+| OpenWeatherMap | Heat forecast | `OPENWEATHER_API_KEY`, `HEAT_THRESHOLD_C` | Built, waits for key | Grid-cell centres only (no person's place) |
 | Sign in with Apple, Google, email | Accounts | planned | Roadmap | — |
 | RevenueCat / App Store / Play | Subscriptions | planned | Decision 5 open | — |
 | OpenAI | Second LLM, failover | planned | Roadmap | — |
@@ -111,6 +112,7 @@ Health: `GET /health` (per-source status, no error texts). CORS: any origin, bea
 | `PRESSEPORTAL_AGENCIES` | all | `all` / `off` / agency keys |
 | `FEUERWEHR_BERLIN` | on | `off` to disable |
 | `RSS_FEEDS` | [] | JSON list of feeds |
+| `OPENWEATHER_API_KEY`, `HEAT_THRESHOLD_C` | –, 32 | Heat at people's places (off without key) |
 | `POLL_INTERVAL_SEC` | 120 | Ingest interval |
 | `GEOCODER_URL`, `GEOCODER_USER_AGENT` | Nominatim | Geocoding |
 | `EXPO_PUSH_URL` | Expo | Push endpoint |

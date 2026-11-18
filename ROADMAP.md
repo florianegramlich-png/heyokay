@@ -10,7 +10,6 @@ Items that need accounts or keys (Firebase, RevenueCat or App Store products, Ap
 
 ### Phase 1: launch blockers
 
-- [ ] **Source: heat at saved places** [5.4]: heat thresholds from OpenWeatherMap at users' saved places (for example "38 °C at your mother's address"), on top of DWD's official HITZE warnings, which already arrive via NINA and DWD direct. Needs an OpenWeatherMap key (see "Needs a human"). Fixtures and tests. *(Split from "DWD direct + heat", 2026-11-18.)*
 - [ ] **Sign-in** [5.3, 7.1]: Sign in with Apple, Google sign-in and email (magic link) on top of the anonymous device token. Link the existing device user to the account, and restore it on a new phone. Server: account table, verification of identity tokens, session tokens. Tests.
 - [ ] **Source: BVG/VBB disruptions** [5.4]: VBB/HAFAS disruption messages mapped to `transit` events, with stations geocoded. Fixtures and tests.
   - *Blocked 2026-11-18, needs Flori:* VBB's official API (HAFAS with disruption messages) needs an access agreement, and BVG's website uses an internal disruptions endpoint with no published terms, which the agent won't build on without permission. See CHANGELOG → Open questions.
@@ -67,7 +66,7 @@ Accounts and keys
 - Firebase project (Crashlytics, FCM): put `GoogleService-Info.plist` and `google-services.json` in `app/firebase/` (see its README), then make a new development build and confirm a test crash shows up in the console.
 - RevenueCat plus App Store / Play subscription products (€2.50; €4.99 family test).
 - Sign in with Apple capability, Google OAuth client IDs, an email sender for magic links.
-- Anthropic and OpenAI keys with EU residency and zero-retention terms and DPAs (Decision 12); Mistral data-retention settings for the embeddings key (key is set on Fly and the DPA applies automatically, 2026-11-18); OpenWeatherMap and VBB API access.
+- Anthropic and OpenAI keys with EU residency and zero-retention terms and DPAs (Decision 12); Mistral data-retention settings for the embeddings key (key is set on Fly and the DPA applies automatically, 2026-11-18); OpenWeatherMap key (free plan; `fly secrets set OPENWEATHER_API_KEY=…`) and VBB API access.
 - Hosting account (Fly.io or AWS in Frankfurt), managed Postgres, admin token.
 
 Decisions (PRD section 12) that the agent needs before the related item is final
@@ -86,6 +85,7 @@ Legal and partners
 
 ## Done
 
+- [x] 2026-11-18 **Source: heat at saved places** [5.4]: OpenWeatherMap 5-day forecast per 0.1° grid cell holding a saved place or current location (never an exact place), every 3 h; felt ≥ 32 / 35 / 38 °C → severity 1 / 2 / 3, same-day escalation merges; heat-specific advice; titles name the place ("Mama: Hitze: bis 37 °C gefühlt"). Off until `OPENWEATHER_API_KEY` is set. 10 tests (end to end per backend).
 - [x] 2026-11-18 **Notification actions** [5.3]: "👍 Relevant" / "👎 Nicht relevant" buttons on every alert push (category `alert`, not on all-clears), recorded without opening the app; Android background task, iOS response listener, offline queue; pushes grouped per incident (`threadId`). Needs a new development build to show the buttons.
 - [x] 2026-11-18 **Push receipts + retry** [5.4, 6.2 step 9]: Expo tickets stored per push (`push_tickets`), receipts checked 15 min later; `DeviceNotRegistered` clears the token (at send time too); transient errors resent up to twice; sends retry 429/5xx/network with backoff; delivery counts in the Alert Desk metrics. 7 tests per backend.
 - [x] 2026-11-18 **Web app** (Flori's request; not on the roadmap before): `web/`, a Next.js browser version in the look of Flori's v0 design, connected to the real API: Jetzt (current alerts by category, no risk scores), Verlauf, alert detail with feedback, settings (DE/EN, topics, quiet hours, limit, places, delete), onboarding. No push, payments or sign-in. Server CORS now allows PUT/DELETE. 10 web tests, CI job.

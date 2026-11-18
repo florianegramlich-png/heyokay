@@ -64,6 +64,12 @@ export interface Store {
    * A superset is allowed (the pipeline's `match` makes the final call); missing a user is not.
    */
   usersNear(area: Area, bufferM: number, now: Date): Promise<UserWithPlaces[]>;
+  /**
+   * Grid cells (centre of a `stepDeg` square) that contain a saved place or a current location
+   * (updated since `freshSinceIso`). Used to ask weather services about areas, never about a person's
+   * exact place: many people share one cell.
+   */
+  locationCells(stepDeg: number, freshSinceIso: string): Promise<Array<{ lat: number; lon: number }>>;
 
   // source items
   /** Returns true if the item is new (not seen before). */
@@ -121,6 +127,12 @@ export interface Store {
 }
 
 /** Shared by both implementations so the numbers can't drift apart. */
+/** Centre of the grid cell containing a point (also used to build the cell list in both stores). */
+export function cellOf(lat: number, lon: number, stepDeg: number) {
+  const c = (x: number) => Math.round((Math.floor(x / stepDeg) * stepDeg + stepDeg / 2) * 1e6) / 1e6;
+  return { lat: c(lat), lon: c(lon) };
+}
+
 export function computeMetrics(
   rows: Array<{ alert: Alert; delivery: string; feedback: string | null }>,
   sinceIso: string,

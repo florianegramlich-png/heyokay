@@ -6,7 +6,7 @@ import type {
 import { DEFAULT_PREFS } from './types.js';
 import { hashToken } from './db.js';
 import { LOCATION_MAX_AGE_MS, MAX_PLACE_RADIUS_M } from './geo.js';
-import { SCHEDULED_LOOKBACK_H, computeMetrics, type Area, type Metrics, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces } from './store.js';
+import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces } from './store.js';
 import type { PushTicket } from './push.js';
 
 /**
@@ -266,6 +266,15 @@ export class PgStore implements Store {
       byUser.set(r.user_id, [...(byUser.get(r.user_id) ?? []), { id: r.id, userId: r.user_id, label: r.label, lat: r.lat, lon: r.lon, radiusM: r.radius_m }]);
     }
     return users.map((user) => ({ user, places: byUser.get(user.id) ?? [] }));
+  }
+
+  async locationCells(stepDeg: number, freshSinceIso: string): Promise<Array<{ lat: number; lon: number }>> {
+    const { rows } = await this.q(`
+      SELECT DISTINCT floor(lat / $1::float8) AS y, floor(lon / $1::float8) AS x FROM (
+        SELECT lat, lon FROM saved_places
+        UNION ALL SELECT lat, lon FROM users WHERE lat IS NOT NULL AND location_updated_at >= $2::timestamptz
+      ) p`, [stepDeg, freshSinceIso]);
+    return rows.map((r) => cellOf(Number(r.y) * stepDeg + stepDeg / 2, Number(r.x) * stepDeg + stepDeg / 2, stepDeg));
   }
 
   // ── source items ─────────────────────────────────────────────────────────

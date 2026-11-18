@@ -4,7 +4,7 @@ import type {
   Alert, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
 } from './types.js';
 import { DEFAULT_PREFS } from './types.js';
-import { SCHEDULED_LOOKBACK_H, computeMetrics, type Area, type Metrics, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces } from './store.js';
+import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces } from './store.js';
 import type { PushTicket } from './push.js';
 import { distanceM, LOCATION_MAX_AGE_MS } from './geo.js';
 import { cosine } from './embeddings.js';
@@ -148,6 +148,16 @@ export class SqliteStore implements Store {
       if (here || atPlace) out.push({ user, places });
     }
     return out;
+  }
+
+  async locationCells(stepDeg: number, freshSinceIso: string): Promise<Array<{ lat: number; lon: number }>> {
+    const pts = [
+      ...(this.db.prepare(`SELECT lat, lon FROM saved_places`).all() as any[]),
+      ...(this.db.prepare(`SELECT lat, lon FROM users WHERE lat IS NOT NULL AND location_updated_at >= ?`).all(freshSinceIso) as any[]),
+    ];
+    const cells = new Map<string, { lat: number; lon: number }>();
+    for (const p of pts) { const c = cellOf(p.lat, p.lon, stepDeg); cells.set(`${c.lat},${c.lon}`, c); }
+    return [...cells.values()];
   }
 
   // ── source items ─────────────────────────────────────────────────────────

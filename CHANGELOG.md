@@ -6,6 +6,14 @@
 
 ## 2026-11-18
 
+- **Source: heat at saved places** [5.4]: "38 °C at your mother's address".
+  - `server/src/sources/heat.ts`: OpenWeatherMap's free 5-day / 3-hour forecast. For each 0.1° grid cell (about 11 × 7 km) that holds a saved place or a location from the last 24 hours, every 3 hours, it looks at the highest felt temperature in the next 24 hours.
+  - Privacy: OpenWeatherMap is only ever asked about cell centres, each cell once, never about a person's place. The cells come from the new `Store.locationCells()` (both backends).
+  - Calm levels: felt ≥ 32 °C → severity 1 (feed only, no push), ≥ 35 °C → 2, ≥ 38 °C → 3, never higher (it's a forecast; DWD's official heat warnings still come through NINA/DWD). Threshold: `HEAT_THRESHOLD_C` (default 32). One item per cell, day and level; a higher level the same day is an escalation of the same event.
+  - New on the way: items can be `structured` (mapped without a model) and carry a `hazard`; heat gets its own advice ("Viel trinken, Mittagshitze meiden, Räume tagsüber abdunkeln."; at level 3 "…nach Älteren und Kranken sehen. Bei Hitzschlag 112.") instead of the storm advice the weather category would give. Title example: "Mama: Hitze: bis 37 °C gefühlt". Outside Germany it's English with °F (US test mode).
+  - The API key is sent as `appid` and never appears in logs or error messages.
+  - Tests: `server/test/heat.test.ts` (10: levels, item shape and escalation ids, English/°F, grid cells only and 3-hour throttle, config, key never in errors; per backend: cells from places and fresh locations, end to end with a saved place). The forecast fixture follows OpenWeatherMap's documented format; verify against a live response once a key exists. Server 120 passed + 2 skipped on SQLite, 164/164 on Postgres.
+  - For Flori: create a free key at openweathermap.org (API keys), then `fly secrets set OPENWEATHER_API_KEY=… -a heyokay`. New keys can take up to 2 hours to start working.
 - **Notification actions** [5.3]: every alert push has two buttons, "👍 Relevant" and "👎 Nicht relevant" ("Not relevant" in English). Tapping one records the rating without opening the app, and it feeds ranking like the rating in the alert screen. All-clears have no buttons.
   - Server: pushes carry `categoryId: "alert"` and `threadId` = the event, so a warning, its updates and its all-clear stack together on the lock screen.
   - App (`app/src/lib/notifications.ts`): the category is registered with titles in the chosen language. A button tap is handled by the response listener, and on Android also by a background notification task (`heyokay-notification`, `expo-task-manager`, already installed) when the app is closed. If sending fails (offline, or iOS gives the app too little time), the rating waits in `app/src/lib/feedback-queue.ts` and goes out on the next start. A normal tap still opens the alert.

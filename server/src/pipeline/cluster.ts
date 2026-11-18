@@ -64,6 +64,7 @@ export function newEvent(ext: ExtractedEvent, item: SourceItem, status: EventSta
     sources: [{ sourceName: item.sourceName, externalId: item.externalId, url: item.url, title: item.title, official: item.official }],
     copyTitle: null, copyBody: null, copyAction: null, copyIsTemplate: false,
     language: item.language ?? 'de',
+    ...(item.hazard ? { hazard: item.hazard } : {}),
     ...(item.feedKey ? { feedKeys: [item.feedKey] } : {}),
     createdAt: now.toISOString(), updatedAt: now.toISOString(), revision: 1,
   };

@@ -1,4 +1,4 @@
-import type { Category, Language, Severity } from '../types.js';
+import type { Category, Hazard, Language, Severity } from '../types.js';
 
 /**
  * Recommended actions come from this fixed library (modelled on BBK / DWD public guidance),
@@ -62,9 +62,23 @@ const LIBRARY_EN: Record<Category, { low: string; high: string }> = {
   },
 };
 
-export function recommendedAction(category: Category, severity: Severity, language: Language = 'de'): string {
-  const lib = language === 'en' ? LIBRARY_EN : LIBRARY;
-  return severity >= 4 ? lib[category].high : lib[category].low;
+/** Hazard-specific actions, where the category's general advice would be wrong (storm advice for heat). */
+const HAZARD: Record<Hazard, Record<Language, { low: string; high: string }>> = {
+  heat: {
+    de: {
+      low: 'Viel trinken, Mittagshitze meiden, Räume tagsüber abdunkeln.',
+      high: 'Viel trinken, drinnen bleiben, nach Älteren und Kranken sehen. Bei Hitzschlag 112.',
+    },
+    en: {
+      low: 'Drink plenty, avoid the midday heat, keep rooms shaded.',
+      high: 'Drink plenty, stay indoors, check on older or sick people. Heat stroke: call 911.',
+    },
+  },
+};
+
+export function recommendedAction(category: Category, severity: Severity, language: Language = 'de', hazard?: Hazard): string {
+  const lib = hazard ? HAZARD[hazard][language] : (language === 'en' ? LIBRARY_EN : LIBRARY)[category];
+  return severity >= 3 && hazard ? lib.high : severity >= 4 ? lib.high : lib.low;
 }
 
 export const CATEGORY_LABEL_DE: Record<Category, string> = {
