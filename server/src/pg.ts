@@ -145,6 +145,11 @@ export const MIGRATIONS: { version: number; sql: string }[] = [
     version: 10,
     sql: `CREATE TABLE llm_usage (day date PRIMARY KEY, calls integer NOT NULL, input_tokens bigint NOT NULL, output_tokens bigint NOT NULL, eur double precision NOT NULL, skipped integer NOT NULL);`,
   },
+  {
+    // Evening summary: at most one per person and local day, whichever worker gets there first.
+    version: 11,
+    sql: `CREATE TABLE digests (user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE, day date NOT NULL, sent_at timestamptz NOT NULL, PRIMARY KEY (user_id, day));`,
+  },
 ];
 
 /**
@@ -411,8 +416,8 @@ export class PgStore implements Store {
   }
 
   // ── alerts ───────────────────────────────────────────────────────────────
-  async insertAlert(a: Omit<Alert, 'id' | 'createdAt' | 'feedback'>): Promise<Alert | null> {
-    const alert: Alert = { ...a, id: randomUUID(), createdAt: new Date().toISOString(), feedback: null };
+  async insertAlert(a: Omit<Alert, 'id' | 'createdAt' | 'feedback'> & { createdAt?: string }): Promise<Alert | null> {
+    const alert: Alert = { ...a, id: randomUUID(), createdAt: a.createdAt ?? new Date().toISOString(), feedback: null };
     const res = await this.q(`
       INSERT INTO alerts (id, user_id, event_id, event_revision, data, delivery, created_at)
       VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING
@@ -447,7 +452,7 @@ export class PgStore implements Store {
   async alertsForUser(userId: string, limit = 50): Promise<Alert[]> {
     if (!isUuid(userId)) return [];
     const { rows } = await this.q(
-      `SELECT data, feedback FROM alerts WHERE user_id = $1 AND delivery != 'suppressed' ORDER BY created_at DESC LIMIT $2`,
+      `SELECT data, feedback FROM alerts WHERE user_id = $1 AND delivery != 'suppressed' ORDER BY created_at DESC, event_revision DESC LIMIT $2`,
       [userId, limit],
     );
     return rows.map((r) => ({ ...r.data, feedback: r.feedback ?? null }));
@@ -629,6 +634,13 @@ export class PgStore implements Store {
 
   async releaseLease(name: string, holder: string): Promise<void> {
     await this.q(`DELETE FROM leases WHERE name = $1 AND holder = $2`, [name, holder]);
+  }
+
+  async claimDigest(userId: string, day: string, atIso: string): Promise<boolean> {
+    const { rows } = await this.q(
+      `INSERT INTO digests (user_id, day, sent_at) VALUES ($1, $2::date, $3::timestamptz) ON CONFLICT DO NOTHING RETURNING day`,
+      [userId, day, atIso]);
+    return rows.length === 1;
   }
 
   // ── push delivery ────────────────────────────────────────────────────────

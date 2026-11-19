@@ -110,7 +110,8 @@ export interface Store {
 
   // alerts
   /** Returns null if this user already has an alert for this event revision. */
-  insertAlert(a: Omit<Alert, 'id' | 'createdAt' | 'feedback'>): Promise<Alert | null>;
+  /** `createdAt` defaults to now; the pipeline passes its own clock. */
+  insertAlert(a: Omit<Alert, 'id' | 'createdAt' | 'feedback'> & { createdAt?: string }): Promise<Alert | null>;
   hasAlertForEvent(userId: string, eventId: string): Promise<boolean>;
   /** Everyone who was told about this event (feed or push), and whether any of it reached them as a push. */
   recipients(eventId: string): Promise<Array<{ userId: string; pushed: boolean }>>;
@@ -175,6 +176,11 @@ export interface Store {
    * afterwards: it was free, expired, or already this holder's. Atomic across processes.
    */
   acquireLease(name: string, holder: string, ttlMs: number, now?: Date): Promise<boolean>;
+  /**
+   * Marks today's evening summary (digest) for this person as sent. True only for the first
+   * caller per person and local day, so two workers never send it twice.
+   */
+  claimDigest(userId: string, day: string, atIso: string): Promise<boolean>;
   /** Gives the lease up early (clean shutdown), so another worker can take over at once. */
   releaseLease(name: string, holder: string): Promise<void>;
 

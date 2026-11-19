@@ -1,6 +1,6 @@
 import Constants from 'expo-constants';
 import { session } from './session';
-import type { Alert, AlertDetail, Feedback, SavedPlace, UserPrefs } from './types';
+import type { Alert, AlertDetail, Category, Feedback, SavedPlace, UserPrefs } from './types';
 
 /** EXPO_PUBLIC_API_URL wins (e.g. a tunnel to a local server), else app.json extra.apiUrl (the hosted server). */
 export const API_URL: string =
@@ -43,6 +43,14 @@ export const api = {
   deletePlace: (id: string) => request<{ ok: true }>('DELETE', `/v1/me/places/${id}`),
   deleteAccount: () => request<{ ok: true }>('DELETE', '/v1/me'),
   alerts: () => request<{ alerts: Alert[] }>('GET', '/v1/me/alerts'),
+  /** Past alerts, one per incident; `q` matches words, `category` narrows by topic. */
+  history: (opts: { q?: string; category?: Category } = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.q) qs.set('q', opts.q);
+    if (opts.category) qs.set('category', opts.category);
+    const s = qs.toString();
+    return request<{ alerts: Alert[] }>('GET', `/v1/me/history${s ? `?${s}` : ''}`);
+  },
   alert: (id: string) => request<AlertDetail>('GET', `/v1/alerts/${id}`),
   feedback: (id: string, value: Feedback) => request<{ ok: true }>('POST', `/v1/alerts/${id}/feedback`, { value }),
 };

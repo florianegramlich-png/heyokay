@@ -2,7 +2,7 @@
 
 Living document. The build agent updates it whenever a component, source, integration or setting changes (see `AGENT.md`). A copy lives in the Claude project "Hey Okey" (`claude/architecture.md`).
 
-Last updated: 2026-11-19 (earthquakes, air quality; AI cost guard, insights consent, language dropdown; India pack + SACHET, FEMA IPAWS; technology outages US; scaling plan; worker roles; country packs; Supabase; delivery queue; source registry; observability; staging + EAS Update).
+Last updated: 2026-11-19 (alert history search; daily summary; US wildfires; river gauges/floods; earthquakes, air quality; AI cost guard, insights consent, language dropdown; India pack + SACHET, FEMA IPAWS; technology outages US; scaling plan; worker roles; country packs; Supabase; delivery queue; source registry; observability; staging + EAS Update).
 
 ## 1. System overview
 
@@ -46,12 +46,13 @@ Live URLs: API `https://heyokay.fly.dev` (health: `/health`, Alert Desk: `/admin
 5. **Compose + verify** (`compose.ts`): Claude writes title (≤ 50) and body (≤ 100); a verifier rejects numbers not in the sources, alarm words and area stigma; two failures → template. The recommended action comes from a fixed library (`guidance.ts`).
 6. **Match** (`rank.ts`, `Store.usersNear`): users whose last location (≤ 24 h old) or saved places are inside the event's exact outlines (or circle + buffer). PostGIS index in Postgres.
 7. **Rank** (`rank.ts`): push / feed / suppress (official extreme always pushes; categories off; quiet hours; daily limit; learned relevance).
+7b. **Daily summary** (`digest.ts`, worker task `push:digest`): at each person's `digestTime` (local, default 18:00; 3-hour window) one push bundles the last 24 hours' feed-only first alerts of events still running, most serious first; tapping opens the top one. `digests` (user, local day) makes it at most one per day across workers. Not counted toward the daily limit.
 8. **Deliver** (`push.ts`, delivery queue): matching writes one job per push into `push_jobs`; `PUSH_CONCURRENCY` senders claim 500 at a time (`SKIP LOCKED`; a dead sender's jobs return after 5 min). Expo push with retries (429/5xx/network); updates and all-clears ("Entwarnung") to people who got the original. Every push is stored as a ticket (`push_tickets`); 15 minutes later the receipt is checked (`checkPushReceipts`): delivered, token of an uninstalled app forgotten, transient errors resent up to twice.
 
 ### Storage (`store.ts`, `db.ts`, `pg.ts`)
 
 - `Store` interface with two implementations: `SqliteStore` (tests, demo, production today on the Fly volume `/data/heyokay.db`) and `PgStore` (used when `DATABASE_URL` is set; numbered migrations under an advisory lock; PostGIS for matching, pgvector for embeddings).
-- Tables: `users` (a person's data: prefs, last location only, push token), `devices` (hashed bearer tokens; several per signed-in person), `accounts` (email, one per user), `email_codes` (hashed sign-in codes), `saved_places`, `source_items`, `events` (+ `event_embeddings`), `alerts`, `push_tickets` (delivery status per push), `leases` (which worker runs ingest and push), `push_jobs` (delivery queue), `source_status` (per-source health written by the worker), `llm_usage` (AI spend per day).
+- Tables: `users` (a person's data: prefs, last location only, push token), `devices` (hashed bearer tokens; several per signed-in person), `accounts` (email, one per user), `email_codes` (hashed sign-in codes), `saved_places`, `source_items`, `events` (+ `event_embeddings`), `alerts`, `push_tickets` (delivery status per push), `leases` (which worker runs ingest and push), `push_jobs` (delivery queue), `source_status` (per-source health written by the worker), `llm_usage` (AI spend per day), `digests` (daily summary sent, per person and local day).
 - Privacy by design: only the latest location (rounded ~100 m on the device), no history; device tokens hashed; `DELETE /v1/me` erases everything; the model never sees user data.
 
 ### Countries (`countries.ts`)
@@ -66,7 +67,7 @@ One pack per country (DE, AT, CH, US, IN): language, emergency / police / medica
 
 Sign-in: `POST /v1/auth/email/start`, `POST /v1/auth/email/verify`, `POST /v1/auth/signout`.
 Device: `POST /v1/devices`, `GET /v1/me`, `PUT /v1/me/prefs`, `PUT /v1/me/push-token`, `POST /v1/me/location`, `GET|POST|DELETE /v1/me/places`, `DELETE /v1/me`.
-Alerts: `GET /v1/me/alerts`, `GET /v1/alerts/:id`, `POST /v1/alerts/:id/feedback`.
+Alerts: `GET /v1/me/alerts`, `GET /v1/me/history?q=&category=` (search, `history.ts`), `GET /v1/alerts/:id`, `POST /v1/alerts/:id/feedback`.
 Admin (token): `/admin`, `/admin/api/pending|active|metrics|sources|ingest|manual-alert|events/:id/approve|reject|end`.
 Health: `GET /health` (per-source status, no error texts). CORS: any origin, bearer tokens only, no cookies.
 
@@ -85,6 +86,8 @@ Health: `GET /health` (per-source status, no error texts). CORS: any origin, bea
 | FEMA IPAWS (US) | Public alerts from state and local authorities (evacuations, shelter-in-place, civil emergencies, AMBER) — CAP 1.2 | `sources/ipaws.ts`, `cap.ts` | Public, no key | On (`IPAWS_URL`, or `off`) | NWS messages skipped (own adapter); last 6 h polled; URL to confirm on first live poll |
 | NDMA SACHET (India) | Official alerts from IMD, CWC, INCOIS and state disaster authorities — CAP 1.2 via RSS | `sources/sachet.ts`, `cap.ts` | Public, no key | On (`SACHET_RSS_URL`, or `off`) | English info block preferred; withdrawn → all-clear; URL to confirm on first live poll |
 | USGS earthquakes | Worldwide real-time feed (GeoJSON, M2.5+ last hour); only quakes in or near DE, US, IN | `sources/usgs.ts` | Public, no key | On (`USGS_URL`, or `off`) | M4+ only; felt radius and level from magnitude, raised by USGS PAGER; aftershock advice; German text in Germany |
+| PEGELONLINE (WSV) | River water levels at ~700 federal gauges, with the agency's own state vs. mean flood level (MHW) and highest navigable level (HSW) | `sources/pegelonline.ts` | Public, no key, DL-DE/Zero-2.0 | On (`PEGELONLINE_URL`, or `off`); fetched at most every 15 min | German gauges only; above HSW → feed (sev. 1), above MHW → may push (sev. 2); 5 km around the gauge; hazard `flood`; back to normal → all-clear; out-of-date gauges keep their alert; fallback NINA · Hochwasserportal |
+| NIFC WFIGS (US) | Current wildfire incidents: size, containment, place (public ArcGIS layer, filtered to wildfires of 10+ acres that aren't out) | `sources/wildfire.ts` | Public domain, no key | On (`WFIGS_URL`, or `off`); fetched at most every 5 min | US outline only; 10+ acres → feed, 100+ → sev. 2, 1,000+ → sev. 3; half contained or older than 2 weeks → feed only; 90%+ → no new alert; out/contained/no update for 7 days → all-clear; radius 10/20/40 km by size; hazard `wildfire`, category public_safety; prescribed burns skipped; a cut-off answer fails rather than lifting alerts; fallback FEMA IPAWS (evacuation orders) |
 | OpenWeatherMap air quality | Air pollution forecast per 0.1° cell (AQI 1–5) | `sources/air.ts` | Same key as heat | Off until `OPENWEATHER_API_KEY` | Poor → feed, very poor → severity 2; later today → "Coming up"; category health |
 | Status pages (US) | Technology outages: Cloudflare, Square, Zoom, Discord, Reddit, Dropbox (Atlassian Statuspage public API, `/api/v2/incidents/unresolved.json`) | `sources/statuspage.ts` | Public, no key | On (`STATUS_PAGES`, JSON or `off`) | Category `technology`, hazard `outage`; major → feed (sev. 1), critical → may push (sev. 3); whole-country outline; resolved → all-clear |
 | OpenWeatherMap | Heat at saved places and current locations (5-day forecast) | `sources/heat.ts` | Free key | Off until `OPENWEATHER_API_KEY` | Grid cells (0.1°) only; felt ≥ 32/35/38 °C → 1/2/3 |

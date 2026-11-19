@@ -9,6 +9,7 @@ import { sourceReport } from './sources/registry.js';
 import { MAX_PLACE_RADIUS_M } from './geo.js';
 import { AuthError, checkEmailCode, signIn, signOut, startEmailSignIn, type Mailer } from './auth.js';
 import { logError, defaultSink, type ErrorSink } from './errors.js';
+import { HISTORY_SCAN, searchHistory } from './history.js';
 import { M } from './metrics.js';
 
 const PrefsSchema = z.object({
@@ -18,6 +19,7 @@ const PrefsSchema = z.object({
   timezone: z.string(),
   language: z.enum(UI_LANGUAGES),
   insightsConsent: z.boolean(),
+  digestTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable(),
 }).partial();
 
 const Coord = { lat: z.number().min(-90).max(90), lon: z.number().min(-180).max(180) };
@@ -194,6 +196,25 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
         endedById.set(a.eventId, !e || e.status === 'rejected' || (!!e.endsAt && Date.parse(e.endsAt) <= now));
       }
       alerts.push({ ...a, kind: a.kind ?? 'new', ended: endedById.get(a.eventId)! });
+    }
+    return { alerts };
+  });
+
+  // Search the person's own past alerts: one entry per incident, newest first.
+  const HistoryQuerySchema = z.object({
+    q: z.string().max(100).optional(),
+    category: z.enum(CATEGORIES).optional(),
+    limit: z.coerce.number().int().min(1).max(200).optional(),
+  });
+  app.get('/v1/me/history', async (req, reply) => {
+    const u = await authed(req, reply); if (!u) return;
+    const query = HistoryQuerySchema.parse(req.query ?? {});
+    const now = clock().getTime();
+    const found = searchHistory(await store.alertsForUser(u.id, HISTORY_SCAN), query);
+    const alerts = [];
+    for (const a of found) {
+      const e = await store.getEvent(a.eventId);
+      alerts.push({ ...a, kind: a.kind ?? 'new', ended: !e || e.status === 'rejected' || (!!e.endsAt && Date.parse(e.endsAt) <= now) || a.kind === 'all_clear' });
     }
     return { alerts };
   });

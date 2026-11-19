@@ -1,6 +1,6 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Linking, RefreshControl, ScrollView, Text, View } from 'react-native';
+import { Linking, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { AlertCard } from '../components/AlertCard';
 import { Dashboard } from '../components/Dashboard';
 import { SkyScreen } from '../components/Starfield';
@@ -131,6 +131,12 @@ export default function Feed() {
             <Text style={s.sectionTitle}>{t('feed.earlier')}</Text>
             {earlier.map((a) => <AlertCard key={a.id} alert={a} onPress={() => open(a)} showCategory />)}
           </View>
+        ) : null}
+
+        {!loading && !offlineSince ? (
+          <Pressable onPress={() => router.push('/history')} accessibilityRole="button" style={{ alignItems: 'center', paddingVertical: 16, marginTop: 8 }}>
+            <Text style={{ color: colors.cyan, fontWeight: '600', fontSize: 15 }}>{t('feed.history')}</Text>
+          </Pressable>
         ) : null}
       </ScrollView>
     </SkyScreen>

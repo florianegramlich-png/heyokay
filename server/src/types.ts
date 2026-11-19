@@ -10,7 +10,7 @@ export type Category = (typeof CATEGORIES)[number];
 /** 1 = info, 2 = minor, 3 = moderate, 4 = severe, 5 = extreme. Same meaning across all sources. */
 export type Severity = 1 | 2 | 3 | 4 | 5;
 
-export type SourceKind = 'nina' | 'dwd' | 'nws' | 'rss' | 'presseportal' | 'owm' | 'statuspage' | 'ipaws' | 'sachet' | 'usgs' | 'manual';
+export type SourceKind = 'nina' | 'dwd' | 'nws' | 'rss' | 'presseportal' | 'owm' | 'statuspage' | 'ipaws' | 'sachet' | 'usgs' | 'pegelonline' | 'wfigs' | 'manual';
 
 export type Language = 'de' | 'en';
 /**
@@ -22,7 +22,7 @@ export type UiLanguage = Language | 'ta';
 export const UI_LANGUAGES = ['de', 'en', 'ta'] as const satisfies readonly UiLanguage[];
 export const contentLanguage = (l: UiLanguage | null | undefined): Language => (l === 'de' ? 'de' : 'en');
 
-export type Hazard = 'heat' | 'outage' | 'earthquake' | 'air';
+export type Hazard = 'heat' | 'outage' | 'earthquake' | 'air' | 'flood' | 'wildfire';
 
 /** A raw item as it arrives from a source, before the AI pipeline touches it. */
 export interface SourceItem {
@@ -161,6 +161,11 @@ export interface UserPrefs {
   insightsConsentAt?: string | null;
   /** Categories this person has been offered; new ones not in here are switched on once (normalizePrefs). */
   knownCategories?: Category[];
+  /**
+   * Evening summary (PRD 6.1 #7, 6.2 step 7): local time ("18:00") for one push that bundles the
+   * day's alerts that went to the feed only. null = off. Missing = the default.
+   */
+  digestTime?: string | null;
 }
 
 export const DEFAULT_PREFS: UserPrefs = {
@@ -170,6 +175,7 @@ export const DEFAULT_PREFS: UserPrefs = {
   timezone: 'Europe/Berlin',
   // English default for now (Flori, 2026-11-18); clients send the person's choice.
   language: 'en',
+  digestTime: '18:00',
 };
 
 /**

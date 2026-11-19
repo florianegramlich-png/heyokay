@@ -104,6 +104,26 @@ const HAZARD: Record<Hazard, Record<Language, Advice>> = {
       high: t('Have a backup ready, such as cash or another app. Check the provider\'s status page.'),
     },
   },
+  flood: {
+    de: {
+      low: t('Ufer und Uferwege meiden. Fahrzeuge aus tief liegenden Bereichen holen.'),
+      high: (n) => `Ufer meiden, Keller und Tiefgaragen nicht betreten, Hinweise der Behörden beachten. Im Notfall ${n.emergency}.`,
+    },
+    en: {
+      low: t('Keep away from riverbanks and riverside paths. Move cars out of low-lying areas.'),
+      high: (n) => `Keep away from riverbanks, stay out of basements and underground car parks, follow official advice. Emergency: ${n.emergency}.`,
+    },
+  },
+  wildfire: {
+    de: {
+      low: t('Hinweise der örtlichen Feuerwehr beachten. Bei Rauch Fenster schließen.'),
+      high: (n) => `Bereit sein, das Gebiet zu verlassen: Wichtiges griffbereit, Anordnungen der Behörden befolgen. Im Notfall ${n.emergency}.`,
+    },
+    en: {
+      low: t('Follow local fire officials. Keep windows closed if there is smoke.'),
+      high: (n) => `Be ready to leave: keep essentials at hand and follow evacuation orders from local officials. Emergency: ${n.emergency}.`,
+    },
+  },
   heat: {
     de: {
       low: t('Viel trinken, Mittagshitze meiden, Räume tagsüber abdunkeln.'),

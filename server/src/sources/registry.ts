@@ -56,10 +56,14 @@ export function describeSource(key: string): SourceInfo {
       return { key, name: 'NDMA SACHET (India public alerts)', country: 'IN', official: true, category: 'warnings', docs: 'https://sachet.ndma.gov.in' };
     case 'usgs':
       return { key, name: 'USGS earthquakes (worldwide; DE, US, IN used)', country: '*', official: true, category: 'warnings', docs: 'https://earthquake.usgs.gov/earthquakes/feed/' };
+    case 'pegelonline':
+      return { key, name: 'PEGELONLINE (WSV) · Wasserstände', country: 'DE', official: true, category: 'weather', fallback: 'nina:lhp', docs: 'https://www.pegelonline.wsv.de/webservice/dokuRestapi' };
+    case 'wfigs':
+      return { key, name: 'NIFC wildfire incidents (WFIGS)', country: 'US', official: true, category: 'fire', fallback: 'ipaws', docs: 'https://data-nifc.opendata.arcgis.com/datasets/nifc::wfigs-current-incident-locations' };
     case 'rss':
       return { key, name: rest || 'RSS', country: 'DE', official: false, category: 'news' };
     case 'push':
-      return { key, name: rest === 'receipts' ? 'Push receipts' : 'Delivery queue', country: '*', official: false, category: 'system' };
+      return { key, name: rest === 'receipts' ? 'Push receipts' : rest === 'digest' ? 'Evening summaries' : 'Delivery queue', country: '*', official: false, category: 'system' };
     default:
       return { key, name: key, country: '*', official: false, category: 'news' };
   }

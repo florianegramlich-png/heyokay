@@ -1,0 +1,279 @@
+{
+ "features": [
+  {
+   "attributes": {
+    "OBJECTID": 589345,
+    "IrwinID": "{F96D076D-EE37-4181-996C-9FF52D876942}",
+    "UniqueFireIdentifier": "2026-WAMRP-000952",
+    "IncidentName": "WEST FORK",
+    "IncidentTypeCategory": "WF",
+    "IncidentSize": 310,
+    "PercentContained": 16,
+    "FireDiscoveryDateTime": 1787443766000,
+    "FireOutDateTime": null,
+    "ContainmentDateTime": null,
+    "ControlDateTime": null,
+    "POOState": "US-WA",
+    "POOCounty": "Pierce",
+    "POOCity": null,
+    "ModifiedOnDateTime_dt": 1794530852880,
+    "IncidentShortDescription": "null Miles null from null, ",
+    "TotalIncidentPersonnel": null
+   },
+   "geometry": {
+    "x": -121.71705,
+    "y": 46.94685
+   }
+  },
+  {
+   "attributes": {
+    "OBJECTID": 589922,
+    "IrwinID": "{942121B5-9B9B-4259-A074-139A67347B5B}",
+    "UniqueFireIdentifier": "2026-WAMRP-000968",
+    "IncidentName": "GARDA FALLS",
+    "IncidentTypeCategory": "WF",
+    "IncidentSize": 308,
+    "PercentContained": 0,
+    "FireDiscoveryDateTime": 1787601791000,
+    "FireOutDateTime": null,
+    "ContainmentDateTime": null,
+    "ControlDateTime": null,
+    "POOState": "US-WA",
+    "POOCounty": "Pierce",
+    "POOCity": null,
+    "ModifiedOnDateTime_dt": 1794530866800,
+    "IncidentShortDescription": "null Miles null from null, ",
+    "TotalIncidentPersonnel": null
+   },
+   "geometry": {
+    "x": -121.719833,
+    "y": 46.922
+   }
+  },
+  {
+   "attributes": {
+    "OBJECTID": 603603,
+    "IrwinID": "{DE469701-A9F7-456E-B0A3-3B15CC8F0C37}",
+    "UniqueFireIdentifier": "2026-FLFLS-260601105",
+    "IncidentName": "BEE HAVEN (2) (24-06)",
+    "IncidentTypeCategory": "WF",
+    "IncidentSize": 2060,
+    "PercentContained": 85,
+    "FireDiscoveryDateTime": 1792611600000,
+    "FireOutDateTime": null,
+    "ContainmentDateTime": null,
+    "ControlDateTime": null,
+    "POOState": "US-FL",
+    "POOCounty": "Hamilton",
+    "POOCity": "Jasper",
+    "ModifiedOnDateTime_dt": 1795057086503,
+    "IncidentShortDescription": "28 Miles NW from LAKE CITY, FL",
+    "TotalIncidentPersonnel": 41
+   },
+   "geometry": {
+    "x": -82.8577778,
+    "y": 30.4952778
+   }
+  },
+  {
+   "attributes": {
+    "OBJECTID": 605056,
+    "IrwinID": "{9C763680-EBED-488A-B588-D97638D6C8F3}",
+    "UniqueFireIdentifier": "2026-NHWMF-000182",
+    "IncidentName": "Wild River",
+    "IncidentTypeCategory": "WF",
+    "IncidentSize": 817,
+    "PercentContained": 59,
+    "FireDiscoveryDateTime": 1793553300000,
+    "FireOutDateTime": null,
+    "ContainmentDateTime": null,
+    "ControlDateTime": null,
+    "POOState": "US-NH",
+    "POOCounty": "Coos",
+    "POOCity": "Shelburne",
+    "ModifiedOnDateTime_dt": 1794856628613,
+    "IncidentShortDescription": "5 Miles SW from Shelburne, NH",
+    "TotalIncidentPersonnel": 56
+   },
+   "geometry": {
+    "x": -71.031283,
+    "y": 44.330583
+   }
+  },
+  {
+   "attributes": {
+    "OBJECTID": 585501,
+    "IrwinID": "{4C2E7170-4BDC-42C5-A730-A0C09CFD7B39}",
+    "UniqueFireIdentifier": "2026-NDFTA-000683",
+    "IncidentName": "Honey Bee",
+    "IncidentTypeCategory": "WF",
+    "IncidentSize": 15,
+    "PercentContained": null,
+    "FireDiscoveryDateTime": 1786480263000,
+    "FireOutDateTime": null,
+    "ContainmentDateTime": null,
+    "ControlDateTime": null,
+    "POOState": "US-ND",
+    "POOCounty": "Benson",
+    "POOCity": null,
+    "ModifiedOnDateTime_dt": 1794600509420,
+    "IncidentShortDescription": null,
+    "TotalIncidentPersonnel": null
+   },
+   "geometry": {
+    "x": -98,
+    "y": 47
+   }
+  },
+  {
+   "attributes": {
+    "OBJECTID": 565386,
+    "IrwinID": "{043D65A0-543E-4682-BDAA-7F1FB91F1076}",
+    "UniqueFireIdentifier": "2026-PRLCR-001956",
+    "IncidentName": "Fosforo",
+    "IncidentTypeCategory": "WF",
+    "IncidentSize": 100,
+    "PercentContained": null,
+    "FireDiscoveryDateTime": 1781973792000,
+    "FireOutDateTime": null,
+    "ContainmentDateTime": null,
+    "ControlDateTime": null,
+    "POOState": "US-PR",
+    "POOCounty": "Lajas",
+    "POOCity": null,
+    "ModifiedOnDateTime_dt": 1794964224083,
+    "IncidentShortDescription": null,
+    "TotalIncidentPersonnel": null
+   },
+   "geometry": {
+    "x": -67.06471,
+    "y": 17.99126
+   }
+  },
+  {
+   "attributes": {
+    "OBJECTID": 606727,
+    "IrwinID": "{54A059A8-9CAA-452E-A17A-FEDDB98117C1}",
+    "UniqueFireIdentifier": "2026-AROUF-003219",
+    "IncidentName": "Walker MT West",
+    "IncidentTypeCategory": "WF",
+    "IncidentSize": 132,
+    "PercentContained": 90,
+    "FireDiscoveryDateTime": 1794775744000,
+    "FireOutDateTime": null,
+    "ContainmentDateTime": null,
+    "ControlDateTime": null,
+    "POOState": "US-OK",
+    "POOCounty": "Le Flore",
+    "POOCity": "Heavener",
+    "ModifiedOnDateTime_dt": 1795018083280,
+    "IncidentShortDescription": "7 Miles S from Havener, OK",
+    "TotalIncidentPersonnel": 3
+   },
+   "geometry": {
+    "x": -94.580191,
+    "y": 34.803627
+   }
+  },
+  {
+   "attributes": {
+    "OBJECTID": 606217,
+    "IrwinID": "{3C9661A9-A917-4F2E-BFB5-BAB480AC9D4B}",
+    "UniqueFireIdentifier": "2026-MSMNF-000713",
+    "IncidentName": "Red Hill",
+    "IncidentTypeCategory": "WF",
+    "IncidentSize": 519,
+    "PercentContained": 100,
+    "FireDiscoveryDateTime": 1794446027000,
+    "FireOutDateTime": null,
+    "ContainmentDateTime": null,
+    "ControlDateTime": null,
+    "POOState": "US-MS",
+    "POOCounty": "Perry",
+    "POOCity": "Brooklyn",
+    "ModifiedOnDateTime_dt": 1794594540660,
+    "IncidentShortDescription": "9 Miles NE from Brooklyn, MS",
+    "TotalIncidentPersonnel": 10
+   },
+   "geometry": {
+    "x": -89.063853,
+    "y": 31.130069
+   }
+  },
+  {
+   "attributes": {
+    "OBJECTID": 567545,
+    "IrwinID": "{1CDF5E5A-F22E-4352-A582-C2A47663B93D}",
+    "UniqueFireIdentifier": "2026-COCUX-001160",
+    "IncidentName": "Aspen Acres",
+    "IncidentTypeCategory": "WF",
+    "IncidentSize": 102007,
+    "PercentContained": 96,
+    "FireDiscoveryDateTime": 1782734686000,
+    "FireOutDateTime": null,
+    "ContainmentDateTime": null,
+    "ControlDateTime": null,
+    "POOState": "US-CO",
+    "POOCounty": "Custer",
+    "POOCity": "Beulah",
+    "ModifiedOnDateTime_dt": 1795127371263,
+    "IncidentShortDescription": "20 Miles SW from Pueblo, CO",
+    "TotalIncidentPersonnel": 1
+   },
+   "geometry": {
+    "x": -105.071268,
+    "y": 38.019315
+   }
+  },
+  {
+   "attributes": {
+    "OBJECTID": 606519,
+    "IrwinID": "{78980105-0F1A-475D-818D-20D21B2E089A}",
+    "UniqueFireIdentifier": "2026-MTNCA-000869",
+    "IncidentName": "Car",
+    "IncidentTypeCategory": "WF",
+    "IncidentSize": 0.1,
+    "PercentContained": null,
+    "FireDiscoveryDateTime": 1794518100000,
+    "FireOutDateTime": null,
+    "ContainmentDateTime": null,
+    "ControlDateTime": null,
+    "POOState": "US-MT",
+    "POOCounty": "Rosebud",
+    "POOCity": null,
+    "ModifiedOnDateTime_dt": 1794951264110,
+    "IncidentShortDescription": null,
+    "TotalIncidentPersonnel": null
+   },
+   "geometry": {
+    "x": -106.702583,
+    "y": 45.620944
+   }
+  },
+  {
+   "attributes": {
+    "OBJECTID": 583729,
+    "IrwinID": "{51374D2C-D96B-40F7-940B-6CB8E0A483A2}",
+    "UniqueFireIdentifier": "2026-CALPF-002271",
+    "IncidentName": "TIMBER",
+    "IncidentTypeCategory": "WF",
+    "IncidentSize": 1250,
+    "PercentContained": 10,
+    "FireDiscoveryDateTime": 1795118400000,
+    "FireOutDateTime": null,
+    "ContainmentDateTime": null,
+    "ControlDateTime": null,
+    "POOState": "US-CA",
+    "POOCounty": "Monterey",
+    "POOCity": "Big Sur",
+    "ModifiedOnDateTime_dt": 1795128000000,
+    "IncidentShortDescription": "6 Miles SE from Big Sur, CA",
+    "TotalIncidentPersonnel": 148
+   },
+   "geometry": {
+    "x": -121.717508,
+    "y": 36.215894
+   }
+  }
+ ]
+}

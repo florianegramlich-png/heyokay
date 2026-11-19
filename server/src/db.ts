@@ -81,6 +81,10 @@ export class SqliteStore implements Store {
       CREATE TABLE IF NOT EXISTS source_status (key TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS llm_usage (day TEXT PRIMARY KEY, calls INTEGER NOT NULL, input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL, eur REAL NOT NULL, skipped INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS leases (name TEXT PRIMARY KEY, holder TEXT NOT NULL, expires_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS digests (
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, day TEXT NOT NULL, sent_at TEXT NOT NULL,
+        PRIMARY KEY (user_id, day)
+      );
       -- Users from before devices existed sign in with their original token.
       INSERT OR IGNORE INTO devices (token_hash, user_id, created_at) SELECT token_hash, id, created_at FROM users;
       PRAGMA foreign_keys = ON;
@@ -260,8 +264,8 @@ export class SqliteStore implements Store {
 
   // ── alerts ───────────────────────────────────────────────────────────────
   /** Returns null if this user already has an alert for this event revision. */
-  async insertAlert(a: Omit<Alert, 'id' | 'createdAt' | 'feedback'>): Promise<Alert | null> {
-    const alert: Alert = { ...a, id: randomUUID(), createdAt: new Date().toISOString(), feedback: null };
+  async insertAlert(a: Omit<Alert, 'id' | 'createdAt' | 'feedback'> & { createdAt?: string }): Promise<Alert | null> {
+    const alert: Alert = { ...a, id: randomUUID(), createdAt: a.createdAt ?? new Date().toISOString(), feedback: null };
     const res = this.db.prepare(`
       INSERT OR IGNORE INTO alerts (id, user_id, event_id, event_revision, data, delivery, created_at)
       VALUES (?,?,?,?,?,?,?)
@@ -302,7 +306,7 @@ export class SqliteStore implements Store {
 
   async alertsForUser(userId: string, limit = 50): Promise<Alert[]> {
     return this.db.prepare(
-      `SELECT data, feedback FROM alerts WHERE user_id = ? AND delivery != 'suppressed' ORDER BY created_at DESC LIMIT ?`,
+      `SELECT data, feedback FROM alerts WHERE user_id = ? AND delivery != 'suppressed' ORDER BY created_at DESC, event_revision DESC, rowid DESC LIMIT ?`,
     ).all(userId, limit).map((r: any) => ({ ...JSON.parse(r.data), feedback: r.feedback ?? null }));
   }
 
@@ -458,6 +462,11 @@ export class SqliteStore implements Store {
 
   async releaseLease(name: string, holder: string): Promise<void> {
     this.db.prepare(`DELETE FROM leases WHERE name = ? AND holder = ?`).run(name, holder);
+  }
+
+  async claimDigest(userId: string, day: string, atIso: string): Promise<boolean> {
+    const r = this.db.prepare(`INSERT OR IGNORE INTO digests (user_id, day, sent_at) VALUES (?,?,?)`).run(userId, day, atIso);
+    return Number(r.changes) === 1;
   }
 
   // ── push delivery ────────────────────────────────────────────────────────
