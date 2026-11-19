@@ -13,6 +13,14 @@ export type Severity = 1 | 2 | 3 | 4 | 5;
 export type SourceKind = 'nina' | 'dwd' | 'nws' | 'rss' | 'presseportal' | 'owm' | 'statuspage' | 'ipaws' | 'sachet' | 'usgs' | 'manual';
 
 export type Language = 'de' | 'en';
+/**
+ * Languages the app UI can be set to (UserPrefs.language). Wider than Language, which is the
+ * language alert copy and emails are written in: for a UI-only language (Tamil, 2026-11-19) the
+ * server writes in English via contentLanguage().
+ */
+export type UiLanguage = Language | 'ta';
+export const UI_LANGUAGES = ['de', 'en', 'ta'] as const satisfies readonly UiLanguage[];
+export const contentLanguage = (l: UiLanguage | null | undefined): Language => (l === 'de' ? 'de' : 'en');
 
 export type Hazard = 'heat' | 'outage' | 'earthquake' | 'air';
 
@@ -143,7 +151,7 @@ export interface UserPrefs {
   quietHours: QuietHours | null;
   dailyLimit: number;
   timezone: string;
-  language: Language;
+  language: UiLanguage;
   /**
    * Optional consent to use their data for aggregated, anonymous safety insights (PRD 5.5,
    * Decision 25). Off unless the person turns it on; nothing is shared until a partner programme exists.

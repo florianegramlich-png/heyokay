@@ -1,15 +1,17 @@
 import type { Category, Severity } from './types';
+import { TA, TA_CATEGORY, TA_SEVERITY } from './strings-ta';
 
 /**
  * UI strings, German first. The dictionaries are copied from the Expo app (app/src/lib/i18n.ts)
  * so both apps say the same things; web-only strings live in WEB below.
  */
-export type Lang = 'de' | 'en';
+export type Lang = 'de' | 'en' | 'ta';
 
 /** Languages in the picker, each named in its own language (same list as the phone app). */
 export const LANGUAGES: { code: Lang; name: string }[] = [
   { code: 'en', name: 'English' },
   { code: 'de', name: 'Deutsch' },
+  { code: 'ta', name: 'தமிழ்' },
 ];
 
 /** English unless the person picks another language (Flori, 2026-11-18: English default for now). */
@@ -270,7 +272,8 @@ const en: Record<AppKey, string> = {
   'fgs.body': 'Alerts for where you are',
 };
 
-export const APP_STRINGS: Record<Lang, Record<AppKey, string>> = { de, en };
+const ta: Record<AppKey, string> = TA;
+export const APP_STRINGS: Record<Lang, Record<AppKey, string>> = { de, en, ta };
 
 export const CATEGORY: Record<Lang, Record<Category, { label: string; hint: string }>> = {
   de: {
@@ -291,12 +294,14 @@ export const CATEGORY: Record<Lang, Record<Category, { label: string; hint: stri
     infrastructure: { label: 'Utilities', hint: 'Power, water and network outages' },
     technology: { label: 'Tech outages', hint: 'Outages of services like card payments, apps and the internet' },
   },
+  ta: TA_CATEGORY,
 };
 
 export const SEVERITY: Record<Lang, Record<Severity, string>> = {
   de: { 1: 'Info', 2: 'Gering', 3: 'Mittel', 4: 'Hoch', 5: 'Extrem' },
   en: { 1: 'Info', 2: 'Minor', 3: 'Moderate', 4: 'Severe', 5: 'Extreme' },
+  ta: TA_SEVERITY,
 };
 
-export const LOCALE: Record<Lang, string> = { de: 'de-DE', en: 'en-US' };
+export const LOCALE: Record<Lang, string> = { de: 'de-DE', en: 'en-US', ta: 'ta-IN' };
 

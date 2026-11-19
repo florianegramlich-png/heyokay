@@ -15,7 +15,7 @@ export interface UserPrefs {
   quietHours: QuietHours | null;
   dailyLimit: number;
   timezone: string;
-  language: 'de' | 'en';
+  language: 'de' | 'en' | 'ta';
   /** Optional: aggregated, anonymous safety insights. Off by default. */
   insightsConsent?: boolean;
   insightsConsentAt?: string | null;

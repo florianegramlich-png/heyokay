@@ -1,13 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSyncExternalStore } from 'react';
 import type { Category, Severity } from './types';
+import { TA, TA_CATEGORY, TA_SEVERITY } from './i18n-ta';
 
 /**
  * UI language (PRD 6.1 #5, 8.1). German first; English for US testing and later markets.
  * The choice lives on the device and is mirrored to the server in prefs.language.
  * Alert texts themselves come from the server in the language of their source.
  */
-export type Lang = 'de' | 'en';
+export type Lang = 'de' | 'en' | 'ta';
 
 /**
  * Languages offered in the picker, each named in its own language. Order = order in the dropdown.
@@ -16,6 +17,7 @@ export type Lang = 'de' | 'en';
 export const LANGUAGES: { code: Lang; name: string }[] = [
   { code: 'en', name: 'English' },
   { code: 'de', name: 'Deutsch' },
+  { code: 'ta', name: 'தமிழ்' },
 ];
 
 /** English unless the person picks another language (Flori, 2026-11-18: English default for now). */
@@ -294,7 +296,8 @@ const en: Record<Key, string> = {
   'fgs.body': 'Alerts for where you are',
 };
 
-const STRINGS: Record<Lang, Record<Key, string>> = { de, en };
+const ta: Record<Key, string> = TA;
+const STRINGS: Record<Lang, Record<Key, string>> = { de, en, ta };
 
 const CATEGORY: Record<Lang, Record<Category, { label: string; hint: string }>> = {
   de: {
@@ -315,14 +318,16 @@ const CATEGORY: Record<Lang, Record<Category, { label: string; hint: string }>> 
     infrastructure: { label: 'Utilities', hint: 'Power, water and network outages' },
     technology: { label: 'Tech outages', hint: 'Outages of services like card payments, apps and the internet' },
   },
+  ta: TA_CATEGORY,
 };
 
 const SEVERITY: Record<Lang, Record<Severity, string>> = {
   de: { 1: 'Info', 2: 'Gering', 3: 'Mittel', 4: 'Hoch', 5: 'Extrem' },
   en: { 1: 'Info', 2: 'Minor', 3: 'Moderate', 4: 'Severe', 5: 'Extreme' },
+  ta: TA_SEVERITY,
 };
 
-export const LOCALE: Record<Lang, string> = { de: 'de-DE', en: 'en-US' };
+export const LOCALE: Record<Lang, string> = { de: 'de-DE', en: 'en-US', ta: 'ta-IN' };
 
 // ── Current language: a tiny store so every screen re-renders when it changes ──
 const KEY = 'heyokay.language';
@@ -354,7 +359,7 @@ export async function loadLanguage() {
 const subscribe = (l: () => void) => { listeners.add(l); return () => { listeners.delete(l); }; };
 
 export function translate(lang: Lang, key: Key, vars?: Record<string, string | number>): string {
-  let s = STRINGS[lang][key] ?? STRINGS.de[key];
+  let s = STRINGS[lang][key] ?? STRINGS.en[key];
   if (vars) for (const [k, v] of Object.entries(vars)) s = s.replace(`{${k}}`, String(v));
   return s;
 }

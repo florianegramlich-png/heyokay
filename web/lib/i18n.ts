@@ -69,6 +69,36 @@ const WEB = {
     'web.onb.locationWeb': 'Your browser will ask for your location next. We only keep the latest one, rounded to about 100 m.',
     'web.delete.done': 'Everything deleted.',
   },
+  ta: {
+    'web.nav.now': 'இப்போது',
+    'web.nav.history': 'வரலாறு',
+    'web.nav.settings': 'அமைப்புகள்',
+    'web.nav.about': 'Hey-Okay பற்றி',
+    'web.menu': 'பட்டியல்',
+    'web.now.title': 'உங்கள் அருகில்',
+    'web.now.subtitle': 'இப்போது உங்களையும் உங்கள் இடங்களையும் பாதிப்பவை.',
+    'web.now.count': '{n} நடப்பில்',
+    'web.now.refresh': 'புதுப்பி',
+    'web.now.locate': 'இருப்பிடத்தைப் புதுப்பி',
+    'web.now.locating': 'உங்கள் இருப்பிடத்தைக் கண்டறிகிறது…',
+    'web.now.locationOff': 'இருப்பிடம் முடக்கப்பட்டுள்ளது. சேமித்த இடங்களைப் பாதிப்பவற்றை மட்டும் காட்டுகிறோம்.',
+    'web.now.locationDenied': 'இருப்பிடம் அனுமதிக்கப்படவில்லை. உலாவி அமைப்புகளில் அனுமதிக்கலாம்.',
+    'web.now.webNote': 'உலாவிக்கு அறிவிப்புகள் வராது. பயணத்தின்போது எச்சரிக்கைகளுக்கு, செயலியைப் பயன்படுத்துங்கள்.',
+    'web.history.title': 'வரலாறு',
+    'web.history.subtitle': 'கடந்த சில நாட்களின் அனைத்தும், முடிந்தவை உட்பட.',
+    'web.history.empty': 'இதுவரை எதுவும் இல்லை.',
+    'web.detail.open': 'விவரங்கள்',
+    'web.detail.close': 'மூடு',
+    'web.detail.source': 'ஆதாரத்தைத் திற',
+    'web.about.title': 'Hey-Okay பற்றி',
+    'web.about.text': 'உங்கள் அருகில் என்ன நடக்கிறது, நீங்கள் என்ன செய்யலாம் என்பதை Hey-Okay அமைதியாக ஒரு வாக்கியத்தில் சொல்லும்: கடுமையான வானிலை, நிலநடுக்கம், காற்றின் தரம், தொழில்நுட்பத் தடைகள். அறிக்கைகள் அதிகாரப்பூர்வ எச்சரிக்கை அமைப்புகளிலிருந்து (எ.கா. NDMA SACHET) வருகின்றன. அதிகாரப்பூர்வ எச்சரிக்கைகள் ஒருபோதும் மாற்றி எழுதப்படுவதில்லை. மற்ற அறிக்கைகள் AI மூலம் சுருக்கப்பட்டு ஆதாரங்களுடன் சரிபார்க்கப்படுகின்றன. எச்சரிக்கைகள் அவற்றின் மூல மொழியில் (இந்தியாவில் ஆங்கிலம்) காட்டப்படும்.',
+    'web.about.privacy': 'கணக்கு தேவையில்லை, இருப்பிட வரலாறு இல்லை, விளம்பரங்கள் இல்லை. உங்கள் சமீபத்திய இருப்பிடம், இடங்கள், அமைப்புகளை மட்டுமே வைத்திருக்கிறோம். அவசரநிலையில்: 112.',
+    'web.places.geocoding': 'முகவரியைத் தேடுகிறது…',
+    'web.places.attribution': 'முகவரி தேடல்: © OpenStreetMap பங்களிப்பாளர்கள்',
+    'web.places.radius': '{m} மீ சுற்றளவு',
+    'web.onb.locationWeb': 'அடுத்து உங்கள் உலாவி இருப்பிடத்தைக் கேட்கும். சமீபத்தியதை மட்டும், சுமார் 100 மீ வரை முழுமையாக்கி வைத்திருப்போம்.',
+    'web.delete.done': 'அனைத்தும் நீக்கப்பட்டது.',
+  },
 } as const;
 
 type WebKey = keyof (typeof WEB)['de'];
@@ -105,7 +135,7 @@ export function setLanguage(lang: Lang) {
 
 export function translate(lang: Lang, key: Key, vars?: Record<string, string | number>): string {
   const dict = (key in WEB.de ? WEB[lang] : APP_STRINGS[lang]) as Record<string, string>;
-  const fallback = (key in WEB.de ? WEB.de : APP_STRINGS.de) as Record<string, string>;
+  const fallback = (key in WEB.de ? WEB.en : APP_STRINGS.en) as Record<string, string>;
   let s = dict[key] ?? fallback[key] ?? key;
   if (vars) for (const [k, v] of Object.entries(vars)) s = s.replace(`{${k}}`, String(v));
   return s;
