@@ -163,6 +163,21 @@ const de = {
   // Android background-location notification
   'fgs.title': 'Hey-Okay ist aktiv',
   'fgs.body': 'Warnungen für deine Umgebung',
+  'dash.title': 'Überblick',
+  'dash.status.calm': 'Alles okay',
+  'dash.status.info': 'Gut zu wissen',
+  'dash.status.watch': 'Behalte es im Blick',
+  'dash.status.act': 'Pass auf dich auf',
+  'dash.status.calmText': 'Gerade betrifft dich und deine Orte nichts.',
+  'dash.status.text': '{n} aktuell in deiner Nähe · höchste Stufe: {level}',
+  'dash.topics': 'Deine Themen',
+  'dash.quiet': 'Ruhig',
+  'dash.active': '{n} aktuell',
+  'dash.next24': 'Nächste 24 Stunden',
+  'dash.next24.none': 'Nichts angekündigt.',
+  'dash.next24.count': '{n} angekündigt',
+  'dash.nowMark': 'Jetzt',
+  'dash.meter': 'Höchste Warnstufe',
 };
 
 export type Key = keyof typeof de;
@@ -294,6 +309,21 @@ const en: Record<Key, string> = {
 
   'fgs.title': 'Hey-Okay is on',
   'fgs.body': 'Alerts for where you are',
+  'dash.title': 'Overview',
+  'dash.status.calm': 'All okay',
+  'dash.status.info': 'Good to know',
+  'dash.status.watch': 'Keep an eye out',
+  'dash.status.act': 'Take care',
+  'dash.status.calmText': 'Nothing affects you or your places right now.',
+  'dash.status.text': '{n} current near you · highest: {level}',
+  'dash.topics': 'Your topics',
+  'dash.quiet': 'Quiet',
+  'dash.active': '{n} current',
+  'dash.next24': 'Next 24 hours',
+  'dash.next24.none': 'Nothing expected.',
+  'dash.next24.count': '{n} expected',
+  'dash.nowMark': 'Now',
+  'dash.meter': 'Highest alert level',
 };
 
 const ta: Record<Key, string> = TA;

@@ -2,16 +2,18 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Linking, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { AlertCard } from '../components/AlertCard';
+import { Dashboard } from '../components/Dashboard';
 import { SkyScreen } from '../components/Starfield';
 import { Card, s } from '../components/ui';
 import { api, ApiError } from '../lib/api';
+import { buildDashboard } from '../lib/dashboard';
 import { aheadAlerts, byCategory, earlierAlerts } from '../lib/feed';
 import { useI18n } from '../lib/i18n';
 import { locationAccess, syncNow } from '../lib/location';
 import { session } from '../lib/session';
 import { loadFeed, saveFeed } from '../lib/offline';
 import { categoryColor, colors } from '../lib/theme';
-import type { Alert } from '../lib/types';
+import { CATEGORIES, type Alert, type Category } from '../lib/types';
 
 /**
  * Main screen: what affects you and your places right now, grouped by topic (no scores),
@@ -25,6 +27,8 @@ export default function Feed() {
   const [noLocation, setNoLocation] = useState(false);
   /** Set when showing the saved copy because the server can't be reached. */
   const [offlineSince, setOfflineSince] = useState<string | null>(null);
+  /** Topics the person follows (dashboard tiles); all of them until /v1/me answers. */
+  const [followed, setFollowed] = useState<readonly Category[]>(CATEGORIES);
   const { t, categoryLabel, locale } = useI18n();
 
   const load = useCallback(async (withLocation: boolean) => {
@@ -32,7 +36,8 @@ export default function Feed() {
     try {
       setNoLocation((await locationAccess()) === 'denied');
       if (withLocation) await syncNow().catch(() => null);
-      const { alerts } = await api.alerts();
+      const [{ alerts }, me] = await Promise.all([api.alerts(), api.me().catch(() => null)]);
+      if (me) setFollowed(me.prefs.categories);
       const visible = alerts.filter((a) => a.delivery !== 'suppressed');
       setAlerts(visible);
       setOfflineSince(null);
@@ -57,6 +62,7 @@ export default function Feed() {
   const groups = byCategory(alerts);
   const earlier = earlierAlerts(alerts);
   const ahead = aheadAlerts(alerts);
+  const dashboard = buildDashboard(alerts, followed);
 
   return (
     <SkyScreen>
@@ -82,7 +88,9 @@ export default function Feed() {
           </Card>
         ) : null}
 
-        {!loading && groups.length === 0 ? (
+        {!loading && !error ? <Dashboard data={dashboard} onOpen={open} /> : null}
+
+        {!loading && groups.length === 0 && error ? (
           <Card style={{ alignItems: 'center', paddingVertical: 32, marginBottom: 8 }}>
             <Text style={{ fontSize: 28, fontWeight: '700', color: error ? colors.text : colors.cyan }}>
               {error ? t('feed.error.title') : t('feed.empty.title')}
