@@ -19,6 +19,10 @@ Items that need accounts or keys (Firebase, RevenueCat or App Store products, Ap
 - [x] **Country packs, part 2** [8.1]: `COUNTRIES=DE,AT` setting that switches each country's sources on, plus the source registry below. (2026-11-18)
 #### Launch markets: Germany, US, India (PRD v6.5, 2026-11-18)
 
+- [x] **More alerts: earthquakes** [5.4]: USGS worldwide feed, quakes M4+ in or near Germany, the US and India; felt radius and level from magnitude and USGS PAGER; aftershock advice; German text in Germany. (2026-11-19, Flori: "more alerts, that is the core")
+- [x] **More alerts: air quality** [5.4]: OpenWeatherMap air-pollution forecast per grid cell (same key and privacy rule as heat); poor → feed, very poor → may push; later today → "Coming up". (2026-11-19)
+- [ ] **More alerts: wildfire smoke and fires (US)**, **floods (Germany: Pegelonline water levels)**, **Meteoalarm (Europe, CAP)** — next candidates, each needs a live format check.
+
 - [x] **Country pack India** [8.1, 5.4]: `IN` in `countries.ts` (English; 112, police 100), NDMA SACHET as the official source (RSS → CAP 1.2, English info preferred, exact areas, withdrawn → all-clear) via a shared CAP parser (`sources/cap.ts`). `COUNTRIES=DE,US,IN`. (2026-11-18; feed URL and numbers to confirm on the first live poll.) IMD has no separate adapter: its warnings come through SACHET.
 - [x] **US sources beyond the weather service, part 1** [5.4, 8.1]: FEMA IPAWS public feed (CAP) next to NWS — state and local official alerts; NWS messages skipped there. (2026-11-18; URL to confirm on the first live poll.)
 - [ ] **US sources, part 2** [5.4]: one California city police/fire feed with clear terms (e.g. a city open-data incident feed), category crime/public_safety. Fixtures and tests.

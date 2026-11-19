@@ -4,6 +4,19 @@
 
 - **BVG/VBB disruptions: which data access?** (2026-11-18) There's no open, documented source I can build on. Options: (1) apply for VBB's official API (HAFAS, includes disruption messages; it's on the "Needs a human" list as "VBB API access"); (2) ask BVG for permission to use the disruptions JSON their website loads (`bvg.de/disruption-reports-service/…`), which has no published terms; (3) use S-Bahn Berlin / VBB disruption RSS if they offer one. I'd go with (1) for the long run and (2) as a quick start if BVG agrees. Until then the item stays open and the other sources run.
 
+## 2026-11-19
+
+- **More alerts: earthquakes and air quality** (Flori: "add more consumer facing features, especially more alerts").
+  - **Earthquakes** (`server/src/sources/usgs.ts`): the USGS real-time feed (worldwide, public domain, no key).
+    - Only quakes of magnitude 4 or more in or near Germany, the US and India; offshore near the coast counts.
+    - How far it is felt and how serious it is come from the magnitude (M4 → 40 km, feed only; M5 → 100 km; M6 → 250 km; M7+ → 500 km). USGS's own impact rating raises the level (orange → 4, red → 5).
+    - Calm text ("A magnitude 5.3 earthquake 12 km NE of Hollister, CA, 8 km deep."), German in Germany, with a tsunami note when USGS flags one. Advice: expect aftershocks, stay out of damaged buildings, the country's emergency number.
+  - **Air quality** (`server/src/sources/air.ts`): the OpenWeatherMap air-pollution forecast for the same 0.1° grid cells as heat, with the same key and the same privacy rule (never a person's place).
+    - "Poor" goes to the feed; "very poor" may push (severity 2) with stay-indoors advice that mentions asthma and heart conditions, without medical claims.
+    - Bad air later today shows under "Coming up". Category: health.
+  - Heat and air now pick the country from the location, so advice names 112 in India and Germany and 911 in the US (before, heat outside Germany always said 911).
+  - Verified: server 250/250 on SQLite + Postgres (7 new; fixtures in the USGS GeoJSON and OWM formats). Not checked live from here: the USGS feed URL and the OWM air endpoint. The Alert Desk Sources table shows if either fails.
+
 ## 2026-11-18
 
 - **Fix: `npm run update:production` failed** (`react-native-web` missing). The app only targets phones, so `app.json` now says `platforms: ["ios", "android"]`: over-the-air updates no longer try to bundle a web version. (The web app is the separate Next.js app in `web/`.)

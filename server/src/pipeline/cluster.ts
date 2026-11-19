@@ -37,7 +37,7 @@ export function findCluster(ext: ExtractedEvent, item: SourceItem, active: RiskE
   // different warnings even when their wording is alike ("... until November 18 at ..."), so never fuzzy-merge.
   // Same for status-page incidents: each has its own id, and every outage sits on the same
   // country-wide area, so the distance rule would merge them all.
-  if (item.source === 'nws' || item.source === 'statuspage' || item.source === 'ipaws' || item.source === 'sachet') return null;
+  if (item.source === 'nws' || item.source === 'statuspage' || item.source === 'ipaws' || item.source === 'sachet' || item.source === 'usgs') return null;
   let best: { e: RiskEvent; score: number } | null = null;
   for (const e of active) {
     if (e.category !== ext.category || ext.lat == null || ext.lon == null) continue;

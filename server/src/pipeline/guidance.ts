@@ -74,6 +74,26 @@ const LIBRARY_EN: Record<Category, Advice> = {
 
 /** Hazard-specific actions, where the category's general advice would be wrong (storm advice for heat). */
 const HAZARD: Record<Hazard, Record<Language, Advice>> = {
+  earthquake: {
+    de: {
+      low: t('Mit Nachbeben rechnen. Auf Schäden achten.'),
+      high: (n) => `Mit Nachbeben rechnen. Beschädigte Gebäude meiden. Im Notfall ${n.emergency}.`,
+    },
+    en: {
+      low: t('Expect aftershocks. Check for damage.'),
+      high: (n) => `Expect aftershocks. Stay out of damaged buildings. Emergency: ${n.emergency}.`,
+    },
+  },
+  air: {
+    de: {
+      low: t('Anstrengung im Freien reduzieren, Fenster geschlossen halten.'),
+      high: t('Möglichst drinnen bleiben und Fenster schließen. Menschen mit Asthma oder Herzerkrankung: eigenen Behandlungsplan beachten.'),
+    },
+    en: {
+      low: t('Limit hard exercise outdoors and keep windows closed.'),
+      high: t('Stay indoors where you can and keep windows closed. People with asthma or heart conditions: follow your care plan.'),
+    },
+  },
   outage: {
     de: {
       low: t('Mit Störungen bei diesem Dienst rechnen. Später erneut versuchen.'),
@@ -100,7 +120,7 @@ export function recommendedAction(
   category: Category, severity: Severity, language: Language = 'de', hazard?: Hazard, country: CountryPack = packFor({ language }),
 ): string {
   const lib = hazard ? HAZARD[hazard][language] : (language === 'en' ? LIBRARY_EN : LIBRARY)[category];
-  const high = hazard ? severity >= 3 : severity >= 4;
+  const high = hazard === 'air' ? severity >= 2 : hazard ? severity >= 3 : severity >= 4;
   return (high ? lib.high : lib.low)(country.numbers);
 }
 

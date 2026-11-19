@@ -1,0 +1,18 @@
+{
+  "type": "FeatureCollection",
+  "metadata": { "generated": 1763510400000, "url": "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_hour.geojson", "title": "USGS Magnitude 2.5+ Earthquakes, Past Hour", "status": 200, "api": "1.10.3", "count": 4 },
+  "features": [
+    { "type": "Feature", "id": "nc75012345",
+      "properties": { "mag": 5.3, "place": "12 km NE of Hollister, CA", "time": 1763508600000, "updated": 1763509000000, "url": "https://earthquake.usgs.gov/earthquakes/eventpage/nc75012345", "tsunami": 0, "alert": "green", "status": "reviewed", "type": "earthquake", "title": "M 5.3 - 12 km NE of Hollister, CA" },
+      "geometry": { "type": "Point", "coordinates": [-121.32, 36.93, 8.1] } },
+    { "type": "Feature", "id": "nc75012399",
+      "properties": { "mag": 2.9, "place": "5 km W of Cobb, CA", "time": 1763509200000, "url": "https://earthquake.usgs.gov/earthquakes/eventpage/nc75012399", "tsunami": 0, "alert": null, "status": "automatic", "type": "earthquake", "title": "M 2.9 - 5 km W of Cobb, CA" },
+      "geometry": { "type": "Point", "coordinates": [-122.78, 38.82, 2.0] } },
+    { "type": "Feature", "id": "us7000qxyz",
+      "properties": { "mag": 6.1, "place": "Fiji region", "time": 1763508000000, "url": "https://earthquake.usgs.gov/earthquakes/eventpage/us7000qxyz", "tsunami": 1, "alert": "yellow", "status": "reviewed", "type": "earthquake", "title": "M 6.1 - Fiji region" },
+      "geometry": { "type": "Point", "coordinates": [-178.4, -17.9, 560.0] } },
+    { "type": "Feature", "id": "us7000qabc",
+      "properties": { "mag": 4.4, "place": "Quarry blast", "time": 1763508300000, "type": "quarry blast", "title": "M 4.4 quarry blast" },
+      "geometry": { "type": "Point", "coordinates": [-117.0, 34.0, 0.0] } }
+  ]
+}

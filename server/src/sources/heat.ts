@@ -1,5 +1,6 @@
 import type { Severity, SourceItem } from '../types.js';
 import { fetchWithTimeout } from '../http.js';
+import { countryNear } from './usgs.js';
 
 /**
  * Heat at people's places (PRD 5.4: "38 °C at your mother's address"), from the OpenWeatherMap
@@ -72,7 +73,8 @@ export function heatItem(cell: { lat: number; lon: number }, forecast: Forecast,
     structured: true,
     hazard: 'heat',
     language: de ? 'de' : 'en',
-    country: de ? 'DE' : 'US',
+    // The right emergency number in the advice (112 in Germany and India, 911 in the US).
+    country: countryNear(cell.lat, cell.lon) ?? (de ? 'DE' : 'US'),
     title,
     body,
     url: `https://openweathermap.org/weathermap?lat=${cell.lat}&lon=${cell.lon}&zoom=10`,

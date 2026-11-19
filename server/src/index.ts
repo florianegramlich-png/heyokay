@@ -14,6 +14,8 @@ import { FEUERWEHR_BERLIN_AREA, fetchFeuerwehrBerlin } from './sources/feuerwehr
 import { fetchNwsArea, nwsFetcher } from './sources/nws.js';
 import { fetchStatusPage } from './sources/statuspage.js';
 import { fetchIpaws } from './sources/ipaws.js';
+import { fetchQuakes } from './sources/usgs.js';
+import { fetchAir } from './sources/air.js';
 import { fetchSachet } from './sources/sachet.js';
 import { buildApi } from './api.js';
 import { createEmbedder } from './embeddings.js';
@@ -62,6 +64,7 @@ function ninaDwdFailing(): boolean {
 }
 
 const heatChecked = new Map<string, number>();
+const airChecked = new Map<string, number>();
 
 const tasks: SourceTask[] = [
   // Not a source, but runs on the same clock: delivery receipts for pushes sent 15+ minutes ago.
@@ -99,6 +102,18 @@ const tasks: SourceTask[] = [
       const r = await fetchHeat(cells, seen('owm'), owmFetcher(config.openWeatherApiKey!), { thresholdC: config.heatThresholdC, lastChecked: heatChecked });
       return { cells: cells.length, checked: r.checked, ...(await ingest(r.items)) };
     },
+  }] : []),
+  ...(config.openWeatherApiKey ? [{
+    key: 'owm:air',
+    run: async () => {
+      const cells = await store.locationCells(CELL_DEG, new Date(Date.now() - 24 * 3600_000).toISOString());
+      const r = await fetchAir(cells, seen('owm'), owmFetcher(config.openWeatherApiKey!), { lastChecked: airChecked });
+      return { cells: cells.length, checked: r.checked, ...(await ingest(r.items)) };
+    },
+  }] : []),
+  ...(config.usgs ? [{
+    key: 'usgs:quakes',
+    run: async () => ingest(await fetchQuakes(seen('usgs'), undefined, { url: config.usgs! })),
   }] : []),
   ...(config.ipaws ? [{
     key: 'ipaws:US',
