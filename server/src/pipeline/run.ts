@@ -11,6 +11,8 @@ import { compose } from './compose.js';
 import { decide, inQuietHours, match, isAhead } from './rank.js';
 import { LIFECYCLE, recommendedAction } from './guidance.js';
 import { packFor } from '../countries.js';
+import { digestDue, digestItems, digestPush } from './digest.js';
+import { contentLanguage } from '../types.js';
 import { M } from '../metrics.js';
 
 export interface PipelineDeps {
@@ -147,6 +149,7 @@ export class Pipeline {
       lat: event.lat, lon: event.lon, radiusM: event.radiusM,
       matchedPlace: f.matchedPlace ?? null, delivery: f.delivery, reason: f.reason, kind,
       ...(isAhead(event, this.now()) ? { startsAt: event.onsetAt } : {}),
+      createdAt: this.now().toISOString(),
     });
   }
 
@@ -328,6 +331,39 @@ export class Pipeline {
    * a transient error → send again (twice at most, the receipt check backs off between tries);
    * no receipt a day later → unknown. Run regularly; cheap when there's nothing to check.
    */
+  /**
+   * Evening summaries that are due now (PRD 6.1 #7): one push per person with the day's feed-only
+   * alerts that are still running. Nothing to tell → no push. At most one per local day.
+   * Scans every person each tick (cheap per row); a "due" index is for when there are many.
+   */
+  async sendDigests(): Promise<{ due: number; sent: number; pushes: number }> {
+    const now = this.now();
+    const out = { due: 0, sent: 0, pushes: 0 };
+    const outbox: PushMessage[] = [];
+    const running = new Map<string, boolean>();
+    for (const user of await this.d.store.allUsers()) {
+      if (!user.pushToken) continue;
+      const day = digestDue(user.prefs, now);
+      if (!day) continue;
+      // Claimed first, even when there turns out to be nothing to say: each person is looked at once
+      // a day, and tomorrow's summary picks up whatever comes in after this one.
+      if (!(await this.d.store.claimDigest(user.id, day, now.toISOString()))) continue;
+      out.due++;
+      const alerts = await this.d.store.alertsForUser(user.id, 200);
+      for (const a of alerts) {
+        if (running.has(a.eventId)) continue;
+        const e = await this.d.store.getEvent(a.eventId);
+        running.set(a.eventId, !!e && e.status !== 'rejected' && (!e.endsAt || Date.parse(e.endsAt) > now.getTime()));
+      }
+      const items = digestItems(alerts, now, (id) => running.get(id) ?? false);
+      if (!items.length) continue;
+      out.sent++;
+      outbox.push({ token: user.pushToken, alert: digestPush(items, contentLanguage(user.prefs.language)) });
+    }
+    out.pushes = await this.sendPush(outbox);
+    return out;
+  }
+
   async checkPushReceipts(opts: { waitMin?: number; maxResends?: number } = {}) {
     const out = { checked: 0, delivered: 0, failed: 0, resent: 0, tokensCleared: 0, unknown: 0 };
     const now = this.now().getTime();

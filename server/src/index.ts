@@ -78,6 +78,8 @@ const tasks: SourceTask[] = [
   { key: 'push:receipts', run: () => ingestLock.run(() => pipeline.checkPushReceipts()) },
   // Leftovers in the delivery queue (a sender that died mid-batch); normally empty.
   { key: 'push:queue', run: () => pipeline.drainPushQueue() },
+  // Evening summaries that are due (each person's own time, default 18:00).
+  { key: 'push:digest', run: () => ingestLock.run(() => pipeline.sendDigests()) },
   ...config.ninaChannels.map((channel) => ({
     key: `nina:${channel}`,
     run: async () => ingest(await fetchNinaChannel(channel, seen('nina'))),

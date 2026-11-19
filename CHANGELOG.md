@@ -6,6 +6,14 @@
 
 ## 2026-11-19
 
+- **Daily summary (digest)** (Flori: "I would like more user facing features"; roadmap "Digest bucket") [PRD 6.1 #7, 6.2 step 7].
+  - What people see: once a day, at their chosen time (default 6 pm), one calm push: "Your day: 3 updates" / "Dein Tagesüberblick: 3 Hinweise", listing what came in but didn't get its own notification (information, things coming up, things during quiet hours or after the daily limit, topics they usually rate not relevant). Tapping it opens the most important one; the rest are in the feed. Nothing to tell → no push.
+  - Never delayed: severe and official extreme warnings still come right away. Only events that are still running are listed; all-clears and updates aren't. The summary doesn't count toward the daily limit.
+  - Setting in the phone app (Settings → Notifications): "Daily summary" on/off and the time (7 am, 12 pm, 6 pm, 8 pm). English, German, Tamil (Tamil to be reviewed with the other Tamil strings). Existing people get it at 6 pm unless they turn it off. The web app has no push, so no setting there (the type is mirrored).
+  - Server: `server/src/pipeline/digest.ts`, `Pipeline.sendDigests()`, worker task `push:digest` (each tick). `digestTime` in prefs (API validates `HH:MM` or null). New table `digests` (Postgres migration 11, SQLite schema) so two workers never send the same person two summaries; it is sent within 3 hours of the chosen time, else it waits for tomorrow.
+  - Fix along the way: alerts were stamped with the computer's clock instead of the pipeline's. That's the same kind of mismatch that broke a test this morning (`lifecycle.test.ts`), and it made "pushes in the last 24 hours" wrong in tests with a pinned clock. They now use the pipeline clock, and the feed order breaks ties by revision, so an all-clear made in the same second as its alert still comes first.
+  - Tests: `test/digest.test.ts` (7 new: timing incl. time zones and a broken zone, which items, the text, and the full path on SQLite + Postgres: one push at 18:00, not before, not twice, nothing for people who turned it off; API validation and the default). Server 270/270, app typecheck clean and iOS bundle builds, web 12/12. App change is JavaScript only: it ships with `npm run update:production`.
+
 - **Roadmap: Meteoalarm moved to Phase 2** (Flori: "move them to phase 2"). It now sits next to "Sources: Austria, Switzerland, UK", with what the live check found: Austria needs a region-outline table, and the Swiss feed is large. Phase 1 keeps its focus on Germany, the US and India.
 
 - **More alerts: wildfires in the US** (roadmap, split from the same item as floods).

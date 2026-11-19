@@ -19,6 +19,8 @@ export interface UserPrefs {
   /** Optional: aggregated, anonymous safety insights. Off by default. */
   insightsConsent?: boolean;
   insightsConsentAt?: string | null;
+  /** Daily summary time ("18:00") for the phone app's push; null = off. Set in the app. */
+  digestTime?: string | null;
 }
 
 export const DEFAULT_PREFS: UserPrefs = {

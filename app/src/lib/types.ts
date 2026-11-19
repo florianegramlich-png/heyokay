@@ -19,6 +19,8 @@ export interface UserPrefs {
   /** Optional: aggregated, anonymous safety insights. Off by default. */
   insightsConsent?: boolean;
   insightsConsentAt?: string | null;
+  /** Daily summary: local time ("18:00") for one push with what stayed in the feed; null = off. */
+  digestTime?: string | null;
 }
 
 export const DEFAULT_PREFS: UserPrefs = {
@@ -27,6 +29,7 @@ export const DEFAULT_PREFS: UserPrefs = {
   dailyLimit: 3,
   timezone: 'Europe/Berlin',
   language: 'en',
+  digestTime: '18:00',
 };
 
 export interface SavedPlace { id: string; label: string; lat: number; lon: number; radiusM: number }

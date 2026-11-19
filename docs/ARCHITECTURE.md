@@ -2,7 +2,7 @@
 
 Living document. The build agent updates it whenever a component, source, integration or setting changes (see `AGENT.md`). A copy lives in the Claude project "Hey Okey" (`claude/architecture.md`).
 
-Last updated: 2026-11-19 (US wildfires; river gauges/floods; earthquakes, air quality; AI cost guard, insights consent, language dropdown; India pack + SACHET, FEMA IPAWS; technology outages US; scaling plan; worker roles; country packs; Supabase; delivery queue; source registry; observability; staging + EAS Update).
+Last updated: 2026-11-19 (daily summary; US wildfires; river gauges/floods; earthquakes, air quality; AI cost guard, insights consent, language dropdown; India pack + SACHET, FEMA IPAWS; technology outages US; scaling plan; worker roles; country packs; Supabase; delivery queue; source registry; observability; staging + EAS Update).
 
 ## 1. System overview
 
@@ -46,12 +46,13 @@ Live URLs: API `https://heyokay.fly.dev` (health: `/health`, Alert Desk: `/admin
 5. **Compose + verify** (`compose.ts`): Claude writes title (≤ 50) and body (≤ 100); a verifier rejects numbers not in the sources, alarm words and area stigma; two failures → template. The recommended action comes from a fixed library (`guidance.ts`).
 6. **Match** (`rank.ts`, `Store.usersNear`): users whose last location (≤ 24 h old) or saved places are inside the event's exact outlines (or circle + buffer). PostGIS index in Postgres.
 7. **Rank** (`rank.ts`): push / feed / suppress (official extreme always pushes; categories off; quiet hours; daily limit; learned relevance).
+7b. **Daily summary** (`digest.ts`, worker task `push:digest`): at each person's `digestTime` (local, default 18:00; 3-hour window) one push bundles the last 24 hours' feed-only first alerts of events still running, most serious first; tapping opens the top one. `digests` (user, local day) makes it at most one per day across workers. Not counted toward the daily limit.
 8. **Deliver** (`push.ts`, delivery queue): matching writes one job per push into `push_jobs`; `PUSH_CONCURRENCY` senders claim 500 at a time (`SKIP LOCKED`; a dead sender's jobs return after 5 min). Expo push with retries (429/5xx/network); updates and all-clears ("Entwarnung") to people who got the original. Every push is stored as a ticket (`push_tickets`); 15 minutes later the receipt is checked (`checkPushReceipts`): delivered, token of an uninstalled app forgotten, transient errors resent up to twice.
 
 ### Storage (`store.ts`, `db.ts`, `pg.ts`)
 
 - `Store` interface with two implementations: `SqliteStore` (tests, demo, production today on the Fly volume `/data/heyokay.db`) and `PgStore` (used when `DATABASE_URL` is set; numbered migrations under an advisory lock; PostGIS for matching, pgvector for embeddings).
-- Tables: `users` (a person's data: prefs, last location only, push token), `devices` (hashed bearer tokens; several per signed-in person), `accounts` (email, one per user), `email_codes` (hashed sign-in codes), `saved_places`, `source_items`, `events` (+ `event_embeddings`), `alerts`, `push_tickets` (delivery status per push), `leases` (which worker runs ingest and push), `push_jobs` (delivery queue), `source_status` (per-source health written by the worker), `llm_usage` (AI spend per day).
+- Tables: `users` (a person's data: prefs, last location only, push token), `devices` (hashed bearer tokens; several per signed-in person), `accounts` (email, one per user), `email_codes` (hashed sign-in codes), `saved_places`, `source_items`, `events` (+ `event_embeddings`), `alerts`, `push_tickets` (delivery status per push), `leases` (which worker runs ingest and push), `push_jobs` (delivery queue), `source_status` (per-source health written by the worker), `llm_usage` (AI spend per day), `digests` (daily summary sent, per person and local day).
 - Privacy by design: only the latest location (rounded ~100 m on the device), no history; device tokens hashed; `DELETE /v1/me` erases everything; the model never sees user data.
 
 ### Countries (`countries.ts`)

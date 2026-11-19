@@ -14,6 +14,13 @@ import { colors } from '../lib/theme';
 import { CATEGORIES, type SavedPlace, type UserPrefs } from '../lib/types';
 
 const LIMITS = [1, 3, 5, 10];
+const DIGEST_TIMES = ['07:00', '12:00', '18:00', '20:00'];
+/** "18:00" → "6 pm" in English, "18:00" elsewhere. */
+const clockLabel = (hm: string, lang: string) => {
+  if (lang !== 'en') return hm;
+  const h = Number(hm.slice(0, 2));
+  return `${h % 12 || 12} ${h < 12 ? 'am' : 'pm'}`;
+};
 
 export default function Settings() {
   const router = useRouter();
@@ -86,6 +93,8 @@ export default function Settings() {
 
   if (!prefs) return <SkyScreen><Text style={[s.muted, { padding: 24 }]}>{t('set.loading')}</Text></SkyScreen>;
   const quiet = prefs.quietHours;
+  // Missing on settings saved before the summary existed: the server's default applies.
+  const digest = prefs.digestTime === undefined ? '18:00' : prefs.digestTime;
 
   return (
     <SkyScreen>
@@ -132,6 +141,33 @@ export default function Settings() {
           ))}
         </View>
         <Text style={[s.rowHint, { marginTop: 8 }]}>{t('set.limit.hint')}</Text>
+        <View style={{ marginTop: 16 }}>
+          <ToggleRow
+            label={t('set.digest')}
+            hint={t('set.digest.hint')}
+            value={digest !== null}
+            last={digest === null}
+            onChange={(on) => save({ digestTime: on ? '18:00' : null })}
+          />
+        </View>
+        {digest !== null ? (
+          <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }} accessibilityLabel={t('set.digest.time')}>
+            {DIGEST_TIMES.map((hm) => (
+              <Pressable
+                key={hm}
+                onPress={() => save({ digestTime: hm })}
+                accessibilityRole="button"
+                accessibilityState={{ selected: digest === hm }}
+                style={{
+                  flex: 1, paddingVertical: 10, borderRadius: 10, alignItems: 'center',
+                  backgroundColor: digest === hm ? colors.brand : 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: digest === hm ? colors.brand : colors.line,
+                }}
+              >
+                <Text style={{ color: digest === hm ? '#fff' : colors.muted, fontWeight: '600' }}>{clockLabel(hm, lang)}</Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
       </Section>
 
       <Section title={t('set.location')}>

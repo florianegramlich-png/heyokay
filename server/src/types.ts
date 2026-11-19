@@ -161,6 +161,11 @@ export interface UserPrefs {
   insightsConsentAt?: string | null;
   /** Categories this person has been offered; new ones not in here are switched on once (normalizePrefs). */
   knownCategories?: Category[];
+  /**
+   * Evening summary (PRD 6.1 #7, 6.2 step 7): local time ("18:00") for one push that bundles the
+   * day's alerts that went to the feed only. null = off. Missing = the default.
+   */
+  digestTime?: string | null;
 }
 
 export const DEFAULT_PREFS: UserPrefs = {
@@ -170,6 +175,7 @@ export const DEFAULT_PREFS: UserPrefs = {
   timezone: 'Europe/Berlin',
   // English default for now (Flori, 2026-11-18); clients send the person's choice.
   language: 'en',
+  digestTime: '18:00',
 };
 
 /**

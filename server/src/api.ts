@@ -18,6 +18,7 @@ const PrefsSchema = z.object({
   timezone: z.string(),
   language: z.enum(UI_LANGUAGES),
   insightsConsent: z.boolean(),
+  digestTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable(),
 }).partial();
 
 const Coord = { lat: z.number().min(-90).max(90), lon: z.number().min(-180).max(180) };
