@@ -29,6 +29,15 @@ const de = {
   // Navigation
   'nav.alert': 'Warnung',
   'nav.settings': 'Einstellungen',
+  'nav.history': 'Verlauf',
+  'feed.history': 'Frühere Hinweise durchsuchen',
+  'history.search': 'Suchen, z. B. S-Bahn, Straße, Ort',
+  'history.all': 'Alle',
+  'history.today': 'Heute',
+  'history.yesterday': 'Gestern',
+  'history.none': 'Nichts gefunden.',
+  'history.empty': 'Noch keine früheren Hinweise.',
+  'history.offline': 'Der Verlauf braucht eine Verbindung. Später erneut versuchen.',
 
   // Onboarding
   'onb.value.title': 'Weniger Alarm. Mehr Bescheid wissen.',
@@ -188,6 +197,15 @@ export type Key = keyof typeof de;
 const en: Record<Key, string> = {
   'nav.alert': 'Alert',
   'nav.settings': 'Settings',
+  'nav.history': 'History',
+  'feed.history': 'Search past alerts',
+  'history.search': 'Search, e.g. a train line, street or place',
+  'history.all': 'All',
+  'history.today': 'Today',
+  'history.yesterday': 'Yesterday',
+  'history.none': 'Nothing found.',
+  'history.empty': 'No past alerts yet.',
+  'history.offline': 'History needs a connection. Try again later.',
 
   'onb.value.title': 'Less alarm. More in the know.',
   'onb.value.text': 'Hey-Okay tells you in one sentence what’s happening near you – severe weather, police activity, closures – and what you can do. Only when it affects you.',

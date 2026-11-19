@@ -6,6 +6,11 @@
 
 ## 2026-11-19
 
+- **Searchable alert history** (Flori: "more user facing features"; pulled forward from Phase 2, because the Phase 1 features left need keys or real devices: Apple/Google sign-in, subscriptions, geofencing) [PRD 5.3].
+  - What people see: "Search past alerts" at the bottom of the main screen opens **History**. You can search by words ("S-Bahn", a street, a saved place's name) and tap a topic to narrow it down. Results are grouped Today / Yesterday / by date. Each incident shows once, in its latest state, so a lifted warning shows as its all-clear. Words match the whole story (the all-clear is found by the original warning's words), ignoring case and accents ("glatte" finds "Glätte", "strasse" finds "Straße"). English, German, Tamil.
+  - Server: `GET /v1/me/history?q=&category=` (`server/src/history.ts`), the person's own alerts only, newest 1,000 scanned (alerts are kept 30 days once data retention is built). Web app: its existing "Verlauf" tab has no search yet; it can use the same endpoint.
+  - Tests: `test/history.test.ts` (4 new: folding, one per incident, matching via the first alert, topic filter, API on SQLite + Postgres incl. 400 for an unknown topic and 401 without a token). Day grouping checked with a logic test. Server 274/274, app typecheck clean and iOS bundle builds, web typecheck clean. Not rendered on a phone from here (no simulator); worth a look on the preview build. App change is JavaScript only (`npm run update:production`).
+
 - **Daily summary (digest)** (Flori: "I would like more user facing features"; roadmap "Digest bucket") [PRD 6.1 #7, 6.2 step 7].
   - What people see: once a day, at their chosen time (default 6 pm), one calm push: "Your day: 3 updates" / "Dein Tagesüberblick: 3 Hinweise", listing what came in but didn't get its own notification (information, things coming up, things during quiet hours or after the daily limit, topics they usually rate not relevant). Tapping it opens the most important one; the rest are in the feed. Nothing to tell → no push.
   - Never delayed: severe and official extreme warnings still come right away. Only events that are still running are listed; all-clears and updates aren't. The summary doesn't count toward the daily limit.

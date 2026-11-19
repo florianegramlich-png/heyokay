@@ -64,7 +64,7 @@ Items that need accounts or keys (Firebase, RevenueCat or App Store products, Ap
 - [ ] **"Hey, okay?" check-ins** [6.1 #8]: a severity ≥ 4 event at a family member's place asks them "Alles okay?". One tap tells the family; a gentle reminder follows; it never contacts emergency services.
 - [ ] **Ask Hey-Okay assistant** [6.1 #9]: retrieval over live events, the official guidance library and saved places; cites sources; refuses out-of-scope questions; always points to 112; paid tier, rate-limited.
 - [ ] **Daily and trip briefings** [6.1 #10]: a 30-second morning or pre-trip summary; paid tier.
-- [ ] **Searchable alert history** [5.3].
+- [x] **Searchable alert history** [5.3]: `GET /v1/me/history?q=&category=` (one entry per incident in its latest state; words match the whole story, accents and ß folded; own alerts only) and a History screen in the phone app (search, topic chips, by day), linked from the feed. Web app: its "Verlauf" tab has no search yet. (2026-11-19, pulled forward from Phase 2 for Flori's "more user facing features")
 - [ ] **Home-screen widgets** [5.3]: current risk level (iOS WidgetKit and Android via an Expo config plugin).
 - [ ] **Accessibility** [6.1 #11]: read alerts aloud (`expo-speech`) and a simple-language mode generated at composition time.
 - [ ] **Hindi** [6.1 #5, 8.1]: Hindi app strings and alert composition for India (English is done for app, web and alert texts since 2026-11-17).

@@ -2,7 +2,7 @@
 
 Living document. The build agent updates it whenever a component, source, integration or setting changes (see `AGENT.md`). A copy lives in the Claude project "Hey Okey" (`claude/architecture.md`).
 
-Last updated: 2026-11-19 (daily summary; US wildfires; river gauges/floods; earthquakes, air quality; AI cost guard, insights consent, language dropdown; India pack + SACHET, FEMA IPAWS; technology outages US; scaling plan; worker roles; country packs; Supabase; delivery queue; source registry; observability; staging + EAS Update).
+Last updated: 2026-11-19 (alert history search; daily summary; US wildfires; river gauges/floods; earthquakes, air quality; AI cost guard, insights consent, language dropdown; India pack + SACHET, FEMA IPAWS; technology outages US; scaling plan; worker roles; country packs; Supabase; delivery queue; source registry; observability; staging + EAS Update).
 
 ## 1. System overview
 
@@ -67,7 +67,7 @@ One pack per country (DE, AT, CH, US, IN): language, emergency / police / medica
 
 Sign-in: `POST /v1/auth/email/start`, `POST /v1/auth/email/verify`, `POST /v1/auth/signout`.
 Device: `POST /v1/devices`, `GET /v1/me`, `PUT /v1/me/prefs`, `PUT /v1/me/push-token`, `POST /v1/me/location`, `GET|POST|DELETE /v1/me/places`, `DELETE /v1/me`.
-Alerts: `GET /v1/me/alerts`, `GET /v1/alerts/:id`, `POST /v1/alerts/:id/feedback`.
+Alerts: `GET /v1/me/alerts`, `GET /v1/me/history?q=&category=` (search, `history.ts`), `GET /v1/alerts/:id`, `POST /v1/alerts/:id/feedback`.
 Admin (token): `/admin`, `/admin/api/pending|active|metrics|sources|ingest|manual-alert|events/:id/approve|reject|end`.
 Health: `GET /health` (per-source status, no error texts). CORS: any origin, bearer tokens only, no cookies.
 

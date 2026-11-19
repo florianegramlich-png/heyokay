@@ -68,6 +68,7 @@ export default function RootLayout() {
         />
         <Stack.Screen name="alert/[id]" options={{ title: t('nav.alert') }} />
         <Stack.Screen name="settings" options={{ title: t('nav.settings') }} />
+        <Stack.Screen name="history" options={{ title: t('nav.history') }} />
       </Stack>
     </>
   );
