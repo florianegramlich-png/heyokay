@@ -15,6 +15,7 @@ import { fetchNwsArea, nwsFetcher } from './sources/nws.js';
 import { fetchStatusPage } from './sources/statuspage.js';
 import { fetchIpaws } from './sources/ipaws.js';
 import { fetchQuakes } from './sources/usgs.js';
+import { fetchPegelonline } from './sources/pegelonline.js';
 import { fetchAir } from './sources/air.js';
 import { fetchSachet } from './sources/sachet.js';
 import { buildApi } from './api.js';
@@ -65,6 +66,9 @@ function ninaDwdFailing(): boolean {
 
 const heatChecked = new Map<string, number>();
 const airChecked = new Map<string, number>();
+// Gauges report every 15 minutes; the full list is ~600 kB, so don't fetch it more often.
+const PEGEL_EVERY_MS = 15 * 60_000;
+let pegelLast = 0;
 
 const tasks: SourceTask[] = [
   // Not a source, but runs on the same clock: delivery receipts for pushes sent 15+ minutes ago.
@@ -114,6 +118,16 @@ const tasks: SourceTask[] = [
   ...(config.usgs ? [{
     key: 'usgs:quakes',
     run: async () => ingest(await fetchQuakes(seen('usgs'), undefined, { url: config.usgs! })),
+  }] : []),
+  ...(config.pegelonline ? [{
+    key: 'pegelonline:DE',
+    run: async () => {
+      if (Date.now() - pegelLast < PEGEL_EVERY_MS) return { skipped: 'checked less than 15 minutes ago' };
+      // Levels that fell back to normal get an all-clear.
+      const r = await ingestAndReconcile(await fetchPegelonline(seen('pegelonline'), undefined, { url: config.pegelonline! }));
+      pegelLast = Date.now();
+      return r;
+    },
   }] : []),
   ...(config.ipaws ? [{
     key: 'ipaws:US',

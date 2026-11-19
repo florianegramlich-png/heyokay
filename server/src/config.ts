@@ -1,4 +1,5 @@
 import { USGS_URL } from './sources/usgs.js';
+import { PEGELONLINE_URL } from './sources/pegelonline.js';
 import { IPAWS_URL } from './sources/ipaws.js';
 import { SACHET_RSS_URL } from './sources/sachet.js';
 import { parseStatusPages, type StatusPage } from './sources/statuspage.js';
@@ -58,6 +59,8 @@ export interface Config {
   role: Role;
   /** USGS earthquake feed (URL override or "off"). */
   usgs: string | null;
+  /** PEGELONLINE river gauges, Germany (URL override or "off"). Polled at most every 15 minutes. */
+  pegelonline: string | null;
   /** AI cost guard: daily cap in EUR (0 = off) and prices per million tokens. */
   llmDailyBudgetEur: number;
   llmPriceInPerMTok: number;
@@ -120,6 +123,7 @@ export function loadConfig(env = process.env): Config {
     expoAccessToken: env.EXPO_ACCESS_TOKEN || null,
     role: parseRole(env.ROLE),
     usgs: /^off$/i.test(env.USGS_URL ?? '') ? null : (env.USGS_URL || USGS_URL),
+    pegelonline: /^off$/i.test(env.PEGELONLINE_URL ?? '') ? null : (env.PEGELONLINE_URL || PEGELONLINE_URL),
     llmDailyBudgetEur: Number(env.LLM_DAILY_BUDGET_EUR ?? 5),
     llmPriceInPerMTok: Number(env.LLM_PRICE_IN_EUR_PER_MTOK ?? 1),
     llmPriceOutPerMTok: Number(env.LLM_PRICE_OUT_EUR_PER_MTOK ?? 5),

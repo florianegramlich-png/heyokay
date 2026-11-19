@@ -6,6 +6,13 @@
 
 ## 2026-11-19
 
+- **More alerts: floods in Germany** (Flori: "continue building"; roadmap item split into floods, US wildfires and Meteoalarm, floods first).
+  - New source `server/src/sources/pegelonline.ts`: PEGELONLINE, the federal waterways agency's open gauge data (no key, licence DL-DE/Zero-2.0). One request returns all ~700 gauges with the latest 15-minute reading; the worker fetches it at most every 15 minutes (`PEGELONLINE_URL`, or `off`).
+  - The agency itself rates each reading against that gauge's reference levels; we use its rating instead of guessing thresholds. Above the highest level ships may sail at → "Erhöhter Wasserstand: Elbe bei Dresden", feed only. Above the mean flood level → "Hochwasser: …", may push (severity 2). People within 5 km of the gauge. Advice: keep away from riverbanks, move cars out of low-lying areas.
+  - When the gauge is back to normal, people get an all-clear. A gauge that is offline or out of date never lifts an alert. Stations abroad (the feed has Dutch ones) and without coordinates are skipped. A flood that runs past midnight stays one alert.
+  - Calm on purpose: these are measurements. Serious flood warnings remain the Länder flood centres' official ones (NINA · Hochwasserportal), which can go up to severity 5. The two are not merged, so near a big flood people may see both: the official warning and the gauge reading.
+  - Live check: the format was checked against the live feed today (one gauge, Templin, was above its mean flood level). Fixture `test/fixtures/pegelonline-stations.json` holds real stations with states edited for the cases.
+  - Tests: `test/pegelonline.test.ts` (5 new: states, names, mapping, and the full path on SQLite + Postgres: feed vs push, escalation, all-clear, past midnight). Server 257/257, server and app typecheck clean. Nothing for Flori to do; it runs on the next deploy.
 - **Fix: a server test started failing on its own today** (baseline red, so per `AGENT.md` this was today's only task; no roadmap item started).
   - `test/lifecycle.test.ts` › "the feed API labels alert kinds…" pins the pipeline clock to 2026-11-17 and creates an alert ending 30 hours later. The `/v1/me/alerts` route decided `ended` with the real clock, so from 2026-11-19 02:00 UTC that alert counted as over and the test went red. Not a product bug: real servers run on real time.
   - `buildApi` now takes an optional `now` clock (default: real time), used for `ended`, the events list and the Alert Desk spend/metrics windows. The test passes its pinned clock.

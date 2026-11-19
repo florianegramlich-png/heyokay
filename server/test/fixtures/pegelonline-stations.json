@@ -1,0 +1,192 @@
+[
+ {
+  "uuid": "b475386c-30cc-453a-b3b7-1d17ace13595",
+  "number": "48300105",
+  "shortname": "CELLE",
+  "longname": "CELLE",
+  "km": 1.74,
+  "agency": "VERDEN",
+  "longitude": 10.062164,
+  "latitude": 52.622706,
+  "voiceServiceNumber": "+49 228 286527 001",
+  "water": {
+   "shortname": "ALLER",
+   "longname": "ALLER"
+  },
+  "timeseries": [
+   {
+    "shortname": "W",
+    "longname": "WASSERSTAND ROHDATEN",
+    "unit": "cm",
+    "equidistance": 15,
+    "currentMeasurement": {
+     "timestamp": "2026-11-19T23:30:00+01:00",
+     "value": 151.0,
+     "stateMnwMhw": "normal",
+     "stateNswHsw": "normal"
+    },
+    "gaugeZero": {
+     "unit": "m. ü. NN",
+     "value": 31.82,
+     "validFrom": "1936-11-01"
+    }
+   }
+  ]
+ },
+ {
+  "uuid": "5918b484-597f-4a1c-8262-0d0cbbb7986d",
+  "number": "581210",
+  "shortname": "TEMPLIN UP",
+  "longname": "TEMPLIN UP",
+  "km": 13.3,
+  "agency": "STANDORT EBERSWALDE",
+  "longitude": 13.494754,
+  "latitude": 53.122249,
+  "voiceServiceNumber": "+49 228 286527 693",
+  "water": {
+   "shortname": "TlG",
+   "longname": "TEMPLINER GEWÄSSER"
+  },
+  "timeseries": [
+   {
+    "shortname": "W",
+    "longname": "WASSERSTAND ROHDATEN",
+    "unit": "cm",
+    "equidistance": 15,
+    "currentMeasurement": {
+     "timestamp": "2026-11-19T23:30:00+01:00",
+     "value": 54.0,
+     "stateMnwMhw": "high",
+     "stateNswHsw": "unknown"
+    },
+    "gaugeZero": {
+     "unit": "m. ü. NHN",
+     "value": 46.839,
+     "validFrom": "2010-11-01"
+    }
+   }
+  ]
+ },
+ {
+  "uuid": "70272185-b2b3-4178-96b8-43bea330dcae",
+  "number": "501060",
+  "shortname": "DRESDEN",
+  "longname": "DRESDEN",
+  "km": 55.63,
+  "agency": "STANDORT DRESDEN",
+  "longitude": 13.738832,
+  "latitude": 51.05446,
+  "voiceServiceNumber": "+49 228 286527 069",
+  "water": {
+   "shortname": "ELBE",
+   "longname": "ELBE"
+  },
+  "timeseries": [
+   {
+    "shortname": "W",
+    "longname": "WASSERSTAND ROHDATEN",
+    "unit": "cm",
+    "equidistance": 15,
+    "currentMeasurement": {
+     "timestamp": "2026-11-19T23:30:00+01:00",
+     "value": 83.0,
+     "stateMnwMhw": "normal",
+     "stateNswHsw": "high"
+    },
+    "gaugeZero": {
+     "unit": "m. ü. NHN",
+     "value": 102.7,
+     "validFrom": "2019-11-01"
+    }
+   }
+  ]
+ },
+ {
+  "uuid": "a6ee8177-107b-47dd-bcfd-30960ccc6e9c",
+  "number": "2730010",
+  "shortname": "KÖLN",
+  "longname": "KÖLN",
+  "km": 688.0,
+  "agency": "STANDORT KÖLN",
+  "longitude": 6.9633,
+  "latitude": 50.936949,
+  "voiceServiceNumber": "+49 228 286527 567",
+  "water": {
+   "shortname": "RHEIN",
+   "longname": "RHEIN"
+  },
+  "timeseries": [
+   {
+    "shortname": "W",
+    "longname": "WASSERSTAND ROHDATEN",
+    "unit": "cm",
+    "equidistance": 15,
+    "currentMeasurement": {
+     "timestamp": "2026-11-19T23:30:00+01:00",
+     "value": 246.0,
+     "stateMnwMhw": "out-dated",
+     "stateNswHsw": "out-dated"
+    },
+    "gaugeZero": {
+     "unit": "m. ü. NHN",
+     "value": 35.038,
+     "validFrom": "2019-11-01"
+    }
+   }
+  ]
+ },
+ {
+  "uuid": "6c6f84c2-b7ea-4720-8ecd-a83c100c6291",
+  "number": "123456785",
+  "shortname": "DORDRECHT",
+  "longname": "DORDRECHT",
+  "km": 975.0,
+  "agency": "RIJKSWATERSTAAT",
+  "water": {
+   "shortname": "ALTE_MAAS",
+   "longname": "ALTE MAAS"
+  },
+  "timeseries": [
+   {
+    "shortname": "W",
+    "longname": "WASSERSTAND ROHDATEN",
+    "unit": "cm",
+    "equidistance": 10,
+    "currentMeasurement": {
+     "timestamp": "2026-11-19T23:20:00+01:00",
+     "value": 122.0,
+     "stateMnwMhw": "high",
+     "stateNswHsw": "unknown"
+    }
+   }
+  ]
+ },
+ {
+  "uuid": "bd4bb467-45f1-490d-a212-49412fcca219",
+  "number": "123456781",
+  "shortname": "TIEL",
+  "longname": "TIEL",
+  "km": 913.5,
+  "agency": "RIJKSWATERSTAAT",
+  "longitude": 5.455684,
+  "latitude": 51.900532,
+  "water": {
+   "shortname": "WAAL",
+   "longname": "WAAL"
+  },
+  "timeseries": [
+   {
+    "shortname": "W",
+    "longname": "WASSERSTAND ROHDATEN",
+    "unit": "cm",
+    "equidistance": 10,
+    "currentMeasurement": {
+     "timestamp": "2026-11-03T11:40:00+01:00",
+     "value": 203.0,
+     "stateMnwMhw": "high",
+     "stateNswHsw": "out-dated"
+    }
+   }
+  ]
+ }
+]
