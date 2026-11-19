@@ -114,6 +114,16 @@ const HAZARD: Record<Hazard, Record<Language, Advice>> = {
       high: (n) => `Keep away from riverbanks, stay out of basements and underground car parks, follow official advice. Emergency: ${n.emergency}.`,
     },
   },
+  wildfire: {
+    de: {
+      low: t('Hinweise der örtlichen Feuerwehr beachten. Bei Rauch Fenster schließen.'),
+      high: (n) => `Bereit sein, das Gebiet zu verlassen: Wichtiges griffbereit, Anordnungen der Behörden befolgen. Im Notfall ${n.emergency}.`,
+    },
+    en: {
+      low: t('Follow local fire officials. Keep windows closed if there is smoke.'),
+      high: (n) => `Be ready to leave: keep essentials at hand and follow evacuation orders from local officials. Emergency: ${n.emergency}.`,
+    },
+  },
   heat: {
     de: {
       low: t('Viel trinken, Mittagshitze meiden, Räume tagsüber abdunkeln.'),

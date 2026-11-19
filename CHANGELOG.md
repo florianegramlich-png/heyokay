@@ -6,6 +6,15 @@
 
 ## 2026-11-19
 
+- **More alerts: wildfires in the US** (roadmap, split from the same item as floods).
+  - New source `server/src/sources/wildfire.ts`: NIFC's WFIGS current wildfire incidents (US federal and state fire agencies' shared incident data; public domain, no key). One query for every wildfire of 10+ acres that isn't out, at most every 5 minutes (`WFIGS_URL`, or `off`).
+  - How serious, for people nearby: 10+ acres → feed; 100+ acres → may push (severity 2); 1,000+ acres → may push (severity 3). Once half contained, or burning for more than two weeks, it drops to the feed (the WFIGS list has many fires from the summer still at 16% containment). At 90% contained it gets no new alert; when the fire is out, fully contained or hasn't been updated for a week, people get an all-clear. Prescribed burns are never alerts.
+  - Reach: 10 km around the fire, 20 km from 1,000 acres, 40 km from 10,000 acres. US only (Puerto Rico and other territories are outside the current US outline).
+  - Text: "Wildfire: Timber" / "1,250 acres, 10% contained. 6 Miles SE from Big Sur, CA." Advice at severity 3+: be ready to leave, follow evacuation orders, 911. Evacuation orders themselves stay with local officials through FEMA IPAWS; smoke stays with the air-quality alert.
+  - Safety net: ArcGIS reports errors with HTTP 200 and cuts long answers off. Both now fail the poll (it shows as failing on the Alert Desk) instead of looking like "all fires out".
+  - Live check: run against the live feed today (19 alerts from 233 active fires, all but one feed-only). Fixture `test/fixtures/wfigs-incidents.json` holds real records; one (Timber, Monterey County) is edited into a fresh fire for the California cases.
+  - Tests: `test/wildfire.test.ts` (6 new: levels, names, query, mapping, failure handling, and the full path on SQLite + Postgres: push near Big Sur, nothing in Monterey, update when half contained, all-clear). Server 263/263, server and app typecheck clean.
+
 - **More alerts: floods in Germany** (Flori: "continue building"; roadmap item split into floods, US wildfires and Meteoalarm, floods first).
   - New source `server/src/sources/pegelonline.ts`: PEGELONLINE, the federal waterways agency's open gauge data (no key, licence DL-DE/Zero-2.0). One request returns all ~700 gauges with the latest 15-minute reading; the worker fetches it at most every 15 minutes (`PEGELONLINE_URL`, or `off`).
   - The agency itself rates each reading against that gauge's reference levels; we use its rating instead of guessing thresholds. Above the highest level ships may sail at → "Erhöhter Wasserstand: Elbe bei Dresden", feed only. Above the mean flood level → "Hochwasser: …", may push (severity 2). People within 5 km of the gauge. Advice: keep away from riverbanks, move cars out of low-lying areas.

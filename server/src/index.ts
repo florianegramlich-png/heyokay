@@ -16,6 +16,7 @@ import { fetchStatusPage } from './sources/statuspage.js';
 import { fetchIpaws } from './sources/ipaws.js';
 import { fetchQuakes } from './sources/usgs.js';
 import { fetchPegelonline } from './sources/pegelonline.js';
+import { fetchWildfires } from './sources/wildfire.js';
 import { fetchAir } from './sources/air.js';
 import { fetchSachet } from './sources/sachet.js';
 import { buildApi } from './api.js';
@@ -69,6 +70,8 @@ const airChecked = new Map<string, number>();
 // Gauges report every 15 minutes; the full list is ~600 kB, so don't fetch it more often.
 const PEGEL_EVERY_MS = 15 * 60_000;
 let pegelLast = 0;
+const FIRES_EVERY_MS = 5 * 60_000;
+let firesLast = 0;
 
 const tasks: SourceTask[] = [
   // Not a source, but runs on the same clock: delivery receipts for pushes sent 15+ minutes ago.
@@ -126,6 +129,16 @@ const tasks: SourceTask[] = [
       // Levels that fell back to normal get an all-clear.
       const r = await ingestAndReconcile(await fetchPegelonline(seen('pegelonline'), undefined, { url: config.pegelonline! }));
       pegelLast = Date.now();
+      return r;
+    },
+  }] : []),
+  ...(config.wfigs ? [{
+    key: 'wfigs:US',
+    run: async () => {
+      if (Date.now() - firesLast < FIRES_EVERY_MS) return { skipped: 'checked less than 5 minutes ago' };
+      // Fires that are out, contained or no longer reported get an all-clear.
+      const r = await ingestAndReconcile(await fetchWildfires(seen('wfigs'), undefined, { url: config.wfigs! }));
+      firesLast = Date.now();
       return r;
     },
   }] : []),
