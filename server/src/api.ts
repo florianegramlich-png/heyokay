@@ -37,11 +37,13 @@ export interface ApiDeps {
   /** Daily AI budget, shown next to the spend on the Alert Desk. */
   aiBudgetEur?: number;
   roleStatus?: () => Record<string, unknown> | Promise<Record<string, unknown>>;
+  /** Clock for time-dependent answers (tests pin it; default: real time). */
+  now?: () => Date;
   /** Where unexpected errors are logged (default: JSON lines on stderr). */
   errorSink?: ErrorSink;
 }
 
-export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus, roleStatus, pollIntervalSec = 120, aiBudgetEur = 0, mailer = null, errorSink = defaultSink }: ApiDeps) {
+export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus, roleStatus, pollIntervalSec = 120, aiBudgetEur = 0, mailer = null, errorSink = defaultSink, now: clock = () => new Date() }: ApiDeps) {
   const app = Fastify({ logger: false });
   // Request metrics by route pattern (never the URL itself: no ids or tokens in labels).
   app.addHook('onResponse', async (req, reply) => {
@@ -183,7 +185,7 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
     const u = await authed(req, reply); if (!u) return;
     const limit = Math.min(Number((req.query as any)?.limit ?? 50), 200);
     // `ended`: the event is over (ran out or was lifted) — the app greys these out.
-    const now = Date.now();
+    const now = clock().getTime();
     const endedById = new Map<string, boolean>();
     const alerts = [];
     for (const a of await store.alertsForUser(u.id, limit)) {
@@ -221,7 +223,7 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
 
   app.get('/admin/api/active', async (req, reply) => {
     if (!admin(req, reply)) return;
-    return { events: await store.activeEvents(new Date()) };
+    return { events: await store.activeEvents(clock()) };
   });
 
   app.post('/admin/api/events/:id/approve', async (req, reply) => {
@@ -271,9 +273,9 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
 
   app.get('/admin/api/ai-usage', async (req, reply) => {
     if (!admin(req, reply)) return;
-    const from = new Date(Date.now() - 29 * 86_400_000).toISOString().slice(0, 10);
+    const from = new Date(clock().getTime() - 29 * 86_400_000).toISOString().slice(0, 10);
     const days = await store.llmUsage(from);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = clock().toISOString().slice(0, 10);
     const total = days.reduce((s, d) => s + d.eur, 0);
     const users = (await store.allUsers()).length;
     return {
@@ -288,7 +290,7 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
   app.get('/admin/api/metrics', async (req, reply) => {
     if (!admin(req, reply)) return;
     const days = Number((req.query as any)?.days ?? 7);
-    return await store.metrics(new Date(Date.now() - days * 86_400_000).toISOString());
+    return await store.metrics(new Date(clock().getTime() - days * 86_400_000).toISOString());
   });
 
   return app;

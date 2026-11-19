@@ -6,6 +6,11 @@
 
 ## 2026-11-19
 
+- **Fix: a server test started failing on its own today** (baseline red, so per `AGENT.md` this was today's only task; no roadmap item started).
+  - `test/lifecycle.test.ts` › "the feed API labels alert kinds…" pins the pipeline clock to 2026-11-17 and creates an alert ending 30 hours later. The `/v1/me/alerts` route decided `ended` with the real clock, so from 2026-11-19 02:00 UTC that alert counted as over and the test went red. Not a product bug: real servers run on real time.
+  - `buildApi` now takes an optional `now` clock (default: real time), used for `ended`, the events list and the Alert Desk spend/metrics windows. The test passes its pinned clock.
+  - Verified: server 252/252 on SQLite + Postgres (local Postgres 16 with PostGIS and pgvector), server and app typecheck clean. No app change.
+
 - **App dashboard** (Flori: "add the dashboard to the app, same as in the prototype"; chose "like the prototype, without a crime score").
   - The main screen now opens with an overview in the layout of the v0 prototype (`app/src/components/Dashboard.tsx`, logic in `app/src/lib/dashboard.ts`), followed by the alert list as before.
   - **Status card**: All okay / Good to know / Keep an eye out / Take care, from the highest current alert, with a 5-step level meter. This is the level of real alerts, not a risk percentage.
