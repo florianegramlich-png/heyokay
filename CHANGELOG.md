@@ -2,6 +2,7 @@
 
 ## Open questions
 
+- **Meteoalarm now or in Phase 2?** (2026-11-19) The live check shows it's more than an adapter: Austria's warnings come with region codes only (no outlines), so we'd first need a table of those regions' outlines (from Meteoalarm or GeoSphere Austria), and Switzerland's feed is 16 MB per poll. Austria and Switzerland aren't launch markets. I'd move it to Phase 2 with "Sources: Austria, Switzerland, UK" and build India/US/Germany alerts first. Your call; the item stays where it is until you decide.
 - **BVG/VBB disruptions: which data access?** (2026-11-18) There's no open, documented source I can build on. Options: (1) apply for VBB's official API (HAFAS, includes disruption messages; it's on the "Needs a human" list as "VBB API access"); (2) ask BVG for permission to use the disruptions JSON their website loads (`bvg.de/disruption-reports-service/…`), which has no published terms; (3) use S-Bahn Berlin / VBB disruption RSS if they offer one. I'd go with (1) for the long run and (2) as a quick start if BVG agrees. Until then the item stays open and the other sources run.
 
 ## 2026-11-19
