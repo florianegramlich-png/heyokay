@@ -6,6 +6,14 @@
 
 ## 2026-11-19
 
+- **App dashboard** (Flori: "add the dashboard to the app, same as in the prototype"; chose "like the prototype, without a crime score").
+  - The main screen now opens with an overview in the layout of the v0 prototype (`app/src/components/Dashboard.tsx`, logic in `app/src/lib/dashboard.ts`), followed by the alert list as before.
+  - **Status card**: All okay / Good to know / Keep an eye out / Take care, from the highest current alert, with a 5-step level meter. This is the level of real alerts, not a risk percentage.
+  - **Your topics**: a tile per followed topic (plus any topic with current alerts) showing the number of current alerts and the highest level; tap to open the most serious one. Police activity shows only the count, no level (PRD: no area-level crime scores).
+  - **Next 24 hours**: a timeline with announced alerts (e.g. a storm front tonight), tap to open.
+  - English, German and Tamil strings. JavaScript only, so it ships with `npm run update:production`.
+  - I couldn't open the v0 page from here (it needs a login), so the layout follows the prototype as I knew it from building the web app. Checks: `tsc`, iOS bundle, logic test, rendered at phone width in English, Tamil and the empty state.
+
 - **More alerts: earthquakes and air quality** (Flori: "add more consumer facing features, especially more alerts").
   - **Earthquakes** (`server/src/sources/usgs.ts`): the USGS real-time feed (worldwide, public domain, no key).
     - Only quakes of magnitude 4 or more in or near Germany, the US and India; offshore near the coast counts.

@@ -133,6 +133,21 @@ export const TA = {
 
   'fgs.title': 'Hey-Okay இயக்கத்தில் உள்ளது',
   'fgs.body': 'நீங்கள் இருக்கும் இடத்திற்கான எச்சரிக்கைகள்',
+  'dash.title': 'கண்ணோட்டம்',
+  'dash.status.calm': 'எல்லாம் சரி',
+  'dash.status.info': 'தெரிந்துகொள்ள',
+  'dash.status.watch': 'கவனமாக இருங்கள்',
+  'dash.status.act': 'எச்சரிக்கையாக இருங்கள்',
+  'dash.status.calmText': 'இப்போது உங்களையோ உங்கள் இடங்களையோ எதுவும் பாதிக்கவில்லை.',
+  'dash.status.text': 'உங்கள் அருகில் {n} நடப்பில் · அதிகபட்சம்: {level}',
+  'dash.topics': 'உங்கள் தலைப்புகள்',
+  'dash.quiet': 'அமைதி',
+  'dash.active': '{n} நடப்பில்',
+  'dash.next24': 'அடுத்த 24 மணி நேரம்',
+  'dash.next24.none': 'எதுவும் எதிர்பார்க்கப்படவில்லை.',
+  'dash.next24.count': '{n} எதிர்பார்க்கப்படுகிறது',
+  'dash.nowMark': 'இப்போது',
+  'dash.meter': 'அதிகபட்ச எச்சரிக்கை நிலை',
 } as const;
 
 export const TA_CATEGORY: Record<Category, { label: string; hint: string }> = {
