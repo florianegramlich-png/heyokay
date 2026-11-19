@@ -143,6 +143,7 @@ export function capItem(alert: CapAlert, o: CapItemOptions): SourceItem | null {
     officialSeverity: mapSeverity(info.severity),
     category: mapCategory('', info.categories),
     expiresAt: cancelled ? now.toISOString() : (iso(info.expires) ?? undefined),
+    ...(iso(info.onset) ? { onsetAt: iso(info.onset)! } : {}),
     areaName: names.length > 3 ? `${names.slice(0, 3).join(', ')} + ${names.length - 3} ${more}` : names.join(', ') || undefined,
     ...(o.feedKey ? { feedKey: o.feedKey } : {}),
   };

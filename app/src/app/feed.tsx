@@ -5,7 +5,7 @@ import { AlertCard } from '../components/AlertCard';
 import { SkyScreen } from '../components/Starfield';
 import { Card, s } from '../components/ui';
 import { api, ApiError } from '../lib/api';
-import { byCategory, earlierAlerts } from '../lib/feed';
+import { aheadAlerts, byCategory, earlierAlerts } from '../lib/feed';
 import { useI18n } from '../lib/i18n';
 import { locationAccess, syncNow } from '../lib/location';
 import { session } from '../lib/session';
@@ -56,6 +56,7 @@ export default function Feed() {
   const open = (a: Alert) => router.push({ pathname: '/alert/[id]', params: { id: a.id } });
   const groups = byCategory(alerts);
   const earlier = earlierAlerts(alerts);
+  const ahead = aheadAlerts(alerts);
 
   return (
     <SkyScreen>
@@ -102,6 +103,20 @@ export default function Feed() {
             {g.alerts.map((a) => <AlertCard key={a.id} alert={a} onPress={() => open(a)} />)}
           </View>
         ))}
+
+        {ahead.length ? (
+          <View style={{ marginTop: 16 }}>
+            <Text style={s.sectionTitle}>{t('feed.ahead')}</Text>
+            {ahead.map((a) => (
+              <View key={a.id}>
+                <Text style={[s.muted, { fontSize: 13, marginBottom: 4 }]}>
+                  {t('feed.ahead.from', { time: new Date(a.startsAt!).toLocaleString(locale, { weekday: 'short', hour: '2-digit', minute: '2-digit' }) })}
+                </Text>
+                <AlertCard alert={a} onPress={() => open(a)} showCategory />
+              </View>
+            ))}
+          </View>
+        ) : null}
 
         {earlier.length ? (
           <View style={{ marginTop: 16 }}>

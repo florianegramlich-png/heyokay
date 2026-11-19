@@ -52,6 +52,8 @@ export interface Alert {
   feedback: Feedback | null;
   createdAt: string;
   kind: AlertKind;
+  /** Set when the event begins later ("coming up"). */
+  startsAt?: string;
   /** The event is over (ran out or was lifted). */
   ended: boolean;
 }

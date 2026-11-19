@@ -43,7 +43,7 @@ export function describeSource(key: string): SourceInfo {
     case 'feuerwehr-berlin':
       return { key, name: 'Berliner Feuerwehr', country: 'DE', official: false, category: 'fire', docs: 'https://www.berliner-feuerwehr.de/service/rss-feeds/' };
     case 'owm':
-      return { key, name: 'OpenWeatherMap · Hitze', country: '*', official: false, category: 'weather', docs: 'https://openweathermap.org/forecast5' };
+      return { key, name: rest === 'air' ? 'OpenWeatherMap · Luftqualität' : 'OpenWeatherMap · Hitze', country: '*', official: false, category: 'weather', docs: 'https://openweathermap.org/forecast5' };
     case 'nws':
       return { key, name: `US National Weather Service · ${rest}`, country: 'US', official: true, category: 'warnings', docs: 'https://www.weather.gov/documentation/services-web-api' };
     case 'statuspage': {
@@ -54,6 +54,8 @@ export function describeSource(key: string): SourceInfo {
       return { key, name: 'FEMA IPAWS (US public alerts)', country: 'US', official: true, category: 'warnings', fallback: 'nws', docs: 'https://www.fema.gov/emergency-managers/practitioners/integrated-public-alert-warning-system' };
     case 'sachet':
       return { key, name: 'NDMA SACHET (India public alerts)', country: 'IN', official: true, category: 'warnings', docs: 'https://sachet.ndma.gov.in' };
+    case 'usgs':
+      return { key, name: 'USGS earthquakes (worldwide; DE, US, IN used)', country: '*', official: true, category: 'warnings', docs: 'https://earthquake.usgs.gov/earthquakes/feed/' };
     case 'rss':
       return { key, name: rest || 'RSS', country: 'DE', official: false, category: 'news' };
     case 'push':

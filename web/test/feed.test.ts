@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { byCategory, currentAlerts } from '../lib/feed';
+import { aheadAlerts, byCategory, currentAlerts } from '../lib/feed';
 import type { Alert } from '../lib/types';
 
 let n = 0;
@@ -32,4 +32,19 @@ test('grouped by category in the app order, empty categories left out; nothing a
   assert.deepEqual(groups.map((g) => [g.category, g.alerts.length]), [['weather', 1], ['transit', 2]]);
   assert.deepEqual(byCategory([]), []);
   assert.deepEqual(byCategory([alert({ ended: true })]), []);
+});
+
+test('coming up: events that begin more than an hour from now, soonest first, not under Now', () => {
+  const now = Date.parse('2026-11-18T12:00:00Z');
+  const tomorrow = alert({ startsAt: '2026-11-19T14:00:00Z', category: 'weather' });
+  const tonight = alert({ startsAt: '2026-11-18T20:00:00Z', category: 'public_safety' });
+  const soon = alert({ startsAt: '2026-11-18T12:30:00Z' }); // within the hour → Now
+  const current = alert({});
+  const all = [tomorrow, tonight, soon, current];
+  assert.deepEqual(aheadAlerts(all, now).map((a) => a.id), [tonight.id, tomorrow.id]);
+  const realNow = Date.now;
+  Date.now = () => now;
+  try {
+    assert.deepEqual(currentAlerts(all).map((a) => a.id).sort(), [soon.id, current.id].sort());
+  } finally { Date.now = realNow; }
 });

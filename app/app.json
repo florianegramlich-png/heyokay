@@ -75,6 +75,10 @@
     },
     "updates": {
       "url": "https://u.expo.dev/48b6164f-ab15-4bd1-b348-b4bab0e7f8ea"
-    }
+    },
+    "platforms": [
+      "ios",
+      "android"
+    ]
   }
 }

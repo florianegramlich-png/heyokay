@@ -8,7 +8,7 @@ import { AlertCard } from '@/components/alert-card';
 import { AlertDialog } from '@/components/alert-dialog';
 import { CategoryIcon } from '@/components/category-icon';
 import { api } from '@/lib/api';
-import { byCategory } from '@/lib/feed';
+import { aheadAlerts, byCategory } from '@/lib/feed';
 import { currentPosition } from '@/lib/location';
 import { useDevice } from '@/lib/use-device';
 import { useI18n } from '@/lib/i18n';
@@ -21,7 +21,7 @@ import type { Alert, Feedback } from '@/lib/types';
  */
 export default function Now() {
   const ready = useDevice();
-  const { t, categoryLabel } = useI18n();
+  const { t, categoryLabel, locale } = useI18n();
   const [alerts, setAlerts] = useState<Alert[] | null>(null);
   const [error, setError] = useState(false);
   const [open, setOpen] = useState<Alert | null>(null);
@@ -65,6 +65,7 @@ export default function Now() {
 
   if (!ready) return null;
   const groups = alerts ? byCategory(alerts) : [];
+  const ahead = alerts ? aheadAlerts(alerts) : [];
 
   return (
     <div className="space-y-4">
@@ -108,6 +109,18 @@ export default function Now() {
           {g.alerts.map((a) => <AlertCard key={a.id} alert={a} onOpen={setOpen} />)}
         </section>
       ))}
+
+      {ahead.length > 0 && (
+        <section className="space-y-2">
+          <h2 className="text-sm font-medium">{t('feed.ahead')}</h2>
+          {ahead.map((a) => (
+            <div key={a.id} className="space-y-1">
+              <p className="text-xs text-muted-foreground">{t('feed.ahead.from', { time: new Date(a.startsAt!).toLocaleString(locale, { weekday: 'short', hour: '2-digit', minute: '2-digit' }) })}</p>
+              <AlertCard alert={a} onOpen={setOpen} showCategory />
+            </div>
+          ))}
+        </section>
+      )}
 
       <p className="pt-2 text-center text-xs text-muted-foreground">{t('web.now.webNote')}</p>
       <AlertDialog alert={open} onClose={() => setOpen(null)} onFeedback={markFeedback} />

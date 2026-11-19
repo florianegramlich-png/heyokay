@@ -37,7 +37,7 @@ export function findCluster(ext: ExtractedEvent, item: SourceItem, active: RiskE
   // different warnings even when their wording is alike ("... until November 18 at ..."), so never fuzzy-merge.
   // Same for status-page incidents: each has its own id, and every outage sits on the same
   // country-wide area, so the distance rule would merge them all.
-  if (item.source === 'nws' || item.source === 'statuspage' || item.source === 'ipaws' || item.source === 'sachet') return null;
+  if (item.source === 'nws' || item.source === 'statuspage' || item.source === 'ipaws' || item.source === 'sachet' || item.source === 'usgs') return null;
   let best: { e: RiskEvent; score: number } | null = null;
   for (const e of active) {
     if (e.category !== ext.category || ext.lat == null || ext.lon == null) continue;
@@ -68,6 +68,7 @@ export function newEvent(ext: ExtractedEvent, item: SourceItem, status: EventSta
     copyTitle: null, copyBody: null, copyAction: null, copyIsTemplate: false,
     language: item.language ?? 'de',
     ...(item.hazard ? { hazard: item.hazard } : {}),
+    ...(item.onsetAt ? { onsetAt: item.onsetAt } : {}),
     country: packFor(item).code,
     ...(item.feedKey ? { feedKeys: [item.feedKey] } : {}),
     createdAt: now.toISOString(), updatedAt: now.toISOString(), revision: 1,
@@ -85,6 +86,8 @@ const END_SHIFT_MS = 60 * 60_000;
  */
 export function mergeInto(e: RiskEvent, ext: ExtractedEvent, item: SourceItem, now = new Date()): { escalated: boolean; changed: boolean } {
   const before = e.severity;
+  // The newest report says when it starts; a warning now in effect has no future onset.
+  if (item.onsetAt) e.onsetAt = item.onsetAt; else delete e.onsetAt;
   const endBefore = e.endsAt;
   if (item.official) {
     e.severity = ext.severity;
