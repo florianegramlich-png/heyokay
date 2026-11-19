@@ -173,7 +173,7 @@ describe.each(storeBackends())('event lifecycle: updates and all-clears ($name)'
   it('the feed API labels alert kinds and marks ended events; ending needs the admin token', async () => {
     const reg = await store.createUser('ExponentPushToken[x]', { timezone: 'America/Los_Angeles' });
     await store.updateLocation(reg.user.id, HOME.lat, HOME.lon);
-    const app = buildApi({ store, pipeline, adminToken: 'secret', runIngest: async () => ({}) });
+    const app = buildApi({ store, pipeline, adminToken: 'secret', runIngest: async () => ({}), now: () => clock });
     await pipeline.ingest([nws('a1'), nws('z1', { title: 'High Surf Advisory until November 19', expiresAt: hours(30) })]);
     const wind = (await store.alertsForUser(reg.user.id)).find((a) => a.title.includes('Wind'))!;
 
