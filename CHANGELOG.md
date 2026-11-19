@@ -6,6 +6,7 @@
 
 ## 2026-11-18
 
+- **Fix: `npm run update:production` failed** (`react-native-web` missing). The app only targets phones, so `app.json` now says `platforms: ["ios", "android"]`: over-the-air updates no longer try to bundle a web version. (The web app is the separate Next.js app in `web/`.)
 - **Coming up (risk outlook, MVP)** [PRD 6.1 #14].
   - Events now carry their start time when the source gives one: CAP `onset` from NWS, FEMA IPAWS and SACHET; for heat, the first hot forecast hour.
   - Anything that begins more than an hour from now goes to the feed only, never a push (reason "coming up"), and the alert carries `startsAt`.
