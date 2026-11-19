@@ -34,3 +34,13 @@ test('relative times', () => {
   assert.equal(timeAgo('de', '2026-11-18T11:15:00Z', now), 'vor 45 Min.');
   assert.equal(timeAgo('en', '2026-11-18T09:00:00Z', now), translate('en', 'time.h', { n: 3 }));
 });
+
+test('Tamil has every app and web string (Flori, 2026-11-19)', () => {
+  const de = Object.keys(APP_STRINGS.de);
+  for (const k of de) assert.ok(APP_STRINGS.ta[k as keyof typeof APP_STRINGS.ta], `ta ${k}`);
+  for (const key of ['web.nav.now', 'web.now.title', 'web.about.text', 'web.delete.done'] as const) {
+    assert.match(translate('ta', key), /[஀-௿]/, `ta ${key}`);
+  }
+  assert.equal(translate('ta', 'web.now.count', { n: 3 }), '3 நடப்பில்');
+  assert.match(CATEGORY.ta.technology.label, /[஀-௿]/);
+});

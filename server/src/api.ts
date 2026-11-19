@@ -3,7 +3,7 @@ import cors from '@fastify/cors';
 import { z } from 'zod';
 import type { Store } from './store.js';
 import type { Pipeline } from './pipeline/run.js';
-import { CATEGORIES, DEFAULT_PREFS, stampConsent, type User } from './types.js';
+import { CATEGORIES, DEFAULT_PREFS, UI_LANGUAGES, contentLanguage, stampConsent, type User } from './types.js';
 import { DESK_HTML } from './desk.js';
 import { sourceReport } from './sources/registry.js';
 import { MAX_PLACE_RADIUS_M } from './geo.js';
@@ -16,7 +16,7 @@ const PrefsSchema = z.object({
   quietHours: z.object({ start: z.string().regex(/^\d{2}:\d{2}$/), end: z.string().regex(/^\d{2}:\d{2}$/) }).nullable(),
   dailyLimit: z.number().int().min(1).max(20),
   timezone: z.string(),
-  language: z.enum(['de', 'en']),
+  language: z.enum(UI_LANGUAGES),
   insightsConsent: z.boolean(),
 }).partial();
 
@@ -156,7 +156,7 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
   app.post('/v1/auth/email/start', async (req, reply) => {
     const u = await authed(req, reply); if (!u) return;
     const { email } = z.object({ email: Email }).parse(req.body);
-    try { await startEmailSignIn(store, mailer, email, u.prefs.language); } catch (err) { return authError(reply, err); }
+    try { await startEmailSignIn(store, mailer, email, contentLanguage(u.prefs.language)); } catch (err) { return authError(reply, err); }
     return reply.code(202).send({ ok: true });
   });
 
