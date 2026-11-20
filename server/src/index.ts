@@ -188,7 +188,7 @@ const roleStatus = async () => ({
 const mailer = config.resendApiKey && config.mailFrom ? new ResendMailer(config.resendApiKey, config.mailFrom) : null;
 let app;
 if (runsApi(config.role)) {
-  app = buildApi({ store, pipeline, adminToken: config.adminToken, runIngest, ingestStatus: worker ? () => scheduler.snapshot() : undefined, roleStatus, mailer, pollIntervalSec: config.pollIntervalSec, aiBudgetEur: config.llmDailyBudgetEur });
+  app = buildApi({ store, pipeline, adminToken: config.adminToken, runIngest, ingestStatus: worker ? () => scheduler.snapshot() : undefined, roleStatus, mailer, statusPages: config.statusPages, pollIntervalSec: config.pollIntervalSec, aiBudgetEur: config.llmDailyBudgetEur });
 } else {
   // Worker only: no public routes, just the health check the platform polls.
   app = Fastify({ logger: false });

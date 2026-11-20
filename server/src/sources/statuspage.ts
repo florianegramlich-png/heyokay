@@ -40,6 +40,13 @@ export const US_STATUS_PAGES: StatusPage[] = [
   { key: 'dropbox', name: 'Dropbox', url: 'https://status.dropbox.com', country: 'US', kind: 'apps' },
 ];
 
+/** What the apps show in "only the services I use" (GET /v1/services). */
+export interface FollowableService { key: string; name: string; kind: StatusPage['kind']; country: CountryCode }
+export function followableServices(pages: StatusPage[]): FollowableService[] {
+  return pages.map(({ key, name, kind, country }) => ({ key, name, kind, country }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 export function parseStatusPages(raw: string | undefined): StatusPage[] {
   if (!raw) return US_STATUS_PAGES;
   if (/^(off|none|false|0)$/i.test(raw.trim())) return [];
@@ -103,6 +110,7 @@ export function incidentItem(page: StatusPage, inc: StatuspageIncident, now = ne
     structured: true,
     hazard: 'outage',
     category: 'technology',
+    service: page.key,
     language: 'en',
     country: page.country,
     title: `${page.name} outage: ${inc.impact === 'critical' ? 'service largely down' : 'service disrupted'}`,

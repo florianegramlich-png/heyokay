@@ -4,6 +4,14 @@
 
 - **BVG/VBB disruptions: which data access?** (2026-11-18) There's no open, documented source I can build on. Options: (1) apply for VBB's official API (HAFAS, includes disruption messages; it's on the "Needs a human" list as "VBB API access"); (2) ask BVG for permission to use the disruptions JSON their website loads (`bvg.de/disruption-reports-service/…`), which has no published terms; (3) use S-Bahn Berlin / VBB disruption RSS if they offer one. I'd go with (1) for the long run and (2) as a quick start if BVG agrees. Until then the item stays open and the other sources run.
 
+## 2026-11-20
+
+- **Tech outages: only the services I use** (roadmap "Category: technology, part 2", split into this plus parts 3–5: more US services, consumer cyber advisories, Germany and India) [PRD 1, 5.4].
+  - What people see: in the phone app, Settings → **"Tech outages: which services"** (shown while the Tech topic is on): chips for "All" and each service (Cloudflare, Discord, Dropbox, Reddit, Square, Zoom). The first tap on a service means "only this one"; more taps add or remove; unpicking the last goes back to "All". With "All", services added later are included automatically. English, German, Tamil (Tamil to be reviewed with the other Tamil strings).
+  - Server: outage events now carry their service key (`service`); prefs have `techServices` (a list, or null = all; validated at the API); ranking leaves out outages of services the person didn't pick (reason `service not followed`). Outages created before today have no key and still reach everyone who follows the topic. New public route `GET /v1/services` (from `STATUS_PAGES`, no user data).
+  - Web app: the type is mirrored, but it has no picker yet; people who choose services in the phone app keep that choice on the web.
+  - Tests: `test/statuspage.test.ts` (4 new: ranking rule incl. null/empty/old events, the API route and validation, and the full path on SQLite + Postgres: a Zoom-only person gets no Square outage, a Square follower gets the push). Server 278/278 on SQLite + Postgres, server/app/web typecheck clean, iOS bundle builds. App change is JavaScript only (`npm run update:production`).
+
 ## 2026-11-19
 
 - **Searchable alert history** (Flori: "more user facing features"; pulled forward from Phase 2, because the Phase 1 features left need keys or real devices: Apple/Google sign-in, subscriptions, geofencing) [PRD 5.3].

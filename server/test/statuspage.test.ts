@@ -9,6 +9,9 @@ import { NoLLM } from '../src/llm.js';
 import { GazetteerGeocoder } from '../src/geocode.js';
 import { MemoryPushSender } from '../src/push.js';
 import { normalizePrefs } from '../src/types.js';
+import { buildApi } from '../src/api.js';
+import { SqliteStore } from '../src/db.js';
+import { decide } from '../src/pipeline/rank.js';
 
 const FIXTURE = JSON.parse(readFileSync(new URL('./fixtures/statuspage-unresolved.json', import.meta.url), 'utf8')) as { incidents: StatuspageIncident[] };
 const SQUARE = US_STATUS_PAGES.find((p) => p.key === 'square')!;
@@ -54,6 +57,45 @@ describe('status pages → technology outages', () => {
     const old = normalizePrefs({ categories: ['weather', 'crime'] });
     expect(old.categories).toEqual(['weather', 'crime', 'technology']);
     expect(normalizePrefs({ ...old, categories: ['weather'] }).categories).toEqual(['weather']); // turned off later: stays off
+  });
+});
+
+describe('only the services I use', () => {
+  it('outages carry their service; ranking skips services the person did not pick; null = all', () => {
+    const item = incidentItem(SQUARE, FIXTURE.incidents[0], NOW)!;
+    expect(item.service).toBe('square');
+    const base = { id: 'u', tokenHash: '', pushToken: null, lat: null, lon: null, locationUpdatedAt: null, createdAt: '' };
+    const event = { category: 'technology', severity: 3, official: false, service: 'square' } as any;
+    const ctx = { now: NOW, pushesLast24h: 0, feedback: {} };
+    const user = (techServices?: string[] | null) => ({ ...base, prefs: { ...normalizePrefs({ quietHours: null }), techServices } });
+    expect(decide(user(['zoom']), event, ctx)).toEqual({ delivery: 'suppressed', reason: 'service not followed' });
+    expect(decide(user(['zoom', 'square']), event, ctx).delivery).toBe('push');
+    expect(decide(user(null), event, ctx).delivery).toBe('push');
+    expect(decide(user(undefined), event, ctx).delivery).toBe('push');
+    expect(decide(user([]), event, ctx).delivery).toBe('suppressed'); // picked none = no outages
+    // Older events without a service still reach everyone who follows the category.
+    expect(decide(user(['zoom']), { ...event, service: undefined }, ctx).delivery).toBe('push');
+  });
+
+  it('API: GET /v1/services lists what can be followed; prefs accept a list or null and reject junk', async () => {
+    const store = new SqliteStore();
+    const pipeline = new Pipeline({ store, llm: new NoLLM(), geocoder: new GazetteerGeocoder(), push: new MemoryPushSender(), config: cfg });
+    const app = buildApi({ store, pipeline, adminToken: 'x', runIngest: async () => ({}) });
+    const list = (await app.inject({ method: 'GET', url: '/v1/services' })).json();
+    expect(list.services.map((x: any) => x.key)).toEqual(['cloudflare', 'discord', 'dropbox', 'reddit', 'square', 'zoom']);
+    expect(list.services[0]).toEqual({ key: 'cloudflare', name: 'Cloudflare', kind: 'internet', country: 'US' });
+    const custom = buildApi({ store, pipeline, adminToken: 'x', runIngest: async () => ({}), statusPages: [] });
+    expect((await custom.inject({ method: 'GET', url: '/v1/services' })).json()).toEqual({ services: [] });
+    const reg = (await app.inject({ method: 'POST', url: '/v1/devices', payload: {} })).json();
+    expect(reg.prefs.techServices).toBeUndefined(); // default: every service
+    const auth = { authorization: `Bearer ${reg.token}` };
+    const pick = await app.inject({ method: 'PUT', url: '/v1/me/prefs', headers: auth, payload: { techServices: ['zoom', 'square'] } });
+    expect(pick.json().prefs.techServices).toEqual(['zoom', 'square']);
+    expect((await app.inject({ method: 'GET', url: '/v1/me', headers: auth })).json().prefs.techServices).toEqual(['zoom', 'square']);
+    expect((await app.inject({ method: 'PUT', url: '/v1/me/prefs', headers: auth, payload: { techServices: null } })).json().prefs.techServices).toBeNull();
+    expect((await app.inject({ method: 'PUT', url: '/v1/me/prefs', headers: auth, payload: { techServices: ['Zoom!'] } })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'PUT', url: '/v1/me/prefs', headers: auth, payload: { techServices: Array(101).fill('x') } })).statusCode).toBe(400);
+    await app.close(); await custom.close(); await store.close();
   });
 });
 
@@ -104,5 +146,18 @@ describe.each(storeBackends())('outages through the pipeline ($name)', (backend)
     const off = await userAt(MARINA, 'ExponentPushToken[off]', { timezone: 'America/Los_Angeles', language: 'en', categories: ['weather'], knownCategories: ['weather', 'crime', 'transit', 'public_safety', 'health', 'infrastructure', 'technology'] });
     await pipeline.ingest((await fetchStatusPage(SQUARE, () => true, fixtureGet(), NOW)).items);
     expect(await store.alertsForUser(off.id)).toHaveLength(0);
+  });
+
+  it('only the services I use: a Zoom-only person gets no Square outage, a Square follower does', async () => {
+    const tz = { timezone: 'America/Los_Angeles', language: 'en', quietHours: null };
+    const zoomOnly = await userAt(MARINA, 'ExponentPushToken[zoom]', { ...tz, techServices: ['zoom'] });
+    const square = await userAt(HONOLULU, 'ExponentPushToken[sq]', { ...tz, techServices: ['square'] });
+    const all = await userAt(MARINA, 'ExponentPushToken[all]', { ...tz, techServices: null });
+    await pipeline.ingest((await fetchStatusPage(SQUARE, () => true, fixtureGet(), NOW)).items);
+    expect(await store.alertsForUser(zoomOnly.id)).toHaveLength(0);
+    expect((await store.alertsForUser(square.id)).find((a) => a.severity === 3)?.delivery).toBe('push');
+    expect(await store.alertsForUser(all.id)).toHaveLength(2);
+    expect(push.outbox.map((m) => m.token).sort()).toEqual(['ExponentPushToken[all]', 'ExponentPushToken[sq]']);
+    expect((await store.getEvent((await store.alertsForUser(square.id))[0].eventId))?.service).toBe('square');
   });
 });

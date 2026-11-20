@@ -1,6 +1,6 @@
 import Constants from 'expo-constants';
 import { session } from './session';
-import type { Alert, AlertDetail, Category, Feedback, SavedPlace, UserPrefs } from './types';
+import type { Alert, AlertDetail, Category, Feedback, SavedPlace, TechService, UserPrefs } from './types';
 
 /** EXPO_PUBLIC_API_URL wins (e.g. a tunnel to a local server), else app.json extra.apiUrl (the hosted server). */
 export const API_URL: string =
@@ -51,6 +51,8 @@ export const api = {
     const s = qs.toString();
     return request<{ alerts: Alert[] }>('GET', `/v1/me/history${s ? `?${s}` : ''}`);
   },
+  /** Services whose outages can be followed one by one ("only the services I use"). */
+  services: () => request<{ services: TechService[] }>('GET', '/v1/services', undefined, false),
   alert: (id: string) => request<AlertDetail>('GET', `/v1/alerts/${id}`),
   feedback: (id: string, value: Feedback) => request<{ ok: true }>('POST', `/v1/alerts/${id}/feedback`, { value }),
 };

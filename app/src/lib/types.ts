@@ -21,6 +21,8 @@ export interface UserPrefs {
   insightsConsentAt?: string | null;
   /** Daily summary: local time ("18:00") for one push with what stayed in the feed; null = off. */
   digestTime?: string | null;
+  /** Tech outages only for these services (status-page keys, GET /v1/services); null/missing = all. */
+  techServices?: string[] | null;
 }
 
 export const DEFAULT_PREFS: UserPrefs = {
@@ -64,5 +66,8 @@ export interface Alert {
 export interface SourceRef { sourceName: string; url?: string; title: string; official: boolean }
 
 export interface AlertDetail { alert: Alert; sources: SourceRef[]; summary: string; endsAt: string | null }
+
+/** A service whose outages can be followed (GET /v1/services). */
+export interface TechService { key: string; name: string; kind: 'payments' | 'communication' | 'internet' | 'apps'; country: string }
 
 // Category labels and hints live in lib/i18n.ts (German + English).

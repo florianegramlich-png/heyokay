@@ -51,6 +51,10 @@ export function decide(user: User, event: RiskEvent, ctx: RankContext): { delive
   if (event.official && event.severity === 5) return { delivery: 'push', reason: 'official extreme warning' };
 
   if (!prefs.categories.includes(event.category)) return { delivery: 'suppressed', reason: 'category turned off' };
+  // "Only the services I use": an outage of a service the person didn't pick isn't theirs.
+  if (event.category === 'technology' && event.service && prefs.techServices && !prefs.techServices.includes(event.service)) {
+    return { delivery: 'suppressed', reason: 'service not followed' };
+  }
   // Risk outlook (PRD 6.1 #14): something that begins later goes to the feed under "Ahead";
   // a push comes with the actual warning, not the forecast.
   if (isAhead(event, ctx.now)) return { delivery: 'feed', reason: 'coming up' };
