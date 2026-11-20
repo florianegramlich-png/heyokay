@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { fetchStatusPage, incidentItem, parseStatusPages, US_STATUS_PAGES, type StatuspageIncident } from '../src/sources/statuspage.js';
+import { fetchStatusPage, incidentIoIncidents, incidentItem, parseStatusPages, US_STATUS_PAGES, type StatusPage, type StatuspageIncident } from '../src/sources/statuspage.js';
 import { describeSource } from '../src/sources/registry.js';
 import { storeBackends } from './backends.js';
 import type { Store } from '../src/store.js';
@@ -14,7 +14,9 @@ import { SqliteStore } from '../src/db.js';
 import { decide } from '../src/pipeline/rank.js';
 
 const FIXTURE = JSON.parse(readFileSync(new URL('./fixtures/statuspage-unresolved.json', import.meta.url), 'utf8')) as { incidents: StatuspageIncident[] };
-const SQUARE = US_STATUS_PAGES.find((p) => p.key === 'square')!;
+const INCIDENTIO = JSON.parse(readFileSync(new URL('./fixtures/incidentio-square-summary.json', import.meta.url), 'utf8'));
+// The Statuspage fixture comes from Square's old page (Statuspage API until 2026-10); its tests keep that setup.
+const SQUARE: StatusPage = { key: 'square', name: 'Square', url: 'https://www.issquareup.com', country: 'US', kind: 'payments' };
 const NOW = new Date('2026-11-18T19:45:00Z');
 const MARINA = { lat: 36.684, lon: -121.801 };
 const HONOLULU = { lat: 21.307, lon: -157.858 };
@@ -44,6 +46,43 @@ describe('status pages → technology outages', () => {
     expect(r.feedKey).toBe('statuspage:square');
     expect(r.items.map((i) => i.externalId)).toEqual(['statuspage:square:p9x2kq7rlm3c:3', 'statuspage:square:z9y8x7w6v5u4:1']);
     expect(r.listedIds.has('statuspage:square:p9x2kq7rlm3c:1')).toBe(true); // the lower level stays "listed" while critical
+  });
+
+  it('money and home services: their own words for what an outage affects; keys are unique', () => {
+    const page = (key: string) => US_STATUS_PAGES.find((p) => p.key === key)!;
+    const [critical] = FIXTURE.incidents;
+    const bare = { ...critical, components: [] };
+    expect(incidentItem(page('chime'), bare, NOW)!.body).toContain('This can affect banking, transfers and card payments.');
+    expect(incidentItem(page('ring'), bare, NOW)!).toMatchObject({ service: 'ring', title: 'Ring outage: service largely down' });
+    expect(incidentItem(page('ring'), bare, NOW)!.body).toContain('cameras and alarms reaching your phone');
+    const keys = US_STATUS_PAGES.map((p) => p.key);
+    expect(new Set(keys).size).toBe(keys.length);
+    for (const p of US_STATUS_PAGES) expect(p.url).toMatch(/^https:\/\/[^/]+$/);
+    expect(describeSource('statuspage:chime')).toMatchObject({ country: 'US', category: 'technology' });
+  });
+
+  it('incident.io pages (Square today, ChatGPT): the country sub-page only; full outage = critical, partial = major', async () => {
+    const live = US_STATUS_PAGES.find((p) => p.key === 'square')!;
+    expect(live).toMatchObject({ api: 'incidentio', subpage: 'united-states' });
+    const urls: string[] = [];
+    const r = await fetchStatusPage(live, () => true, async (u) => { urls.push(u); return INCIDENTIO; }, NOW);
+    expect(urls).toEqual(['https://www.issquareup.com/api/v1/summary']);
+    expect(r.items).toHaveLength(1); // degraded performance is not an alert; Canada is not read
+    expect(r.items[0]).toMatchObject({
+      externalId: 'statuspage:square:01KUS0000000000000000US001:3', service: 'square', officialSeverity: 3,
+      title: 'Square outage: service largely down', url: 'https://www.issquareup.com/united-states/incidents/01KUS0000000000000000US001',
+      publishedAt: '2026-11-20T18:05:00.000Z',
+    });
+    expect(r.items[0].body).toBe('Square reports: Card payments failing for some sellers. Affected: Card Payments, Point of Sale. We have identified the cause. Cash and manual entry still work.');
+    const canada = incidentIoIncidents(INCIDENTIO, 'canada');
+    expect(canada[0]).toMatchObject({ impact: 'major', status: 'identified' });
+    // A single page (OpenAI) has the summary at the top level.
+    const single = { page_title: 'OpenAI', ongoing_incidents: INCIDENTIO.subpages[1].summary.ongoing_incidents };
+    expect(incidentIoIncidents(single).map((i) => i.impact)).toEqual(['critical', 'minor']);
+    expect(incidentIoIncidents({ page_title: 'OpenAI', ongoing_incidents: [] })).toEqual([]);
+    // A changed API fails the poll (shows as failing on the Alert Desk) instead of looking like "no outages".
+    expect(() => incidentIoIncidents({ subpages: [] }, 'united-states')).toThrow(/ongoing_incidents/);
+    expect(() => incidentIoIncidents({ page: null })).toThrow();
   });
 
   it('STATUS_PAGES: default US list, a custom list, or off; the registry describes them', () => {
@@ -82,8 +121,9 @@ describe('only the services I use', () => {
     const pipeline = new Pipeline({ store, llm: new NoLLM(), geocoder: new GazetteerGeocoder(), push: new MemoryPushSender(), config: cfg });
     const app = buildApi({ store, pipeline, adminToken: 'x', runIngest: async () => ({}) });
     const list = (await app.inject({ method: 'GET', url: '/v1/services' })).json();
-    expect(list.services.map((x: any) => x.key)).toEqual(['cloudflare', 'discord', 'dropbox', 'reddit', 'square', 'zoom']);
-    expect(list.services[0]).toEqual({ key: 'cloudflare', name: 'Cloudflare', kind: 'internet', country: 'US' });
+    expect(list.services.map((x: any) => x.name)).toEqual(['Affirm', 'Cash App', 'ChatGPT', 'Chime', 'Cloudflare', 'Coinbase', 'Discord', 'Dropbox', 'Klarna', 'Reddit', 'Ring', 'Robinhood', 'Square', 'Wise', 'Zoom']);
+    expect(list.services.find((x: any) => x.key === 'cloudflare')).toEqual({ key: 'cloudflare', name: 'Cloudflare', kind: 'internet', country: 'US' });
+    expect(list.services.find((x: any) => x.key === 'square')).toEqual({ key: 'square', name: 'Square', kind: 'payments', country: 'US' }); // no API details
     const custom = buildApi({ store, pipeline, adminToken: 'x', runIngest: async () => ({}), statusPages: [] });
     expect((await custom.inject({ method: 'GET', url: '/v1/services' })).json()).toEqual({ services: [] });
     const reg = (await app.inject({ method: 'POST', url: '/v1/devices', payload: {} })).json();

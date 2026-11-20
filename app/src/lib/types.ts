@@ -68,6 +68,6 @@ export interface SourceRef { sourceName: string; url?: string; title: string; of
 export interface AlertDetail { alert: Alert; sources: SourceRef[]; summary: string; endsAt: string | null }
 
 /** A service whose outages can be followed (GET /v1/services). */
-export interface TechService { key: string; name: string; kind: 'payments' | 'communication' | 'internet' | 'apps'; country: string }
+export interface TechService { key: string; name: string; kind: 'payments' | 'banking' | 'communication' | 'internet' | 'apps' | 'home'; country: string }
 
 // Category labels and hints live in lib/i18n.ts (German + English).
