@@ -40,6 +40,8 @@ export interface SourceItem {
   structured?: boolean;
   /** A specific hazard within the category, for the recommended action (e.g. heat within weather). */
   hazard?: Hazard;
+  /** Technology outages: which service (status-page key, e.g. "zoom"), for per-service follow. */
+  service?: string;
   /** When the hazard begins, if the source says (CAP onset, forecast peak). Future = "coming up". */
   onsetAt?: string;
   /** ISO country (countries.ts) — decides emergency numbers and units. Missing = inferred from language. */
@@ -123,6 +125,8 @@ export interface RiskEvent {
   revision: number;
   /** Specific hazard (e.g. heat), for the recommended action. */
   hazard?: Hazard;
+  /** Technology outages: the service it concerns (status-page key). See UserPrefs.techServices. */
+  service?: string;
   /** When the hazard begins, if the source says (CAP onset, forecast peak). Future = "coming up". */
   onsetAt?: string;
   /** ISO country (countries.ts) — decides emergency numbers and units. Missing = inferred from language. */
@@ -166,6 +170,11 @@ export interface UserPrefs {
    * day's alerts that went to the feed only. null = off. Missing = the default.
    */
   digestTime?: string | null;
+  /**
+   * Technology outages, per service ("only the services I use"): status-page keys, e.g. ["zoom"].
+   * null or missing = every service. Services added later are then included automatically.
+   */
+  techServices?: string[] | null;
 }
 
 export const DEFAULT_PREFS: UserPrefs = {

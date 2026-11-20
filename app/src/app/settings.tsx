@@ -11,7 +11,8 @@ import { setLanguage, useI18n, type Lang } from '../lib/i18n';
 import { geocode, locationAccess, stopBackgroundUpdates, type LocationAccess } from '../lib/location';
 import { session } from '../lib/session';
 import { colors } from '../lib/theme';
-import { CATEGORIES, type SavedPlace, type UserPrefs } from '../lib/types';
+import { CATEGORIES, type SavedPlace, type TechService, type UserPrefs } from '../lib/types';
+import { followsService, toggleService } from '../lib/services';
 
 const LIMITS = [1, 3, 5, 10];
 const DIGEST_TIMES = ['07:00', '12:00', '18:00', '20:00'];
@@ -32,6 +33,7 @@ export default function Settings() {
   const [placeError, setPlaceError] = useState<string | null>(null);
   const [crashReports, setCrashReports] = useState(false);
   const [account, setAccount] = useState<string | null>(null);
+  const [services, setServices] = useState<TechService[]>([]);
   const showCrashToggle = crashReportingAvailable();
   const { t, lang, categoryLabel, categoryHint } = useI18n();
 
@@ -39,6 +41,7 @@ export default function Settings() {
     api.me().then((me) => { setPrefs(me.prefs); setPlaces(me.places); setAccount(me.account?.email ?? null); }).catch(() => null);
     locationAccess().then(setAccess);
     getCrashReportsOptIn().then(setCrashReports);
+    api.services().then((r) => setServices(r.services)).catch(() => null);
   }, []);
 
   async function toggleCrashReports(v: boolean) {
@@ -117,6 +120,31 @@ export default function Settings() {
           />
         ))}
       </Section>
+
+      {prefs.categories.includes('technology') && services.length > 0 ? (
+        <Section title={t('set.services')}>
+          <Text style={[s.rowHint, { marginBottom: 10 }]}>{t('set.services.hint')}</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            {[{ key: '*', name: t('set.services.all') }, ...services].map((svc) => {
+              const on = svc.key === '*' ? !prefs.techServices : !!prefs.techServices && followsService(prefs.techServices, svc.key);
+              return (
+                <Pressable
+                  key={svc.key}
+                  onPress={() => save({ techServices: svc.key === '*' ? null : toggleService(prefs.techServices, svc.key) })}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: on }}
+                  style={{
+                    paddingVertical: 8, paddingHorizontal: 14, borderRadius: 999,
+                    backgroundColor: on ? colors.brand : 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: on ? colors.brand : colors.line,
+                  }}
+                >
+                  <Text style={{ color: on ? '#fff' : colors.muted, fontWeight: '600' }}>{svc.name}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </Section>
+      ) : null}
 
       <Section title={t('set.notifications')}>
         <ToggleRow

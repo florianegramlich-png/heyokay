@@ -21,6 +21,8 @@ export interface UserPrefs {
   insightsConsentAt?: string | null;
   /** Daily summary time ("18:00") for the phone app's push; null = off. Set in the app. */
   digestTime?: string | null;
+  /** Tech outages only for these services (status-page keys, GET /v1/services); null/missing = all. */
+  techServices?: string[] | null;
 }
 
 export const DEFAULT_PREFS: UserPrefs = {

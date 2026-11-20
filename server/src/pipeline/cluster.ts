@@ -68,6 +68,7 @@ export function newEvent(ext: ExtractedEvent, item: SourceItem, status: EventSta
     copyTitle: null, copyBody: null, copyAction: null, copyIsTemplate: false,
     language: item.language ?? 'de',
     ...(item.hazard ? { hazard: item.hazard } : {}),
+    ...(item.service ? { service: item.service } : {}),
     ...(item.onsetAt ? { onsetAt: item.onsetAt } : {}),
     country: packFor(item).code,
     ...(item.feedKey ? { feedKeys: [item.feedKey] } : {}),

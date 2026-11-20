@@ -11,6 +11,7 @@ import { AuthError, checkEmailCode, signIn, signOut, startEmailSignIn, type Mail
 import { logError, defaultSink, type ErrorSink } from './errors.js';
 import { HISTORY_SCAN, searchHistory } from './history.js';
 import { M } from './metrics.js';
+import { followableServices, US_STATUS_PAGES, type StatusPage } from './sources/statuspage.js';
 
 const PrefsSchema = z.object({
   categories: z.array(z.enum(CATEGORIES)),
@@ -20,6 +21,8 @@ const PrefsSchema = z.object({
   language: z.enum(UI_LANGUAGES),
   insightsConsent: z.boolean(),
   digestTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable(),
+  // Status-page keys; unknown keys are kept (a service may come back to the list later).
+  techServices: z.array(z.string().regex(/^[a-z0-9][a-z0-9_-]{0,39}$/)).max(100).nullable(),
 }).partial();
 
 const Coord = { lat: z.number().min(-90).max(90), lon: z.number().min(-180).max(180) };
@@ -39,13 +42,15 @@ export interface ApiDeps {
   /** Daily AI budget, shown next to the spend on the Alert Desk. */
   aiBudgetEur?: number;
   roleStatus?: () => Record<string, unknown> | Promise<Record<string, unknown>>;
+  /** Services people can follow for technology outages (GET /v1/services). Default: the US status pages. */
+  statusPages?: StatusPage[];
   /** Clock for time-dependent answers (tests pin it; default: real time). */
   now?: () => Date;
   /** Where unexpected errors are logged (default: JSON lines on stderr). */
   errorSink?: ErrorSink;
 }
 
-export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus, roleStatus, pollIntervalSec = 120, aiBudgetEur = 0, mailer = null, errorSink = defaultSink, now: clock = () => new Date() }: ApiDeps) {
+export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus, roleStatus, pollIntervalSec = 120, aiBudgetEur = 0, mailer = null, statusPages = US_STATUS_PAGES, errorSink = defaultSink, now: clock = () => new Date() }: ApiDeps) {
   const app = Fastify({ logger: false });
   // Request metrics by route pattern (never the URL itself: no ids or tokens in labels).
   app.addHook('onResponse', async (req, reply) => {
@@ -86,6 +91,9 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
     const sources = Object.fromEntries(Object.entries(ingestStatus()).map(([k, v]) => [k, { ok: v.ok, running: v.running, lastOkAt: v.lastOkAt }]));
     return { ok: true, ...role, sources };
   });
+
+  // Public: the list behind "only the services I use" (no user data).
+  app.get('/v1/services', async () => ({ services: followableServices(statusPages) }));
 
   // ── device / user ────────────────────────────────────────────────────────
   app.post('/v1/devices', async (req) => {

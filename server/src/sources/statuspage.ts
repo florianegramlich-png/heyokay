@@ -23,7 +23,14 @@ export interface StatusPage {
   url: string;
   country: CountryCode;
   /** What people use it for — for the alert text. */
-  kind: 'payments' | 'communication' | 'internet' | 'apps';
+  kind: 'payments' | 'banking' | 'communication' | 'internet' | 'apps' | 'home';
+  /**
+   * Which public API the page speaks. Missing = Atlassian Statuspage. 'incidentio' = incident.io's
+   * status-summary API (GET <page>/api/v1/summary), used by Square since 2026 and by OpenAI.
+   */
+  api?: 'statuspage' | 'incidentio';
+  /** incident.io pages with one sub-page per country (Square): the sub-page to read, e.g. "united-states". */
+  subpage?: string;
 }
 
 /**
@@ -33,12 +40,31 @@ export interface StatusPage {
  */
 export const US_STATUS_PAGES: StatusPage[] = [
   { key: 'cloudflare', name: 'Cloudflare', url: 'https://www.cloudflarestatus.com', country: 'US', kind: 'internet' },
-  { key: 'square', name: 'Square', url: 'https://www.issquareup.com', country: 'US', kind: 'payments' },
+  // Square moved its status page to incident.io (the old Statuspage API answers 404 since 2026-10).
+  { key: 'square', name: 'Square', url: 'https://www.issquareup.com', country: 'US', kind: 'payments', api: 'incidentio', subpage: 'united-states' },
   { key: 'zoom', name: 'Zoom', url: 'https://status.zoom.us', country: 'US', kind: 'communication' },
   { key: 'discord', name: 'Discord', url: 'https://discordstatus.com', country: 'US', kind: 'communication' },
   { key: 'reddit', name: 'Reddit', url: 'https://www.redditstatus.com', country: 'US', kind: 'apps' },
   { key: 'dropbox', name: 'Dropbox', url: 'https://status.dropbox.com', country: 'US', kind: 'apps' },
+  // Money people use every day (added 2026-11-20; each URL answered the public API live that day).
+  { key: 'chime', name: 'Chime', url: 'https://status.chime.com', country: 'US', kind: 'banking' },
+  { key: 'cashapp', name: 'Cash App', url: 'https://status.cash.app', country: 'US', kind: 'payments' },
+  { key: 'affirm', name: 'Affirm', url: 'https://status.affirm.com', country: 'US', kind: 'payments' },
+  { key: 'klarna', name: 'Klarna', url: 'https://status.klarna.com', country: 'US', kind: 'payments' },
+  { key: 'wise', name: 'Wise', url: 'https://status.wise.com', country: 'US', kind: 'banking' },
+  { key: 'robinhood', name: 'Robinhood', url: 'https://status.robinhood.com', country: 'US', kind: 'banking' },
+  { key: 'coinbase', name: 'Coinbase', url: 'https://status.coinbase.com', country: 'US', kind: 'banking' },
+  { key: 'chatgpt', name: 'ChatGPT', url: 'https://status.openai.com', country: 'US', kind: 'apps', api: 'incidentio' },
+  // Home security: an outage can mean cameras and alarms don't reach the phone.
+  { key: 'ring', name: 'Ring', url: 'https://status.ring.com', country: 'US', kind: 'home' },
 ];
+
+/** What the apps show in "only the services I use" (GET /v1/services). */
+export interface FollowableService { key: string; name: string; kind: StatusPage['kind']; country: CountryCode }
+export function followableServices(pages: StatusPage[]): FollowableService[] {
+  return pages.map(({ key, name, kind, country }) => ({ key, name, kind, country }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
 
 export function parseStatusPages(raw: string | undefined): StatusPage[] {
   if (!raw) return US_STATUS_PAGES;
@@ -81,6 +107,8 @@ const KIND_TEXT = {
   communication: { en: 'calls and messages', de: 'Anrufe und Nachrichten' },
   internet: { en: 'many websites and apps', de: 'viele Websites und Apps' },
   apps: { en: 'the service', de: 'den Dienst' },
+  banking: { en: 'banking, transfers and card payments', de: 'Banking, Überweisungen und Kartenzahlungen' },
+  home: { en: 'cameras and alarms reaching your phone', de: 'Kameras und Alarme auf dem Handy' },
 } as const;
 
 /** Statuspage incident → one item per incident and impact level (a higher level updates the event). */
@@ -103,6 +131,7 @@ export function incidentItem(page: StatusPage, inc: StatuspageIncident, now = ne
     structured: true,
     hazard: 'outage',
     category: 'technology',
+    service: page.key,
     language: 'en',
     country: page.country,
     title: `${page.name} outage: ${inc.impact === 'critical' ? 'service largely down' : 'service disrupted'}`,
@@ -114,6 +143,48 @@ export function incidentItem(page: StatusPage, inc: StatuspageIncident, now = ne
     areaName: area.name,
     officialSeverity: severity,
   };
+}
+
+/** One ongoing incident in incident.io's public status-summary API. */
+export interface IncidentIoIncident {
+  id: string;
+  name: string;
+  status?: string; // investigating | identified | monitoring
+  url?: string;
+  published_at?: string;
+  last_update_at?: string;
+  last_update_message?: string;
+  current_worst_impact?: string; // degraded_performance | partial_outage | full_outage
+  affected_components?: Array<{ name?: string }>;
+}
+interface IncidentIoSummary { ongoing_incidents?: IncidentIoIncident[] }
+
+/** incident.io's impact words → Statuspage's: a full outage is "critical", a partial one "major". */
+const INCIDENTIO_IMPACT: Record<string, string> = { full_outage: 'critical', partial_outage: 'major', degraded_performance: 'minor' };
+
+/**
+ * incident.io summary → the same incident shape as Statuspage, so both share `incidentItem`.
+ * A parent page (Square) lists one summary per country sub-page; we read only the one asked for.
+ * Throws when the answer has neither shape, so a changed API shows as failing, not as "all fine".
+ */
+export function incidentIoIncidents(json: unknown, subpage?: string): StatuspageIncident[] {
+  const j = json as { subpages?: Array<{ subpage?: string; summary?: IncidentIoSummary }> } & IncidentIoSummary;
+  let summary: IncidentIoSummary | undefined;
+  if (subpage) summary = j.subpages?.find((s) => s.subpage === subpage)?.summary;
+  else summary = j;
+  if (!summary || !Array.isArray(summary.ongoing_incidents)) {
+    throw new Error(`incident.io summary without ongoing_incidents${subpage ? ` for ${subpage}` : ''}`);
+  }
+  return summary.ongoing_incidents.map((inc) => ({
+    id: inc.id,
+    name: inc.name,
+    status: inc.status ?? 'investigating',
+    impact: INCIDENTIO_IMPACT[inc.current_worst_impact ?? ''] ?? 'none',
+    created_at: inc.published_at ?? inc.last_update_at ?? '',
+    shortlink: inc.url,
+    incident_updates: inc.last_update_message ? [{ body: inc.last_update_message, created_at: inc.last_update_at }] : [],
+    components: inc.affected_components ?? [],
+  }));
 }
 
 export type JsonGetter = (url: string) => Promise<unknown>;
@@ -135,10 +206,13 @@ export async function fetchStatusPage(
   now = new Date(),
 ): Promise<{ feedKey: string; items: SourceItem[]; listedIds: Set<string> }> {
   const feedKey = `statuspage:${page.key}`;
-  const json = (await get(`${page.url.replace(/\/$/, '')}/api/v2/incidents/unresolved.json`)) as { incidents?: StatuspageIncident[] };
+  const base = page.url.replace(/\/$/, '');
+  const incidents = page.api === 'incidentio'
+    ? incidentIoIncidents(await get(`${base}/api/v1/summary`), page.subpage)
+    : ((await get(`${base}/api/v2/incidents/unresolved.json`)) as { incidents?: StatuspageIncident[] }).incidents ?? [];
   const items: SourceItem[] = [];
   const listedIds = new Set<string>();
-  for (const inc of json.incidents ?? []) {
+  for (const inc of incidents) {
     const item = incidentItem(page, inc, now);
     if (!item) continue;
     listedIds.add(item.externalId);
