@@ -7,17 +7,19 @@ import { Card, CardContent } from '@/components/ui/card';
 import { AlertCard } from '@/components/alert-card';
 import { AlertDialog } from '@/components/alert-dialog';
 import { CategoryIcon } from '@/components/category-icon';
+import { Dashboard } from '@/components/dashboard';
 import { api } from '@/lib/api';
 import { aheadAlerts, byCategory } from '@/lib/feed';
+import { buildDashboard } from '@/lib/dashboard';
 import { currentPosition } from '@/lib/location';
 import { useDevice } from '@/lib/use-device';
 import { useI18n } from '@/lib/i18n';
-import type { Alert, Feedback } from '@/lib/types';
+import { CATEGORIES, type Alert, type Category, type Feedback } from '@/lib/types';
 
 /**
  * "Jetzt": what's going on near you and your places right now, grouped by category.
- * Replaces the v0 risk-score dashboard: no scores, no area ratings, just current alerts,
- * and "Alles okay." when there is nothing.
+ * Starts with the overview (status, topic tiles, next 24 hours), like the phone app, then the
+ * alerts. No risk scores, no area ratings.
  */
 export default function Now() {
   const ready = useDevice();
@@ -27,10 +29,14 @@ export default function Now() {
   const [open, setOpen] = useState<Alert | null>(null);
   const [locating, setLocating] = useState(false);
   const [location, setLocation] = useState<'unknown' | 'on' | 'off' | 'denied'>('unknown');
+  /** Topics the person follows (dashboard tiles); all of them until /v1/me answers. */
+  const [followed, setFollowed] = useState<readonly Category[]>(CATEGORIES);
 
   const load = useCallback(async () => {
     try {
-      setAlerts((await api.alerts()).alerts);
+      const [{ alerts }, me] = await Promise.all([api.alerts(), api.me().catch(() => null)]);
+      if (me) setFollowed(me.prefs.categories);
+      setAlerts(alerts);
       setError(false);
     } catch {
       setError(true);
@@ -66,6 +72,7 @@ export default function Now() {
   if (!ready) return null;
   const groups = alerts ? byCategory(alerts) : [];
   const ahead = alerts ? aheadAlerts(alerts) : [];
+  const dashboard = alerts ? buildDashboard(alerts, followed) : null;
 
   return (
     <div className="space-y-4">
@@ -92,12 +99,8 @@ export default function Now() {
         </CardContent></Card>
       )}
 
-      {alerts && groups.length === 0 && (
-        <Card><CardContent className="space-y-2 p-8 text-center">
-          <p className="bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-2xl font-semibold text-transparent">{t('feed.empty.title')}</p>
-          <p className="text-sm text-muted-foreground">{t('feed.empty.text')}</p>
-        </CardContent></Card>
-      )}
+      {dashboard && <Dashboard data={dashboard} onOpen={setOpen} />}
+
 
       {groups.map((g) => (
         <section key={g.category} className="space-y-2">

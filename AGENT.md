@@ -7,7 +7,7 @@ You run once a day, unattended, and keep building Hey-Okay: calm, location-aware
 1. **Work on the rolling branch.** Everything goes on the branch `agent/next`, with one open PR into `main`.
    - If `agent/next` exists, check it out and merge `origin/main` into it. Resolve conflicts in favour of `main`.
    - If it doesn't exist (Flori merged the last PR), create it from `main`.
-2. **Check the baseline.** In `server`, run `npm ci && npm test && npm run typecheck`. In `app`, run `npm ci && npx tsc --noEmit`.
+2. **Check the baseline.** In `server`, run `npm ci && npm test && npm run typecheck`. In `app`, run `npm ci && npx tsc --noEmit`. In `web`, run `npm ci && npm test && npm run typecheck`.
    - If anything is red, fixing it is today's task. Don't start a roadmap item.
 3. **Pick the task.** Take the first unchecked item under "Up next" in `ROADMAP.md`.
    - Do up to **3 items per run**, in roadmap order, one at a time: build, verify, record and commit each item (steps 4–6) before starting the next.
@@ -17,6 +17,7 @@ You run once a day, unattended, and keep building Hey-Okay: calm, location-aware
    - Write tests next to the existing ones.
    - Keep the conventions: ESM + NodeNext, zod at the API boundary, no new runtime dependency unless the item needs one.
    - In `app/`, always add packages with `npx expo install`. Read `app/AGENTS.md` before touching Expo APIs.
+   - **Phone app and web app together** (Flori, 2026-11-20: "always add to web app and iPhone app"). Every user-facing feature goes into both `app/` and `web/` in the same item: screens, settings, strings (de, en, ta) and the client types/API calls. Share logic by copying the small pure module (e.g. `lib/dashboard.ts`) and test it on both sides. The only exceptions are things a browser can't do (push notifications, notification buttons, background location, offline cache); say so in the changelog. Step 2's checks then also include `web`: `npm ci && npm test && npm run typecheck`.
 5. **Verify.** Run everything from step 2 again. All green is required.
    - If you can't get it green, revert your changes for this item.
    - Then add a note under the item in `ROADMAP.md` saying what blocked you, commit only that note, and end the run (don't start another item).
