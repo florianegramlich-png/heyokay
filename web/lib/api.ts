@@ -1,5 +1,5 @@
 import { session } from './session';
-import type { Alert, AlertDetail, Feedback, SavedPlace, UserPrefs } from './types';
+import type { Alert, AlertDetail, Category, Feedback, SavedPlace, TechService, UserPrefs } from './types';
 
 /** The Hey-Okay server. NEXT_PUBLIC_API_URL for a local server (e.g. http://localhost:8787). */
 export const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'https://heyokay.fly.dev').replace(/\/$/, '');
@@ -41,6 +41,16 @@ export function createApi(fetchImpl: Fetch = (...a) => fetch(...a), getToken = (
     deletePlace: (id: string) => request<{ ok: true }>('DELETE', `/v1/me/places/${encodeURIComponent(id)}`),
     deleteAccount: () => request<{ ok: true }>('DELETE', '/v1/me'),
     alerts: () => request<{ alerts: Alert[] }>('GET', '/v1/me/alerts'),
+    /** Services whose outages can be followed one by one ("only the services I use"). */
+    services: () => request<{ services: TechService[] }>('GET', '/v1/services', undefined, false),
+    /** Past alerts, one per incident; `q` matches words, `category` narrows by topic. */
+    history: (opts: { q?: string; category?: Category } = {}) => {
+      const qs = new URLSearchParams();
+      if (opts.q) qs.set('q', opts.q);
+      if (opts.category) qs.set('category', opts.category);
+      const s = qs.toString();
+      return request<{ alerts: Alert[] }>('GET', `/v1/me/history${s ? `?${s}` : ''}`);
+    },
     alert: (id: string) => request<AlertDetail>('GET', `/v1/alerts/${encodeURIComponent(id)}`),
     feedback: (id: string, value: Feedback) => request<{ ok: true }>('POST', `/v1/alerts/${encodeURIComponent(id)}/feedback`, { value }),
   };

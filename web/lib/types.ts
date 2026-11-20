@@ -67,3 +67,6 @@ export interface SourceRef { sourceName: string; url?: string; title: string; of
 export interface AlertDetail { alert: Alert; sources: SourceRef[]; summary: string; endsAt: string | null }
 
 // Category labels and hints live in lib/i18n.ts.
+
+/** A service whose outages can be followed (GET /v1/services). Same as the phone app. */
+export interface TechService { key: string; name: string; kind: 'payments' | 'banking' | 'communication' | 'internet' | 'apps' | 'home'; country: string }

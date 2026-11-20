@@ -16,7 +16,8 @@ import { setLanguage, useI18n, type Lang } from '@/lib/i18n';
 import { LanguageSelect } from '@/components/language-select';
 import { AccountSection } from '@/components/account-section';
 import { useDevice } from '@/lib/use-device';
-import { CATEGORIES, type Category, type SavedPlace, type UserPrefs } from '@/lib/types';
+import { CATEGORIES, type Category, type SavedPlace, type TechService, type UserPrefs } from '@/lib/types';
+import { followsService, toggleService } from '@/lib/services';
 import { cn } from '@/lib/utils';
 
 const LIMITS = [1, 3, 5, 10];
@@ -42,10 +43,12 @@ export default function Settings() {
   const [adding, setAdding] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [account, setAccount] = useState<string | null>(null);
+  const [services, setServices] = useState<TechService[]>([]);
 
   useEffect(() => {
     if (!ready) return;
     api.me().then((m) => { setPrefs(m.prefs); setPlaces(m.places); setAccount(m.account?.email ?? null); }).catch(() => {});
+    api.services().then((r) => setServices(r.services)).catch(() => {});
   }, [ready]);
 
   const save = async (patch: Partial<UserPrefs>) => {
@@ -118,6 +121,27 @@ export default function Settings() {
         </ul>
         <p className="text-xs text-muted-foreground">{t('onb.cat.always')}</p>
       </Section>
+
+      {prefs.categories.includes('technology') && services.length > 0 && (
+        <Section title={t('set.services')}>
+          <p className="text-xs text-muted-foreground">{t('set.services.hint')}</p>
+          <div className="flex flex-wrap gap-2">
+            {[{ key: '*', name: t('set.services.all') }, ...services].map((svc) => {
+              const on = svc.key === '*' ? !prefs.techServices : !!prefs.techServices && followsService(prefs.techServices, svc.key);
+              return (
+                <button
+                  key={svc.key}
+                  type="button"
+                  role="checkbox"
+                  aria-checked={on}
+                  onClick={() => save({ techServices: svc.key === '*' ? null : toggleService(prefs.techServices, svc.key) })}
+                  className={cn('rounded-full border px-3.5 py-1.5 text-sm font-medium', on ? 'border-purple-500 bg-purple-500/20 text-purple-100' : 'border-border text-muted-foreground')}
+                >{svc.name}</button>
+              );
+            })}
+          </div>
+        </Section>
+      )}
 
       <Section title={t('set.notifications')}>
         <label className="flex cursor-pointer items-center gap-3">

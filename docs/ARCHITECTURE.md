@@ -2,7 +2,7 @@
 
 Living document. The build agent updates it whenever a component, source, integration or setting changes (see `AGENT.md`). A copy lives in the Claude project "Hey Okey" (`claude/architecture.md`).
 
-Last updated: 2026-11-20 (tech outages per service, more services + incident.io; alert history search; daily summary; US wildfires; river gauges/floods; earthquakes, air quality; AI cost guard, insights consent, language dropdown; India pack + SACHET, FEMA IPAWS; technology outages US; scaling plan; worker roles; country packs; Supabase; delivery queue; source registry; observability; staging + EAS Update).
+Last updated: 2026-11-20 (web app catches up with the phone app; tech outages per service, more services + incident.io; alert history search; daily summary; US wildfires; river gauges/floods; earthquakes, air quality; AI cost guard, insights consent, language dropdown; India pack + SACHET, FEMA IPAWS; technology outages US; scaling plan; worker roles; country packs; Supabase; delivery queue; source registry; observability; staging + EAS Update).
 
 ## 1. System overview
 
@@ -156,7 +156,7 @@ Phone app: `EXPO_PUBLIC_API_URL` (else `app.json → extra.apiUrl`). Web app: `N
 ## 6. Clients
 
 - **Phone app** (`app/`): notification buttons "Relevant / Nicht relevant" (category `alert`, Android background task, iOS listener, offline queue); pushes stacked per incident (`threadId`); onboarding (value → location → always → notifications → topics → consent), main screen "In deiner Nähe" (current alerts by topic, earlier below), alert detail (map, what to do, sources, AI note, feedback), settings (language, topics, quiet hours, daily limit, location, places, crash reports, delete). Background location task, push token registration, deep links. Night-sky design shared with the web.
-- **Web app** (`web/`): same API and strings (copied from the phone app), "Jetzt", "Verlauf", detail dialog, settings, onboarding; no push or background location.
+- **Web app** (`web/`): same API, strings and features as the phone app (rule since 2026-11-20): "Jetzt" with the overview (status, topic tiles, next 24 hours), searchable "Verlauf", detail dialog, settings incl. tech-outage services, onboarding; no push, daily summary or background location (browser limits).
 - Environments: production `heyokay.fly.dev` (from `main`), staging `heyokay-staging.fly.dev` (from `agent/next`, schema `heyokay_staging`); web production → production API, Vercel previews → staging; app EAS Update channels `development` / `preview` / `production` (`runtimeVersion` policy `appVersion`). Runbook: `docs/runbooks/staging.md`.
 - Both register anonymously (device token). The server supports email sign-in (accounts shared across devices); the sign-in screens in the app and web are the next roadmap item.
 

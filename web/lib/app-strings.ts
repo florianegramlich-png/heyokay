@@ -146,6 +146,33 @@ const de = {
   // Android background-location notification
   'fgs.title': 'Hey-Okay ist aktiv',
   'fgs.body': 'Warnungen für deine Umgebung',
+
+  // Overview, history search, tech services (copied from the phone app, 2026-11-20)
+  'history.search': 'Suchen, z. B. S-Bahn, Straße, Ort',
+  'history.all': 'Alle',
+  'history.today': 'Heute',
+  'history.yesterday': 'Gestern',
+  'history.none': 'Nichts gefunden.',
+  'history.empty': 'Noch keine früheren Hinweise.',
+  'history.offline': 'Der Verlauf braucht eine Verbindung. Später erneut versuchen.',
+  'set.services': 'Technik: welche Dienste',
+  'set.services.hint': 'Störungen nur zu den Diensten, die du nutzt. Neue Dienste sind bei „Alle“ automatisch dabei.',
+  'set.services.all': 'Alle',
+  'dash.title': 'Überblick',
+  'dash.status.calm': 'Alles okay',
+  'dash.status.info': 'Gut zu wissen',
+  'dash.status.watch': 'Behalte es im Blick',
+  'dash.status.act': 'Pass auf dich auf',
+  'dash.status.calmText': 'Gerade betrifft dich und deine Orte nichts.',
+  'dash.nowMark': 'Jetzt',
+  'dash.status.text': '{n} aktuell in deiner Nähe · höchste Stufe: {level}',
+  'dash.topics': 'Deine Themen',
+  'dash.quiet': 'Ruhig',
+  'dash.active': '{n} aktuell',
+  'dash.next24': 'Nächste 24 Stunden',
+  'dash.next24.none': 'Nichts angekündigt.',
+  'dash.next24.count': '{n} angekündigt',
+  'dash.meter': 'Höchste Warnstufe',
 };
 
 export type AppKey = keyof typeof de;
@@ -270,6 +297,33 @@ const en: Record<AppKey, string> = {
 
   'fgs.title': 'Hey-Okay is on',
   'fgs.body': 'Alerts for where you are',
+
+  // Overview, history search, tech services (copied from the phone app, 2026-11-20)
+  'history.search': 'Search, e.g. a train line, street or place',
+  'history.all': 'All',
+  'history.today': 'Today',
+  'history.yesterday': 'Yesterday',
+  'history.none': 'Nothing found.',
+  'history.empty': 'No past alerts yet.',
+  'history.offline': 'History needs a connection. Try again later.',
+  'set.services': 'Tech outages: which services',
+  'set.services.hint': 'Outages only for the services you use. With “All”, new services are included automatically.',
+  'set.services.all': 'All',
+  'dash.title': 'Overview',
+  'dash.status.calm': 'All okay',
+  'dash.status.info': 'Good to know',
+  'dash.status.watch': 'Keep an eye out',
+  'dash.status.act': 'Take care',
+  'dash.status.calmText': 'Nothing affects you or your places right now.',
+  'dash.nowMark': 'Now',
+  'dash.status.text': '{n} current near you · highest: {level}',
+  'dash.topics': 'Your topics',
+  'dash.quiet': 'Quiet',
+  'dash.active': '{n} current',
+  'dash.next24': 'Next 24 hours',
+  'dash.next24.none': 'Nothing expected.',
+  'dash.next24.count': '{n} expected',
+  'dash.meter': 'Highest alert level',
 };
 
 const ta: Record<AppKey, string> = TA;

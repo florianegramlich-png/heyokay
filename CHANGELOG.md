@@ -10,6 +10,13 @@
 
 ## 2026-11-20
 
+- **Web app catches up with the phone app** (Flori: "please add always to web app and iphone app").
+  - **Overview on "Jetzt"**: the same status card with level meter ("All okay" / "Good to know" / "Keep an eye out" / "Take care"), a tile per topic (tap opens the most serious alert; police shows only a count, no level) and the next-24-hours line, above the alerts. The extra "All okay." card underneath is gone, as in the phone app.
+  - **Search in "Verlauf"**: search box and topic chips, one entry per incident in its latest state, grouped Today / Yesterday / by date (same server endpoint as the phone app).
+  - **Settings → "Tech outages: which services"**: the same chips as the phone app; a choice made on one shows on the other for a signed-in person.
+  - Shared logic copied from the phone app (`web/lib/dashboard.ts`, `history.ts`, `services.ts`) and the strings in English, German and Tamil. Still phone-only, because browsers can't do them: push, notification buttons, the daily summary push, background location, the offline copy.
+  - **New rule for the build agent** (`AGENT.md`): every user-facing feature goes into both the phone app and the web app in the same item, and the web tests and typecheck are part of every run.
+  - Tests: `web/test/parity.test.ts` (4 new: overview, service picker, day grouping + API URLs, strings in all languages). Web 16/16, web typecheck and production build clean; rendered at phone width against the demo server (Now, Settings, History). Nothing for Flori to do: Vercel deploys it when this is merged.
 - **Skipped: "technology, part 4" (CISA advisories)**: CISA's feeds answer "Access Denied" from here, so I can't check the live format. **Waiting: "technology, part 5"** for the open question above. I stopped there for today rather than jump further down the list.
 - **Tech outages: more US services, and Square works again** (roadmap "technology, part 3", split into 3a, done, and 3b, carriers and big banks, which waits for Flori) [PRD 1, 5.4].
   - New services people can follow: **Chime, Cash App, Affirm, Klarna, Wise, Robinhood, Coinbase** (money: "This can affect banking, transfers and card payments"), **Ring** (home security: "cameras and alarms reaching your phone") and **ChatGPT**. 15 services in all; they show up in the app's service chips automatically.
