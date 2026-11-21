@@ -1,3 +1,5 @@
+import { parseProviders, type LlmProviderName } from './llm-providers.js';
+import { parseClientIds } from './identity.js';
 import { USGS_URL } from './sources/usgs.js';
 import { PEGELONLINE_URL } from './sources/pegelonline.js';
 import { WFIGS_URL } from './sources/wildfire.js';
@@ -30,6 +32,16 @@ export interface Config {
   anthropicApiKey: string | null;
   /** Small, fast model for extraction and alert writing. */
   model: string;
+  /** AI providers in failover order (`LLM_PROVIDERS`, default `anthropic`); ones without a key are left out. */
+  llmProviders: LlmProviderName[];
+  mistralApiKey: string | null;
+  mistralModel: string;
+  mistralUrl: string;
+  /** Any OpenAI-style chat API (e.g. an open-weight model on EU hosting). */
+  openaiCompatUrl: string | null;
+  openaiCompatApiKey: string | null;
+  openaiCompatModel: string | null;
+  openaiCompatJsonMode: 'schema' | 'object';
   /** NINA channels to poll. https://warnung.bund.de/api31 */
   ninaChannels: string[];
   rssFeeds: RssFeedConfig[];
@@ -37,6 +49,10 @@ export interface Config {
   feuerwehrBerlin: boolean;
   /** Email sign-in codes via Resend; both unset = email sign-in off. */
   resendApiKey: string | null;
+  /** Sign in with Apple: accepted audiences (iOS bundle id, web Services ID); null = off. */
+  appleClientIds: string[] | null;
+  /** Sign in with Google: accepted audiences (iOS, Android and web OAuth client ids); null = off. */
+  googleClientIds: string[] | null;
   mailFrom: string | null;
   /** OpenWeatherMap key for heat at people's places; unset = off. */
   openWeatherApiKey: string | null;
@@ -108,6 +124,14 @@ export function loadConfig(env = process.env): Config {
     adminToken: env.ADMIN_TOKEN ?? 'change-me',
     anthropicApiKey: env.ANTHROPIC_API_KEY ?? null,
     model: env.HEYOKAY_MODEL ?? 'claude-haiku-5-5',
+    llmProviders: parseProviders(env.LLM_PROVIDERS),
+    mistralApiKey: env.MISTRAL_API_KEY || null,
+    mistralModel: env.MISTRAL_MODEL ?? 'mistral-small-latest',
+    mistralUrl: env.MISTRAL_URL ?? 'https://api.mistral.ai/v1',
+    openaiCompatUrl: env.OPENAI_COMPAT_URL || null,
+    openaiCompatApiKey: env.OPENAI_COMPAT_API_KEY || null,
+    openaiCompatModel: env.OPENAI_COMPAT_MODEL || null,
+    openaiCompatJsonMode: env.OPENAI_COMPAT_JSON_MODE === 'object' ? 'object' : 'schema',
     ninaChannels: (env.NINA_CHANNELS ?? 'mowas,katwarn,biwapp,dwd,lhp,police').split(',').map((s) => s.trim()).filter(Boolean),
     rssFeeds: env.RSS_FEEDS ? (JSON.parse(env.RSS_FEEDS) as RssFeedConfig[]) : [],
     presseportalAgencies: selectAgencies(env.PRESSEPORTAL_AGENCIES),
@@ -115,6 +139,8 @@ export function loadConfig(env = process.env): Config {
     openWeatherApiKey: env.OPENWEATHER_API_KEY || null,
     resendApiKey: env.RESEND_API_KEY || null,
     mailFrom: env.MAIL_FROM || null,
+    appleClientIds: parseClientIds(env.APPLE_CLIENT_IDS),
+    googleClientIds: parseClientIds(env.GOOGLE_CLIENT_IDS),
     heatThresholdC: Number(env.HEAT_THRESHOLD_C ?? 32),
     feuerwehrBerlin: !/^(off|false|0|no)$/i.test(env.FEUERWEHR_BERLIN ?? 'on'),
     nwsAreas: (env.NWS_AREAS ?? '').split(';').flatMap((a) => (a.includes(',') && /\d/.test(a) ? [a] : a.split(','))).map((s) => s.trim()).filter(Boolean),

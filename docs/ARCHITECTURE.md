@@ -2,7 +2,7 @@
 
 Living document. The build agent updates it whenever a component, source, integration or setting changes (see `AGENT.md`). A copy lives in the Claude project "Hey Okey" (`claude/architecture.md`).
 
-Last updated: 2026-11-20 (web app catches up with the phone app; tech outages per service, more services + incident.io; alert history search; daily summary; US wildfires; river gauges/floods; earthquakes, air quality; AI cost guard, insights consent, language dropdown; India pack + SACHET, FEMA IPAWS; technology outages US; scaling plan; worker roles; country packs; Supabase; delivery queue; source registry; observability; staging + EAS Update).
+Last updated: 2026-11-21 (AI provider failover: Mistral / OpenAI-compatible; Sign in with Apple / Google on the server; web app catches up with the phone app; tech outages per service, more services + incident.io; alert history search; daily summary; US wildfires; river gauges/floods; earthquakes, air quality; AI cost guard, insights consent, language dropdown; India pack + SACHET, FEMA IPAWS; technology outages US; scaling plan; worker roles; country packs; Supabase; delivery queue; source registry; observability; staging + EAS Update).
 
 ## 1. System overview
 
@@ -52,7 +52,7 @@ Live URLs: API `https://heyokay.fly.dev` (health: `/health`, Alert Desk: `/admin
 ### Storage (`store.ts`, `db.ts`, `pg.ts`)
 
 - `Store` interface with two implementations: `SqliteStore` (tests, demo, production today on the Fly volume `/data/heyokay.db`) and `PgStore` (used when `DATABASE_URL` is set; numbered migrations under an advisory lock; PostGIS for matching, pgvector for embeddings).
-- Tables: `users` (a person's data: prefs, last location only, push token), `devices` (hashed bearer tokens; several per signed-in person), `accounts` (email, one per user), `email_codes` (hashed sign-in codes), `saved_places`, `source_items`, `events` (+ `event_embeddings`), `alerts`, `push_tickets` (delivery status per push), `leases` (which worker runs ingest and push), `push_jobs` (delivery queue), `source_status` (per-source health written by the worker), `llm_usage` (AI spend per day), `digests` (daily summary sent, per person and local day).
+- Tables: `users` (a person's data: prefs, last location only, push token), `devices` (hashed bearer tokens; several per signed-in person), `accounts` (email, one per user), `account_identities` (Apple / Google user id → account), `email_codes` (hashed sign-in codes), `saved_places`, `source_items`, `events` (+ `event_embeddings`), `alerts`, `push_tickets` (delivery status per push), `leases` (which worker runs ingest and push), `push_jobs` (delivery queue), `source_status` (per-source health written by the worker), `llm_usage` (AI spend per day), `digests` (daily summary sent, per person and local day).
 - Privacy by design: only the latest location (rounded ~100 m on the device), no history; device tokens hashed; `DELETE /v1/me` erases everything; the model never sees user data.
 
 ### Countries (`countries.ts`)
@@ -65,7 +65,7 @@ One pack per country (DE, AT, CH, US, IN): language, emergency / police / medica
 
 ### API (`api.ts`)
 
-Sign-in: `POST /v1/auth/email/start`, `POST /v1/auth/email/verify`, `POST /v1/auth/signout`.
+Sign-in: `POST /v1/auth/email/start`, `POST /v1/auth/email/verify`, `POST /v1/auth/apple`, `POST /v1/auth/google` (body `{ idToken }`, checked in `identity.ts`: RS256 against the provider's JWKS, issuer, audience = our client ids, expiry; links by provider `sub`, or by an email the provider has verified), `POST /v1/auth/signout`.
 Device: `POST /v1/devices`, `GET /v1/me`, `PUT /v1/me/prefs`, `PUT /v1/me/push-token`, `POST /v1/me/location`, `GET|POST|DELETE /v1/me/places`, `DELETE /v1/me`.
 Services: `GET /v1/services` (public; outage services people can follow, from `STATUS_PAGES`).
 Alerts: `GET /v1/me/alerts`, `GET /v1/me/history?q=&category=` (search, `history.ts`), `GET /v1/alerts/:id`, `POST /v1/alerts/:id/feedback`.
@@ -108,12 +108,11 @@ Health: `GET /health` (per-source status, no error texts). CORS: any origin, bea
 | OS geocoder | Addresses for saved places (phone) | expo-location | Live | Address, on the device's provider |
 | Apple Maps / Google Maps | Map in alert detail | react-native-maps | Live | Map tiles |
 | Postgres + PostGIS + pgvector | Production DB option | `DATABASE_URL`, `server/docker-compose.yml` | Ready, not switched on | — |
-| OpenWeatherMap | Heat forecast | `RESEND_API_KEY`, `MAIL_FROM` | – | Email sign-in codes (off without both) |
-| `OPENWEATHER_API_KEY`, `HEAT_THRESHOLD_C` | Built, waits for key | Grid-cell centres only (no person's place) |
+| OpenWeatherMap | Heat forecast | `OPENWEATHER_API_KEY`, `HEAT_THRESHOLD_C` | Built, waits for key | Grid-cell centres only (no person's place) |
 | Resend (email) | Sign-in codes | `RESEND_API_KEY`, `MAIL_FROM` | Built, waits for key and sender domain | Email address, code |
-| Sign in with Apple, Google | Accounts | planned | Roadmap | — |
+| Sign in with Apple, Google | Accounts (identity tokens checked against `appleid.apple.com/auth/keys`, `googleapis.com/oauth2/v3/certs`) | `APPLE_CLIENT_IDS`, `GOOGLE_CLIENT_IDS` | Server built 2026-11-21; buttons and client ids to follow | Provider user id, email (Apple may give a relay address) |
 | RevenueCat / App Store / Play | Subscriptions | planned | Decision 5 open | — |
-| OpenAI | Second LLM, failover | planned | Roadmap | — |
+| Mistral (La Plateforme, EU) / any OpenAI-style chat API | Second LLM, failover (`llm-providers.ts`, order `LLM_PROVIDERS`) | `MISTRAL_API_KEY`, `MISTRAL_MODEL`; `OPENAI_COMPAT_URL/API_KEY/MODEL/JSON_MODE` | Built 2026-11-21, off until a key is set and listed in `LLM_PROVIDERS` | Public source text only |
 | Analytics (Mixpanel/Amplitude) | Product KPIs | planned | Decision 9 open | — |
 
 ## 5. Configuration (server environment)
@@ -125,6 +124,9 @@ Health: `GET /health` (per-source status, no error texts). CORS: any origin, bea
 | `DB_PATH` | ./heyokay.db | SQLite file (Fly: `/data/heyokay.db`) |
 | `ADMIN_TOKEN` | change-me | Alert Desk; production refuses to start with the default |
 | `ANTHROPIC_API_KEY`, `HEYOKAY_MODEL` | –, claude-haiku-5-5 | AI extraction and copy |
+| `LLM_PROVIDERS` | anthropic | AI providers in failover order (`anthropic`, `mistral`, `openai_compat`); ones without a key are skipped; a provider failing 3 times in a row is skipped for 5 min; templates last |
+| `MISTRAL_API_KEY`, `MISTRAL_MODEL`, `MISTRAL_URL` | –, mistral-small-latest, https://api.mistral.ai/v1 | Mistral as an AI provider (separate from `EMBEDDINGS_API_KEY`) |
+| `OPENAI_COMPAT_URL`, `OPENAI_COMPAT_API_KEY`, `OPENAI_COMPAT_MODEL`, `OPENAI_COMPAT_JSON_MODE` | –, –, –, schema | Any OpenAI-style chat API (e.g. an open-weight model on EU hosting); `object` for servers without JSON-schema output |
 | `EMBEDDINGS_URL`, `EMBEDDINGS_MODEL`, `EMBEDDINGS_API_KEY`, `EMBEDDINGS_DIMENSIONS`, `EMBEDDINGS_MIN_SIMILARITY` | –, –, –, –, 0.8 | Dedup embeddings |
 | `NINA_CHANNELS` | mowas,katwarn,biwapp,dwd,lhp,police | NINA channels |
 | `DWD_DIRECT` | fallback | `fallback` / `always` / `off` |
@@ -133,6 +135,8 @@ Health: `GET /health` (per-source status, no error texts). CORS: any origin, bea
 | `FEUERWEHR_BERLIN` | on | `off` to disable |
 | `RSS_FEEDS` | [] | JSON list of feeds |
 | `RESEND_API_KEY`, `MAIL_FROM` | – | Email sign-in codes (off without both) |
+| `APPLE_CLIENT_IDS` | – | Sign in with Apple: accepted audiences, comma-separated (iOS bundle id, web Services ID); off when unset |
+| `GOOGLE_CLIENT_IDS` | – | Sign in with Google: accepted OAuth client ids (iOS, Android, web); off when unset |
 | `OPENWEATHER_API_KEY`, `HEAT_THRESHOLD_C` | –, 32 | Heat at people's places (off without key) |
 | `POLL_INTERVAL_SEC` | 120 | Ingest interval |
 | `GEOCODER_URL`, `GEOCODER_USER_AGENT` | Nominatim | Geocoding |
@@ -158,7 +162,7 @@ Phone app: `EXPO_PUBLIC_API_URL` (else `app.json → extra.apiUrl`). Web app: `N
 - **Phone app** (`app/`): notification buttons "Relevant / Nicht relevant" (category `alert`, Android background task, iOS listener, offline queue); pushes stacked per incident (`threadId`); onboarding (value → location → always → notifications → topics → consent), main screen "In deiner Nähe" (current alerts by topic, earlier below), alert detail (map, what to do, sources, AI note, feedback), settings (language, topics, quiet hours, daily limit, location, places, crash reports, delete). Background location task, push token registration, deep links. Night-sky design shared with the web.
 - **Web app** (`web/`): same API, strings and features as the phone app (rule since 2026-11-20): "Jetzt" with the overview (status, topic tiles, next 24 hours), searchable "Verlauf", detail dialog, settings incl. tech-outage services, onboarding; no push, daily summary or background location (browser limits).
 - Environments: production `heyokay.fly.dev` (from `main`), staging `heyokay-staging.fly.dev` (from `agent/next`, schema `heyokay_staging`); web production → production API, Vercel previews → staging; app EAS Update channels `development` / `preview` / `production` (`runtimeVersion` policy `appVersion`). Runbook: `docs/runbooks/staging.md`.
-- Both register anonymously (device token). The server supports email sign-in (accounts shared across devices); the sign-in screens in the app and web are the next roadmap item.
+- Both register anonymously (device token). The server supports email sign-in and Sign in with Apple / Google (accounts shared across devices); app and web have the email sign-in screens, the Apple/Google buttons are a roadmap item.
 
 ## 7. Quality and operations
 

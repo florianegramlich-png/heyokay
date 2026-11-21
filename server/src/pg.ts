@@ -6,7 +6,7 @@ import type {
 import { DEFAULT_PREFS, normalizePrefs, savedPrefs } from './types.js';
 import { hashToken } from './db.js';
 import { LOCATION_MAX_AGE_MS, MAX_PLACE_RADIUS_M } from './geo.js';
-import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob, type LlmUsageDay } from './store.js';
+import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type AccountIdentity, type IdentityProvider, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob, type LlmUsageDay } from './store.js';
 import type { PushTicket } from './push.js';
 import type { SourceStatus } from './ingest.js';
 
@@ -150,6 +150,18 @@ export const MIGRATIONS: { version: number; sql: string }[] = [
     version: 11,
     sql: `CREATE TABLE digests (user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE, day date NOT NULL, sent_at timestamptz NOT NULL, PRIMARY KEY (user_id, day));`,
   },
+  {
+    // Sign in with Apple / Google: the provider's stable user id, linked to an account.
+    version: 12,
+    sql: `
+      CREATE TABLE account_identities (
+        provider text NOT NULL, subject text NOT NULL,
+        account_id uuid NOT NULL REFERENCES accounts(id) ON DELETE CASCADE, created_at timestamptz NOT NULL,
+        PRIMARY KEY (provider, subject)
+      );
+      CREATE INDEX account_identities_account ON account_identities(account_id);
+    `,
+  },
 ];
 
 /**
@@ -274,6 +286,7 @@ export class PgStore implements Store {
     if (!isUuid(userId)) return;
     await this.tx(async (c) => {
       await c.query(`DELETE FROM push_tickets WHERE user_id = $1`, [userId]);
+      await c.query(`DELETE FROM account_identities WHERE account_id IN (SELECT id FROM accounts WHERE user_id = $1)`, [userId]);
       await c.query(`DELETE FROM accounts WHERE user_id = $1`, [userId]);
       await c.query(`DELETE FROM devices WHERE user_id = $1`, [userId]);
       await c.query(`DELETE FROM alerts WHERE user_id = $1`, [userId]);
@@ -514,6 +527,22 @@ export class PgStore implements Store {
     const a: Account = { id: randomUUID(), email, userId, createdAt: new Date().toISOString() };
     await this.q(`INSERT INTO accounts (id, email, user_id, created_at) VALUES ($1,$2,$3,$4)`, [a.id, email, userId, a.createdAt]);
     return a;
+  }
+
+  async accountByIdentity(provider: IdentityProvider, subject: string): Promise<Account | null> {
+    const { rows } = await this.q(`SELECT a.* FROM account_identities i JOIN accounts a ON a.id = i.account_id WHERE i.provider = $1 AND i.subject = $2`, [provider, subject]);
+    return rows[0] ? rowToAccount(rows[0]) : null;
+  }
+
+  async addIdentity(accountId: string, { provider, subject }: AccountIdentity): Promise<void> {
+    await this.q(`INSERT INTO account_identities (provider, subject, account_id, created_at) VALUES ($1,$2,$3,$4) ON CONFLICT (provider, subject) DO NOTHING`,
+      [provider, subject, accountId, new Date().toISOString()]);
+  }
+
+  async identities(accountId: string): Promise<AccountIdentity[]> {
+    if (!isUuid(accountId)) return [];
+    const { rows } = await this.q(`SELECT provider, subject FROM account_identities WHERE account_id = $1 ORDER BY provider, created_at`, [accountId]);
+    return rows.map((r: any) => ({ provider: r.provider, subject: r.subject }));
   }
 
   async moveDevice(token: string, toUserId: string): Promise<void> {

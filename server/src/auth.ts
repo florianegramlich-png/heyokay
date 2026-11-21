@@ -1,5 +1,6 @@
 import { createHash, randomInt, timingSafeEqual } from 'node:crypto';
-import type { Store, Account } from './store.js';
+import type { Store, Account, IdentityProvider } from './store.js';
+import type { IdentityClaims } from './identity.js';
 import type { Language, User } from './types.js';
 import { fetchWithTimeout } from './http.js';
 
@@ -39,7 +40,7 @@ export class MemoryMailer implements Mailer {
 }
 
 export class AuthError extends Error {
-  constructor(public code: 'invalid_code' | 'rate_limited' | 'email_not_configured' | 'not_signed_in', public status: number) { super(code); }
+  constructor(public code: 'invalid_code' | 'rate_limited' | 'email_not_configured' | 'not_signed_in' | 'email_required' | 'account_conflict', public status: number) { super(code); }
 }
 
 export function normalizeEmail(email: string) {
@@ -91,17 +92,42 @@ export async function checkEmailCode(store: Store, rawEmail: string, code: strin
   return false;
 }
 
+/** Email-code sign-in: attach this device to the account for `email` (see `attach`). */
+export async function signIn(store: Store, deviceToken: string, current: User, rawEmail: string): Promise<{ user: User; account: Account }> {
+  const email = normalizeEmail(rawEmail);
+  return attach(store, deviceToken, current, await store.accountByEmail(email), email);
+}
+
 /**
- * Attach this device to the account for `email`:
+ * Sign in with Apple or Google, after the identity token has been checked (identity.ts).
+ * - the provider's user id is already linked → that account;
+ * - else an account with the same email, if the provider has verified the address → link to it
+ *   (so email-code, Apple and Google all reach the same data);
+ * - else a new account with that email, linked.
+ * A verified email is needed to create or link an account; an account already linked to another
+ * id of the same provider is never linked a second time (409).
+ */
+export async function signInWithIdentity(store: Store, deviceToken: string, current: User, provider: IdentityProvider, claims: IdentityClaims): Promise<{ user: User; account: Account }> {
+  const linked = await store.accountByIdentity(provider, claims.sub);
+  if (linked) return attach(store, deviceToken, current, linked, linked.email);
+  if (!claims.email || !claims.emailVerified) throw new AuthError('email_required', 400);
+  const email = normalizeEmail(claims.email);
+  const byEmail = await store.accountByEmail(email);
+  if (byEmail && (await store.identities(byEmail.id)).some((i) => i.provider === provider)) throw new AuthError('account_conflict', 409);
+  const result = await attach(store, deviceToken, current, byEmail, email);
+  await store.addIdentity(result.account.id, { provider, subject: claims.sub });
+  return result;
+}
+
+/**
+ * Attach this device to `existing` (or a new account for `email`):
  * - no account yet: the device's current data becomes the account (nothing moves);
  * - account exists and this device is anonymous: its places join the account, then the device
  *   signs in to the account's data (a new phone gets back its places and settings);
  * - this device is signed in to another account: it switches to this one.
  * Returns the user the device now belongs to.
  */
-export async function signIn(store: Store, deviceToken: string, current: User, rawEmail: string): Promise<{ user: User; account: Account }> {
-  const email = normalizeEmail(rawEmail);
-  const existing = await store.accountByEmail(email);
+async function attach(store: Store, deviceToken: string, current: User, existing: Account | null, email: string): Promise<{ user: User; account: Account }> {
   const mine = await store.accountForUser(current.id);
   if (!existing) {
     if (mine) {
