@@ -1,3 +1,4 @@
+import { parseClientIds } from './identity.js';
 import { USGS_URL } from './sources/usgs.js';
 import { PEGELONLINE_URL } from './sources/pegelonline.js';
 import { WFIGS_URL } from './sources/wildfire.js';
@@ -37,6 +38,10 @@ export interface Config {
   feuerwehrBerlin: boolean;
   /** Email sign-in codes via Resend; both unset = email sign-in off. */
   resendApiKey: string | null;
+  /** Sign in with Apple: accepted audiences (iOS bundle id, web Services ID); null = off. */
+  appleClientIds: string[] | null;
+  /** Sign in with Google: accepted audiences (iOS, Android and web OAuth client ids); null = off. */
+  googleClientIds: string[] | null;
   mailFrom: string | null;
   /** OpenWeatherMap key for heat at people's places; unset = off. */
   openWeatherApiKey: string | null;
@@ -115,6 +120,8 @@ export function loadConfig(env = process.env): Config {
     openWeatherApiKey: env.OPENWEATHER_API_KEY || null,
     resendApiKey: env.RESEND_API_KEY || null,
     mailFrom: env.MAIL_FROM || null,
+    appleClientIds: parseClientIds(env.APPLE_CLIENT_IDS),
+    googleClientIds: parseClientIds(env.GOOGLE_CLIENT_IDS),
     heatThresholdC: Number(env.HEAT_THRESHOLD_C ?? 32),
     feuerwehrBerlin: !/^(off|false|0|no)$/i.test(env.FEUERWEHR_BERLIN ?? 'on'),
     nwsAreas: (env.NWS_AREAS ?? '').split(';').flatMap((a) => (a.includes(',') && /\d/.test(a) ? [a] : a.split(','))).map((s) => s.trim()).filter(Boolean),

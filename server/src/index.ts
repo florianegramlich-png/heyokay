@@ -25,6 +25,7 @@ import { installProcessHandlers, logError, sentrySink, setErrorSinks, stderrSink
 import { M, registry } from './metrics.js';
 import { sourceHealth } from './sources/registry.js';
 import { ResendMailer } from './auth.js';
+import { IdentityVerifier } from './identity.js';
 import { IngestScheduler, Mutex, type SourceTask } from './ingest.js';
 import { describeSource, sourceEnabled } from './sources/registry.js';
 import { LeaderElector, leaseTtlMs, runsApi, runsWorker } from './roles.js';
@@ -186,9 +187,13 @@ const roleStatus = async () => ({
 });
 
 const mailer = config.resendApiKey && config.mailFrom ? new ResendMailer(config.resendApiKey, config.mailFrom) : null;
+const identity = {
+  ...(config.appleClientIds ? { apple: new IdentityVerifier('apple', { audiences: config.appleClientIds }) } : {}),
+  ...(config.googleClientIds ? { google: new IdentityVerifier('google', { audiences: config.googleClientIds }) } : {}),
+};
 let app;
 if (runsApi(config.role)) {
-  app = buildApi({ store, pipeline, adminToken: config.adminToken, runIngest, ingestStatus: worker ? () => scheduler.snapshot() : undefined, roleStatus, mailer, statusPages: config.statusPages, pollIntervalSec: config.pollIntervalSec, aiBudgetEur: config.llmDailyBudgetEur });
+  app = buildApi({ store, pipeline, adminToken: config.adminToken, runIngest, ingestStatus: worker ? () => scheduler.snapshot() : undefined, roleStatus, mailer, identity, statusPages: config.statusPages, pollIntervalSec: config.pollIntervalSec, aiBudgetEur: config.llmDailyBudgetEur });
 } else {
   // Worker only: no public routes, just the health check the platform polls.
   app = Fastify({ logger: false });

@@ -7,7 +7,9 @@ import { CATEGORIES, DEFAULT_PREFS, UI_LANGUAGES, contentLanguage, stampConsent,
 import { DESK_HTML } from './desk.js';
 import { sourceReport } from './sources/registry.js';
 import { MAX_PLACE_RADIUS_M } from './geo.js';
-import { AuthError, checkEmailCode, signIn, signOut, startEmailSignIn, type Mailer } from './auth.js';
+import { AuthError, checkEmailCode, signIn, signInWithIdentity, signOut, startEmailSignIn, type Mailer } from './auth.js';
+import { IdentityError, type IdentityVerifier } from './identity.js';
+import type { IdentityProvider } from './store.js';
 import { logError, defaultSink, type ErrorSink } from './errors.js';
 import { HISTORY_SCAN, searchHistory } from './history.js';
 import { M } from './metrics.js';
@@ -33,6 +35,8 @@ export interface ApiDeps {
   adminToken: string;
   /** Sends sign-in codes; null = email sign-in not configured. */
   mailer?: Mailer | null;
+  /** Sign in with Apple / Google; a missing provider answers 503 (client ids not set). */
+  identity?: Partial<Record<IdentityProvider, IdentityVerifier>>;
   /** Per-source ingest health for /health (no error texts). */
   ingestStatus?: () => Record<string, { ok: boolean; running: boolean; lastOkAt: string | null }>;
   runIngest: () => Promise<unknown>;
@@ -50,7 +54,7 @@ export interface ApiDeps {
   errorSink?: ErrorSink;
 }
 
-export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus, roleStatus, pollIntervalSec = 120, aiBudgetEur = 0, mailer = null, statusPages = US_STATUS_PAGES, errorSink = defaultSink, now: clock = () => new Date() }: ApiDeps) {
+export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus, roleStatus, pollIntervalSec = 120, aiBudgetEur = 0, mailer = null, identity = {}, statusPages = US_STATUS_PAGES, errorSink = defaultSink, now: clock = () => new Date() }: ApiDeps) {
   const app = Fastify({ logger: false });
   // Request metrics by route pattern (never the URL itself: no ids or tokens in labels).
   app.addHook('onResponse', async (req, reply) => {
@@ -180,6 +184,31 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
     const { user, account } = await signIn(store, bearer(req), u, email);
     return { userId: user.id, prefs: user.prefs, places: await store.places(user.id), account: { email: account.email } };
   });
+
+  /**
+   * Sign in with Apple / Google: the app sends the identity token from the provider's sheet;
+   * the server checks it (identity.ts) and attaches this device like the email code does.
+   */
+  for (const provider of ['apple', 'google'] as const) {
+    app.post(`/v1/auth/${provider}`, async (req, reply) => {
+      const u = await authed(req, reply); if (!u) return;
+      const { idToken } = z.object({ idToken: z.string().min(20).max(8192) }).parse(req.body);
+      const verifier = identity[provider];
+      if (!verifier) return reply.code(503).send({ error: 'provider_not_configured' });
+      let claims;
+      try { claims = await verifier.verify(idToken); } catch (err) {
+        if (err instanceof IdentityError) {
+          if (err.code === 'provider_unavailable') logError(`auth:${provider}`, err, {}, errorSink);
+          return reply.code(err.code === 'invalid_token' ? 400 : 503).send({ error: err.code });
+        }
+        throw err;
+      }
+      try {
+        const { user, account } = await signInWithIdentity(store, bearer(req), u, provider, claims);
+        return { userId: user.id, prefs: user.prefs, places: await store.places(user.id), account: { email: account.email } };
+      } catch (err) { return authError(reply, err); }
+    });
+  }
 
   /** This device gets a fresh anonymous identity; the account keeps its data. Returns the new token. */
   app.post('/v1/auth/signout', async (req, reply) => {
