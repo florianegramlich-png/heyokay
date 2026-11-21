@@ -1,6 +1,6 @@
 import { loadConfig } from './config.js';
 import { createStore, storeKind } from './create-store.js';
-import { AnthropicLLM } from './llm.js';
+import { createLLM } from './llm-providers.js';
 import { BudgetedLLM } from './llm-budget.js';
 import { NominatimGeocoder, GazetteerGeocoder } from './geocode.js';
 import { ExpoPushSender } from './push.js';
@@ -25,6 +25,7 @@ import { installProcessHandlers, logError, sentrySink, setErrorSinks, stderrSink
 import { M, registry } from './metrics.js';
 import { sourceHealth } from './sources/registry.js';
 import { ResendMailer } from './auth.js';
+import { IdentityVerifier } from './identity.js';
 import { IngestScheduler, Mutex, type SourceTask } from './ingest.js';
 import { describeSource, sourceEnabled } from './sources/registry.js';
 import { LeaderElector, leaseTtlMs, runsApi, runsWorker } from './roles.js';
@@ -39,7 +40,8 @@ if (process.env.NODE_ENV === 'production' && config.adminToken === 'change-me') 
   process.exit(1);
 }
 const store = await createStore(config);
-const llm = new BudgetedLLM(new AnthropicLLM(config.anthropicApiKey, config.model), store, {
+const providers = createLLM(config);
+const llm = new BudgetedLLM(providers, store, {
   dailyBudgetEur: config.llmDailyBudgetEur, priceInPerMTok: config.llmPriceInPerMTok, priceOutPerMTok: config.llmPriceOutPerMTok,
 });
 const geocoder = config.geocoderUrl ? new NominatimGeocoder(config.geocoderUrl, config.geocoderUserAgent) : new GazetteerGeocoder();
@@ -186,16 +188,20 @@ const roleStatus = async () => ({
 });
 
 const mailer = config.resendApiKey && config.mailFrom ? new ResendMailer(config.resendApiKey, config.mailFrom) : null;
+const identity = {
+  ...(config.appleClientIds ? { apple: new IdentityVerifier('apple', { audiences: config.appleClientIds }) } : {}),
+  ...(config.googleClientIds ? { google: new IdentityVerifier('google', { audiences: config.googleClientIds }) } : {}),
+};
 let app;
 if (runsApi(config.role)) {
-  app = buildApi({ store, pipeline, adminToken: config.adminToken, runIngest, ingestStatus: worker ? () => scheduler.snapshot() : undefined, roleStatus, mailer, statusPages: config.statusPages, pollIntervalSec: config.pollIntervalSec, aiBudgetEur: config.llmDailyBudgetEur });
+  app = buildApi({ store, pipeline, adminToken: config.adminToken, runIngest, ingestStatus: worker ? () => scheduler.snapshot() : undefined, roleStatus, mailer, identity, statusPages: config.statusPages, pollIntervalSec: config.pollIntervalSec, aiBudgetEur: config.llmDailyBudgetEur });
 } else {
   // Worker only: no public routes, just the health check the platform polls.
   app = Fastify({ logger: false });
   app.get('/health', async () => ({ ok: true, ...(await roleStatus()), sources: scheduler.snapshot() }));
 }
 await app.listen({ port: config.port, host: '0.0.0.0' });
-console.log(`Hey-Okay server on :${config.port} · role ${config.role} · ${storeKind(config)} · AI ${llm.enabled ? `on (${config.model})` : 'off — rules + templates'} · dedup ${embedder.enabled ? `embeddings (${embedder.model})` : 'word overlap'}${runsApi(config.role) ? ' · Alert Desk at /admin' : ''}`);
+console.log(`Hey-Okay server on :${config.port} · role ${config.role} · ${storeKind(config)} · AI ${llm.enabled ? `on (${providers.names.join(' → ')})` : 'off — rules + templates'} · dedup ${embedder.enabled ? `embeddings (${embedder.model})` : 'word overlap'}${runsApi(config.role) ? ' · Alert Desk at /admin' : ''}`);
 if (config.adminToken === 'change-me') console.warn('⚠ Set ADMIN_TOKEN before exposing this server.');
 if (config.role !== 'all' && !config.databaseUrl) console.warn('⚠ Separate api/worker roles need a shared database (DATABASE_URL); SQLite is one machine only.');
 

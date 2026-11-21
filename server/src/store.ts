@@ -29,6 +29,10 @@ export type PushStatus = 'pending' | 'delivered' | 'error' | 'retried' | 'unknow
 
 export interface Account { id: string; email: string; userId: string; createdAt: string }
 
+/** A sign-in provider other than email codes (PRD 5.3, 7.1). */
+export type IdentityProvider = 'apple' | 'google';
+export interface AccountIdentity { provider: IdentityProvider; subject: string }
+
 export interface EmailCode { email: string; codeHash: string; expiresAt: string; attempts: number; sends: number; windowStart: string }
 
 export interface LlmUsageDay { day: string; calls: number; inputTokens: number; outputTokens: number; eur: number; skipped: number }
@@ -139,6 +143,11 @@ export interface Store {
   accountForUser(userId: string): Promise<Account | null>;
   accountByEmail(email: string): Promise<Account | null>;
   createAccount(email: string, userId: string): Promise<Account>;
+  /** The account a provider's stable user id (`sub`) is linked to. */
+  accountByIdentity(provider: IdentityProvider, subject: string): Promise<Account | null>;
+  /** Links a provider's user id to an account (no-op if already linked to it). */
+  addIdentity(accountId: string, identity: AccountIdentity): Promise<void>;
+  identities(accountId: string): Promise<AccountIdentity[]>;
   /** Points this device token at another user (signing in on a phone that already has an account elsewhere). */
   moveDevice(token: string, toUserId: string): Promise<void>;
   /** Removes one device token (signing out); the user and other devices stay. */

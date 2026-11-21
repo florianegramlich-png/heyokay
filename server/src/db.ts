@@ -4,7 +4,7 @@ import type {
   Alert, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
 } from './types.js';
 import { DEFAULT_PREFS, normalizePrefs, savedPrefs } from './types.js';
-import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob, type LlmUsageDay } from './store.js';
+import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type AccountIdentity, type IdentityProvider, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob, type LlmUsageDay } from './store.js';
 import type { PushTicket } from './push.js';
 import type { SourceStatus } from './ingest.js';
 import { distanceM, LOCATION_MAX_AGE_MS } from './geo.js';
@@ -67,6 +67,11 @@ export class SqliteStore implements Store {
       CREATE TABLE IF NOT EXISTS accounts (
         id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, user_id TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
         created_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS account_identities (
+        provider TEXT NOT NULL, subject TEXT NOT NULL,
+        account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE, created_at TEXT NOT NULL,
+        PRIMARY KEY (provider, subject)
       );
       CREATE TABLE IF NOT EXISTS email_codes (
         email TEXT PRIMARY KEY, code_hash TEXT NOT NULL, expires_at TEXT NOT NULL,
@@ -135,6 +140,7 @@ export class SqliteStore implements Store {
   /** GDPR erasure: user, places and alerts (cascade). */
   async deleteUser(userId: string): Promise<void> {
     this.db.prepare(`DELETE FROM push_tickets WHERE user_id = ?`).run(userId);
+    this.db.prepare(`DELETE FROM account_identities WHERE account_id IN (SELECT id FROM accounts WHERE user_id = ?)`).run(userId);
     this.db.prepare(`DELETE FROM accounts WHERE user_id = ?`).run(userId);
     this.db.prepare(`DELETE FROM devices WHERE user_id = ?`).run(userId);
     this.db.prepare(`DELETE FROM alerts WHERE user_id = ?`).run(userId);
@@ -357,6 +363,21 @@ export class SqliteStore implements Store {
     const a: Account = { id: randomUUID(), email, userId, createdAt: new Date().toISOString() };
     this.db.prepare(`INSERT INTO accounts (id, email, user_id, created_at) VALUES (?,?,?,?)`).run(a.id, email, userId, a.createdAt);
     return a;
+  }
+
+  async accountByIdentity(provider: IdentityProvider, subject: string): Promise<Account | null> {
+    const r: any = this.db.prepare(`SELECT a.* FROM account_identities i JOIN accounts a ON a.id = i.account_id WHERE i.provider = ? AND i.subject = ?`).get(provider, subject);
+    return r ? rowToAccount(r) : null;
+  }
+
+  async addIdentity(accountId: string, { provider, subject }: AccountIdentity): Promise<void> {
+    this.db.prepare(`INSERT INTO account_identities (provider, subject, account_id, created_at) VALUES (?,?,?,?) ON CONFLICT (provider, subject) DO NOTHING`)
+      .run(provider, subject, accountId, new Date().toISOString());
+  }
+
+  async identities(accountId: string): Promise<AccountIdentity[]> {
+    return (this.db.prepare(`SELECT provider, subject FROM account_identities WHERE account_id = ? ORDER BY provider, created_at`).all(accountId) as any[])
+      .map((r) => ({ provider: r.provider, subject: r.subject }));
   }
 
   async moveDevice(token: string, toUserId: string): Promise<void> {
