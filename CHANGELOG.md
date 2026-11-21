@@ -10,6 +10,7 @@
 
 ## 2026-11-21
 
+- **Roadmap: four new alert topics at the top of "Up next"** (Flori: "more interesting categories, e.g. crime and whatever else is relevant"; picked from the research options). (1) More crime coverage: Presseportal police for the ~20 biggest German cities, then Polizei Berlin and München directly. (2) Product and food recalls (lebensmittelwarnung.de; FDA, USDA, CPSC), feed only. (3) Demonstrations, big events and road closures (Berlin assemblies list, Autobahn GmbH API). (4) Pollen and UV (DWD open data), off by default. The build agent starts with these on its next run.
 - **Skipped today, waiting for Flori or blocked** (unchanged since earlier runs): Postgres switch (Flori runs the runbook), US city police/fire feed, carriers and banks, CISA advisories, BSI/CERT-In, BVG/VBB. I started with the first item after those.
 - **Skipped: Apple/Google buttons, subscriptions, OS geofencing.** All three touch Expo APIs, and `app/AGENTS.md` says to read the SDK 58 docs first; docs.expo.dev couldn't be reached from here today. Subscriptions also wait for Decisions 5 and 10. Notes are under each item in the roadmap.
 - **A second AI provider, with automatic failover** (roadmap "Second LLM provider", split into part 1, done, and part 2, comparing providers on the eval set once the eval harness exists) [PRD 6.3, 6.4, Decision 12].
