@@ -1,6 +1,6 @@
 import { loadConfig } from './config.js';
 import { createStore, storeKind } from './create-store.js';
-import { AnthropicLLM } from './llm.js';
+import { createLLM } from './llm-providers.js';
 import { BudgetedLLM } from './llm-budget.js';
 import { NominatimGeocoder, GazetteerGeocoder } from './geocode.js';
 import { ExpoPushSender } from './push.js';
@@ -40,7 +40,8 @@ if (process.env.NODE_ENV === 'production' && config.adminToken === 'change-me') 
   process.exit(1);
 }
 const store = await createStore(config);
-const llm = new BudgetedLLM(new AnthropicLLM(config.anthropicApiKey, config.model), store, {
+const providers = createLLM(config);
+const llm = new BudgetedLLM(providers, store, {
   dailyBudgetEur: config.llmDailyBudgetEur, priceInPerMTok: config.llmPriceInPerMTok, priceOutPerMTok: config.llmPriceOutPerMTok,
 });
 const geocoder = config.geocoderUrl ? new NominatimGeocoder(config.geocoderUrl, config.geocoderUserAgent) : new GazetteerGeocoder();
@@ -200,7 +201,7 @@ if (runsApi(config.role)) {
   app.get('/health', async () => ({ ok: true, ...(await roleStatus()), sources: scheduler.snapshot() }));
 }
 await app.listen({ port: config.port, host: '0.0.0.0' });
-console.log(`Hey-Okay server on :${config.port} · role ${config.role} · ${storeKind(config)} · AI ${llm.enabled ? `on (${config.model})` : 'off — rules + templates'} · dedup ${embedder.enabled ? `embeddings (${embedder.model})` : 'word overlap'}${runsApi(config.role) ? ' · Alert Desk at /admin' : ''}`);
+console.log(`Hey-Okay server on :${config.port} · role ${config.role} · ${storeKind(config)} · AI ${llm.enabled ? `on (${providers.names.join(' → ')})` : 'off — rules + templates'} · dedup ${embedder.enabled ? `embeddings (${embedder.model})` : 'word overlap'}${runsApi(config.role) ? ' · Alert Desk at /admin' : ''}`);
 if (config.adminToken === 'change-me') console.warn('⚠ Set ADMIN_TOKEN before exposing this server.');
 if (config.role !== 'all' && !config.databaseUrl) console.warn('⚠ Separate api/worker roles need a shared database (DATABASE_URL); SQLite is one machine only.');
 

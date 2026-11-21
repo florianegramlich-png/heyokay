@@ -15,6 +15,7 @@ export interface StructuredLLM {
 }
 
 export class AnthropicLLM implements StructuredLLM {
+  readonly name = 'anthropic';
   private client: Anthropic | null;
   /** Called after every successful call with the tokens used (cost tracking, llm-budget.ts). */
   onUsage?: (u: LlmUsage) => void;

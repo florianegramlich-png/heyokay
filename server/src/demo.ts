@@ -6,7 +6,7 @@ import { buildApi } from './api.js';
 import { loadConfig } from './config.js';
 import { SqliteStore } from './db.js';
 import { GazetteerGeocoder } from './geocode.js';
-import { AnthropicLLM } from './llm.js';
+import { createLLM } from './llm-providers.js';
 import { Pipeline } from './pipeline/run.js';
 import { MemoryPushSender } from './push.js';
 import { toSourceItem } from './sources/nina.js';
@@ -19,7 +19,7 @@ const FIXTURE_NOW = new Date('2026-11-14T09:50:00+01:00');
 
 const config = { ...loadConfig(), databaseUrl: null, dbPath: ':memory:', pollIntervalSec: 0 };
 const store = new SqliteStore(':memory:');
-const llm = new AnthropicLLM(config.anthropicApiKey, config.model);
+const llm = createLLM(config);
 const push = new MemoryPushSender();
 const pipeline = new Pipeline({ store, llm, geocoder: new GazetteerGeocoder(), push, config, now: () => FIXTURE_NOW });
 

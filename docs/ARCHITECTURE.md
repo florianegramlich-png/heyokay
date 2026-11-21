@@ -2,7 +2,7 @@
 
 Living document. The build agent updates it whenever a component, source, integration or setting changes (see `AGENT.md`). A copy lives in the Claude project "Hey Okey" (`claude/architecture.md`).
 
-Last updated: 2026-11-21 (Sign in with Apple / Google on the server; web app catches up with the phone app; tech outages per service, more services + incident.io; alert history search; daily summary; US wildfires; river gauges/floods; earthquakes, air quality; AI cost guard, insights consent, language dropdown; India pack + SACHET, FEMA IPAWS; technology outages US; scaling plan; worker roles; country packs; Supabase; delivery queue; source registry; observability; staging + EAS Update).
+Last updated: 2026-11-21 (AI provider failover: Mistral / OpenAI-compatible; Sign in with Apple / Google on the server; web app catches up with the phone app; tech outages per service, more services + incident.io; alert history search; daily summary; US wildfires; river gauges/floods; earthquakes, air quality; AI cost guard, insights consent, language dropdown; India pack + SACHET, FEMA IPAWS; technology outages US; scaling plan; worker roles; country packs; Supabase; delivery queue; source registry; observability; staging + EAS Update).
 
 ## 1. System overview
 
@@ -112,7 +112,7 @@ Health: `GET /health` (per-source status, no error texts). CORS: any origin, bea
 | Resend (email) | Sign-in codes | `RESEND_API_KEY`, `MAIL_FROM` | Built, waits for key and sender domain | Email address, code |
 | Sign in with Apple, Google | Accounts (identity tokens checked against `appleid.apple.com/auth/keys`, `googleapis.com/oauth2/v3/certs`) | `APPLE_CLIENT_IDS`, `GOOGLE_CLIENT_IDS` | Server built 2026-11-21; buttons and client ids to follow | Provider user id, email (Apple may give a relay address) |
 | RevenueCat / App Store / Play | Subscriptions | planned | Decision 5 open | — |
-| OpenAI | Second LLM, failover | planned | Roadmap | — |
+| Mistral (La Plateforme, EU) / any OpenAI-style chat API | Second LLM, failover (`llm-providers.ts`, order `LLM_PROVIDERS`) | `MISTRAL_API_KEY`, `MISTRAL_MODEL`; `OPENAI_COMPAT_URL/API_KEY/MODEL/JSON_MODE` | Built 2026-11-21, off until a key is set and listed in `LLM_PROVIDERS` | Public source text only |
 | Analytics (Mixpanel/Amplitude) | Product KPIs | planned | Decision 9 open | — |
 
 ## 5. Configuration (server environment)
@@ -124,6 +124,9 @@ Health: `GET /health` (per-source status, no error texts). CORS: any origin, bea
 | `DB_PATH` | ./heyokay.db | SQLite file (Fly: `/data/heyokay.db`) |
 | `ADMIN_TOKEN` | change-me | Alert Desk; production refuses to start with the default |
 | `ANTHROPIC_API_KEY`, `HEYOKAY_MODEL` | –, claude-haiku-5-5 | AI extraction and copy |
+| `LLM_PROVIDERS` | anthropic | AI providers in failover order (`anthropic`, `mistral`, `openai_compat`); ones without a key are skipped; a provider failing 3 times in a row is skipped for 5 min; templates last |
+| `MISTRAL_API_KEY`, `MISTRAL_MODEL`, `MISTRAL_URL` | –, mistral-small-latest, https://api.mistral.ai/v1 | Mistral as an AI provider (separate from `EMBEDDINGS_API_KEY`) |
+| `OPENAI_COMPAT_URL`, `OPENAI_COMPAT_API_KEY`, `OPENAI_COMPAT_MODEL`, `OPENAI_COMPAT_JSON_MODE` | –, –, –, schema | Any OpenAI-style chat API (e.g. an open-weight model on EU hosting); `object` for servers without JSON-schema output |
 | `EMBEDDINGS_URL`, `EMBEDDINGS_MODEL`, `EMBEDDINGS_API_KEY`, `EMBEDDINGS_DIMENSIONS`, `EMBEDDINGS_MIN_SIMILARITY` | –, –, –, –, 0.8 | Dedup embeddings |
 | `NINA_CHANNELS` | mowas,katwarn,biwapp,dwd,lhp,police | NINA channels |
 | `DWD_DIRECT` | fallback | `fallback` / `always` / `off` |
