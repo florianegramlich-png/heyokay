@@ -1,15 +1,20 @@
-import { useState } from 'react';
-import { Alert as RNAlert, Text, TextInput, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Alert as RNAlert, Platform, Text, TextInput, View } from 'react-native';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import * as Crypto from 'expo-crypto';
 import { api, ApiError } from '../lib/api';
 import { useI18n, type Key } from '../lib/i18n';
 import { session } from '../lib/session';
 import { clearOffline } from '../lib/offline';
 import { colors } from '../lib/theme';
+import { buttonsToShow, makeNonce, NO_PROVIDERS, providerErrorKey, type Providers } from '../lib/signin';
 import type { SavedPlace, UserPrefs } from '../lib/types';
 import { Button, s, Section } from './ui';
 
 /**
- * Sign-in with an email code (PRD 5.3): restore places and settings on a new phone.
+ * Sign-in with an email code or, on iPhone, with Apple (PRD 5.3): restore places and settings on a new phone.
+ * The Apple button shows only when the server has Apple sign-in switched on and the phone supports it.
+ * Google on the phone follows (roadmap "Sign-in: Apple + Google, part 2b").
  * Optional — the app works the same without it. The device keeps its token; the server attaches
  * it to the account (and merges the places this phone already had).
  */
@@ -24,6 +29,31 @@ export function AccountSection({ email: signedIn, onChanged }: {
   const [step, setStep] = useState<'email' | 'code'>('email');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Key | null>(null);
+  const [providers, setProviders] = useState<Providers>(NO_PROVIDERS);
+  const [appleHere, setAppleHere] = useState(false);
+
+  useEffect(() => {
+    if (signedIn) return;
+    let live = true;
+    api.authProviders().then((p) => { if (live) setProviders(p); }).catch(() => {});
+    if (Platform.OS === 'ios') AppleAuthentication.isAvailableAsync().then((ok) => { if (live) setAppleHere(ok); }).catch(() => {});
+    return () => { live = false; };
+  }, [signedIn]);
+  const buttons = buttonsToShow(providers, { apple: appleHere, google: false });
+
+  async function signInWithApple() {
+    setBusy(true); setError(null);
+    try {
+      const nonce = await makeNonce(Crypto.getRandomBytes, (s) => Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, s));
+      const cred = await AppleAuthentication.signInAsync({ requestedScopes: [AppleAuthentication.AppleAuthenticationScope.EMAIL], nonce: nonce.hashed });
+      if (!cred.identityToken) { setError('acc.err.provider'); return; }
+      const r = await api.signInWith('apple', cred.identityToken, nonce.raw);
+      onChanged({ email: r.account.email, prefs: r.prefs, places: r.places });
+    } catch (e) {
+      if ((e as { code?: string }).code === 'ERR_REQUEST_CANCELED') return; // closed the sheet: nothing to say
+      setError(e instanceof ApiError ? providerErrorKey(e.status, e.message) : 'acc.err.generic');
+    } finally { setBusy(false); }
+  }
 
   const fail = (err: unknown) => {
     const status = err instanceof ApiError ? err.status : 0;
@@ -75,6 +105,18 @@ export function AccountSection({ email: signedIn, onChanged }: {
       ) : step === 'email' ? (
         <View>
           <Text style={s.p}>{t('acc.intro')}</Text>
+          {buttons.includes('apple') ? (
+            <View style={{ marginBottom: 12 }}>
+              <AppleAuthentication.AppleAuthenticationButton
+                buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+                buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
+                cornerRadius={10}
+                style={{ width: '100%', height: 44, opacity: busy ? 0.5 : 1 }}
+                onPress={() => { if (!busy) void signInWithApple(); }}
+              />
+              <Text style={[s.muted, { marginTop: 10 }]}>{t('acc.or')}</Text>
+            </View>
+          ) : null}
           <TextInput
             placeholder={t('acc.email')} placeholderTextColor={colors.muted} value={email} onChangeText={setEmail}
             autoCapitalize="none" autoComplete="email" keyboardType="email-address" textContentType="emailAddress"

@@ -1,6 +1,7 @@
 import Constants from 'expo-constants';
 import { session } from './session';
 import type { Alert, AlertDetail, Category, Feedback, SavedPlace, TechService, UserPrefs } from './types';
+import type { Provider, Providers } from './signin';
 
 /** EXPO_PUBLIC_API_URL wins (e.g. a tunnel to a local server), else app.json extra.apiUrl (the hosted server). */
 export const API_URL: string =
@@ -33,6 +34,11 @@ export const api = {
   emailVerify: (email: string, code: string) =>
     request<{ userId: string; prefs: UserPrefs; places: SavedPlace[]; account: { email: string } }>('POST', '/v1/auth/email/verify', { email, code }),
   signOut: () => request<{ userId: string; token: string; prefs: UserPrefs }>('POST', '/v1/auth/signout'),
+  /** Which sign-in methods the server has switched on (public). */
+  authProviders: () => request<Providers>('GET', '/v1/auth/providers', undefined, false),
+  /** Sign in with Apple / Google: the provider's identity token and the raw nonce (lib/signin.ts). */
+  signInWith: (provider: Provider, idToken: string, nonce: string) =>
+    request<{ userId: string; prefs: UserPrefs; places: SavedPlace[]; account: { email: string } }>('POST', `/v1/auth/${provider}`, { idToken, nonce }),
   updatePrefs: (prefs: Partial<UserPrefs>) => request<{ prefs: UserPrefs }>('PUT', '/v1/me/prefs', prefs),
   updatePushToken: (pushToken: string | null) => request<{ ok: true }>('PUT', '/v1/me/push-token', { pushToken }),
   sendLocation: (lat: number, lon: number, firstSync = false) =>

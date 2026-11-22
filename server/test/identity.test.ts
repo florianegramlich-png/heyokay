@@ -9,7 +9,7 @@ import { Pipeline } from '../src/pipeline/run.js';
 import { buildApi } from '../src/api.js';
 import { MemoryMailer } from '../src/auth.js';
 import { loadConfig } from '../src/config.js';
-import { IdentityError, IdentityVerifier, PROVIDERS, parseClientIds } from '../src/identity.js';
+import { IdentityError, IdentityVerifier, PROVIDERS, nonceHash, nonceMatches, parseClientIds } from '../src/identity.js';
 
 // A stand-in for Apple's / Google's key server: real RSA keys, a JWKS endpoint, signed tokens.
 function keyServer() {
@@ -43,7 +43,10 @@ function keyServer() {
 
 const T0 = new Date('2026-11-21T10:00:00Z');
 const sec = (d: Date) => Math.floor(d.getTime() / 1000);
+/** The raw nonce the app keeps; Apple/Google get its SHA-256. */
+const RAW = 'n0nce-3f9a1c7e5b2d4a68';
 const appleClaims = (over: Record<string, unknown> = {}) => ({
+  nonce: nonceHash(RAW),
   iss: 'https://appleid.apple.com', aud: 'app.heyokay', sub: '001234.abcd', iat: sec(T0) - 10, exp: sec(T0) + 600,
   email: 'flori@privaterelay.appleid.com', email_verified: 'true', is_private_email: 'true', ...over,
 });
@@ -62,9 +65,9 @@ describe('identity token check', () => {
   };
 
   it('accepts a good token and returns only sub and email (Apple sends email_verified as a string)', async () => {
-    expect(await v.verify(ks.token(appleClaims()))).toEqual({ sub: '001234.abcd', email: 'flori@privaterelay.appleid.com', emailVerified: true });
+    expect(await v.verify(ks.token(appleClaims()))).toEqual({ sub: '001234.abcd', email: 'flori@privaterelay.appleid.com', emailVerified: true, nonce: nonceHash(RAW) });
     expect(await v.verify(ks.token(appleClaims({ aud: ['other', 'app.heyokay.web'], email_verified: false })))).toMatchObject({ emailVerified: false });
-    expect(await v.verify(ks.token(appleClaims({ email: undefined })))).toEqual({ sub: '001234.abcd', email: null, emailVerified: false });
+    expect(await v.verify(ks.token(appleClaims({ email: undefined })))).toEqual({ sub: '001234.abcd', email: null, emailVerified: false, nonce: nonceHash(RAW) });
     expect(ks.fetches).toBe(1); // keys cached
   });
 
@@ -143,19 +146,19 @@ describe.each(storeBackends())('sign in with Apple / Google ($name)', (backend) 
   const device = async (prefs: object = {}) => (await call('POST', '/v1/devices', undefined, { prefs })).json().token as string;
   const googleToken = (over: Record<string, unknown> = {}) => google.token({
     iss: 'https://accounts.google.com', aud: 'web-client.apps.googleusercontent.com', sub: '1098765', iat: sec(T0), exp: sec(T0) + 3600,
-    email: 'Flori@Example.org', email_verified: true, ...over,
+    email: 'Flori@Example.org', email_verified: true, nonce: nonceHash(RAW), ...over,
   });
 
   it('Apple: the first sign-in makes an account; a new phone with the same Apple ID gets its places back', async () => {
     const phoneA = await device({ dailyLimit: 4 });
     await call('POST', '/v1/me/places', phoneA, { label: 'Mama', lat: 52.51, lon: 13.45 });
-    const r = await call('POST', '/v1/auth/apple', phoneA, { idToken: apple.token(appleClaims()) });
+    const r = await call('POST', '/v1/auth/apple', phoneA, { idToken: apple.token(appleClaims()), nonce: RAW });
     expect(r.statusCode).toBe(200);
     expect(r.json().account).toEqual({ email: 'flori@privaterelay.appleid.com' });
 
     const phoneB = await device();
     // Apple may leave out the email on later sign-ins: the linked id is enough.
-    const r2 = await call('POST', '/v1/auth/apple', phoneB, { idToken: apple.token(appleClaims({ email: undefined, email_verified: undefined })) });
+    const r2 = await call('POST', '/v1/auth/apple', phoneB, { idToken: apple.token(appleClaims({ email: undefined, email_verified: undefined })), nonce: RAW });
     expect(r2.statusCode).toBe(200);
     expect(r2.json().prefs.dailyLimit).toBe(4);
     expect(r2.json().places.map((p: any) => p.label)).toEqual(['Mama']);
@@ -170,7 +173,7 @@ describe.each(storeBackends())('sign in with Apple / Google ($name)', (backend) 
     await call('POST', '/v1/me/places', phone, { label: 'Kita', lat: 52.52, lon: 13.41 });
 
     const browser = await device();
-    const r = await call('POST', '/v1/auth/google', browser, { idToken: googleToken() });
+    const r = await call('POST', '/v1/auth/google', browser, { idToken: googleToken(), nonce: RAW });
     expect(r.statusCode).toBe(200);
     expect(r.json().account).toEqual({ email: 'flori@example.org' });
     expect(r.json().places.map((p: any) => p.label)).toEqual(['Kita']);
@@ -179,44 +182,62 @@ describe.each(storeBackends())('sign in with Apple / Google ($name)', (backend) 
 
   it('never links on an unverified email, never links a second Google id to one account', async () => {
     const t = await device();
-    const unverified = await call('POST', '/v1/auth/google', t, { idToken: googleToken({ email_verified: false }) });
+    const unverified = await call('POST', '/v1/auth/google', t, { idToken: googleToken({ email_verified: false }), nonce: RAW });
     expect(unverified.statusCode).toBe(400);
     expect(unverified.json().error).toBe('email_required');
     expect((await call('GET', '/v1/me', t)).json().account).toBeNull();
 
-    expect((await call('POST', '/v1/auth/google', t, { idToken: googleToken() })).statusCode).toBe(200);
+    expect((await call('POST', '/v1/auth/google', t, { idToken: googleToken(), nonce: RAW })).statusCode).toBe(200);
     const other = await device();
-    const r = await call('POST', '/v1/auth/google', other, { idToken: googleToken({ sub: '2222222' }) });
+    const r = await call('POST', '/v1/auth/google', other, { idToken: googleToken({ sub: '2222222' }), nonce: RAW });
     expect(r.statusCode).toBe(409);
     expect(r.json().error).toBe('account_conflict');
   });
 
   it('bad tokens, missing settings, and no device token', async () => {
     const t = await device();
-    const bad = await call('POST', '/v1/auth/apple', t, { idToken: apple.token(appleClaims({ aud: 'web-client.apps.googleusercontent.com' })) });
+    const bad = await call('POST', '/v1/auth/apple', t, { idToken: apple.token(appleClaims({ aud: 'web-client.apps.googleusercontent.com' })), nonce: RAW });
     expect(bad.statusCode).toBe(400);
     expect(bad.json().error).toBe('invalid_token');
     // A Google token sent to the Apple route fails the signature (different key server).
-    expect((await call('POST', '/v1/auth/apple', t, { idToken: googleToken() })).statusCode).toBe(400);
-    expect((await call('POST', '/v1/auth/apple', t, { idToken: 'short' })).statusCode).toBe(400);
-    expect((await call('POST', '/v1/auth/apple', undefined, { idToken: apple.token(appleClaims()) })).statusCode).toBe(401);
+    expect((await call('POST', '/v1/auth/apple', t, { idToken: googleToken(), nonce: RAW })).statusCode).toBe(400);
+    expect((await call('POST', '/v1/auth/apple', t, { idToken: 'short', nonce: RAW })).statusCode).toBe(400);
+    expect((await call('POST', '/v1/auth/apple', undefined, { idToken: apple.token(appleClaims()), nonce: RAW })).statusCode).toBe(401);
 
     const pipeline = new Pipeline({ store, llm: new NoLLM(), geocoder: new GazetteerGeocoder(), push: new MemoryPushSender(), config: loadConfig({}) });
     const bare = buildApi({ store, pipeline, adminToken: 'a', runIngest: async () => ({}), errorSink: () => {} });
-    const r = await bare.inject({ method: 'POST', url: '/v1/auth/google', payload: { idToken: googleToken() }, headers: { authorization: `Bearer ${t}` } });
+    const r = await bare.inject({ method: 'POST', url: '/v1/auth/google', payload: { idToken: googleToken(), nonce: RAW }, headers: { authorization: `Bearer ${t}` } });
     expect(r.statusCode).toBe(503);
     expect(r.json().error).toBe('provider_not_configured');
+  });
+
+  it('the nonce must match: a token replayed without the app\'s raw nonce is refused', async () => {
+    const t = await device();
+    const token = apple.token(appleClaims());
+    expect((await call('POST', '/v1/auth/apple', t, { idToken: token, nonce: 'someone-elses-nonce-123' })).json()).toEqual({ error: 'invalid_token' });
+    expect((await call('POST', '/v1/auth/apple', t, { idToken: token })).statusCode).toBe(400); // nonce is required
+    expect((await call('POST', '/v1/auth/apple', t, { idToken: apple.token(appleClaims({ nonce: undefined })), nonce: RAW })).statusCode).toBe(400);
+    expect((await call('GET', '/v1/me', t)).json().account).toBeNull();
+    expect(nonceMatches({ nonce: nonceHash(RAW) }, RAW)).toBe(true);
+    expect(nonceMatches({ nonce: RAW }, RAW)).toBe(false); // the raw value itself is not accepted
+  });
+
+  it('tells apps which sign-in methods are switched on', async () => {
+    expect((await call('GET', '/v1/auth/providers')).json()).toEqual({ email: true, apple: true, google: true });
+    const pipeline = new Pipeline({ store, llm: new NoLLM(), geocoder: new GazetteerGeocoder(), push: new MemoryPushSender(), config: loadConfig({}) });
+    const bare = buildApi({ store, pipeline, adminToken: 'a', runIngest: async () => ({}), errorSink: () => {} });
+    expect((await bare.inject({ method: 'GET', url: '/v1/auth/providers' })).json()).toEqual({ email: false, apple: false, google: false });
   });
 
   it('deleting the account (GDPR) also forgets the Apple link', async () => {
     const t = await device();
     await call('POST', '/v1/me/places', t, { label: 'Mama', lat: 52.51, lon: 13.45 });
-    const first = (await call('POST', '/v1/auth/apple', t, { idToken: apple.token(appleClaims()) })).json();
+    const first = (await call('POST', '/v1/auth/apple', t, { idToken: apple.token(appleClaims()), nonce: RAW })).json();
     expect((await call('DELETE', '/v1/me', t)).statusCode).toBe(200);
     expect(await store.accountByIdentity('apple', '001234.abcd')).toBeNull();
 
     const t2 = await device();
-    const again = (await call('POST', '/v1/auth/apple', t2, { idToken: apple.token(appleClaims()) })).json();
+    const again = (await call('POST', '/v1/auth/apple', t2, { idToken: apple.token(appleClaims()), nonce: RAW })).json();
     expect(again.userId).not.toBe(first.userId);
     expect(again.places).toEqual([]);
   });

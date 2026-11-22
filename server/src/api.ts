@@ -9,7 +9,7 @@ import { DESK_HTML } from './desk.js';
 import { sourceReport } from './sources/registry.js';
 import { MAX_PLACE_RADIUS_M } from './geo.js';
 import { AuthError, checkEmailCode, signIn, signInWithIdentity, signOut, startEmailSignIn, type Mailer } from './auth.js';
-import { IdentityError, type IdentityVerifier } from './identity.js';
+import { IdentityError, nonceMatches, type IdentityVerifier } from './identity.js';
 import type { IdentityProvider } from './store.js';
 import { logError, defaultSink, type ErrorSink } from './errors.js';
 import { HISTORY_SCAN, searchHistory } from './history.js';
@@ -191,10 +191,13 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
    * Sign in with Apple / Google: the app sends the identity token from the provider's sheet;
    * the server checks it (identity.ts) and attaches this device like the email code does.
    */
+  /** Which sign-in methods this server has switched on, so apps only show buttons that work. */
+  app.get('/v1/auth/providers', async () => ({ email: mailer != null, apple: identity.apple != null, google: identity.google != null }));
+
   for (const provider of ['apple', 'google'] as const) {
     app.post(`/v1/auth/${provider}`, async (req, reply) => {
       const u = await authed(req, reply); if (!u) return;
-      const { idToken } = z.object({ idToken: z.string().min(20).max(8192) }).parse(req.body);
+      const { idToken, nonce } = z.object({ idToken: z.string().min(20).max(8192), nonce: z.string().min(16).max(128) }).parse(req.body);
       const verifier = identity[provider];
       if (!verifier) return reply.code(503).send({ error: 'provider_not_configured' });
       let claims;
@@ -205,6 +208,7 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
         }
         throw err;
       }
+      if (!nonceMatches(claims, nonce)) return reply.code(400).send({ error: 'invalid_token' });
       try {
         const { user, account } = await signInWithIdentity(store, bearer(req), u, provider, claims);
         return { userId: user.id, prefs: user.prefs, places: await store.places(user.id), account: { email: account.email } };
