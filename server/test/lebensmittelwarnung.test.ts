@@ -127,4 +127,15 @@ describe.each(storeBackends())('recalls end to end ($name)', (backend) => {
     expect(await store.alertsForUser(muc.id)).toEqual([]);
     expect(push.outbox).toEqual([]);
   });
+
+  it('two recalls on the same day stay two alerts (they share the country centre, so must never merge)', async () => {
+    const pipeline = new Pipeline({ store, llm: new NoLLM(), geocoder: new GazetteerGeocoder(), push: new MemoryPushSender(), config: loadConfig({}), now: () => NOW });
+    const hh = (await store.createUser('ExponentPushToken[hh2]')).user;
+    await store.updateLocation(hh.id, HAMBURG.lat, HAMBURG.lon);
+    // Two nationwide recalls published in the same hour.
+    const [a, b] = (await fetchRecalls(() => true, async () => FEED, { now: NOW })).filter((i) => i.areaName === 'Deutschland' || i.title === 'Rückruf: Wildsalami');
+    const r = await pipeline.ingest([a, { ...b, publishedAt: a.publishedAt }]);
+    expect(r).toMatchObject({ eventsCreated: 2, eventsUpdated: 0 });
+    expect(await store.alertsForUser(hh.id)).toHaveLength(2);
+  });
 });

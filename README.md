@@ -50,6 +50,8 @@ npm start
 | `FEUERWEHR_BERLIN` | on | Berliner Feuerwehr incident reports (`off` to disable) |
 | `POLIZEI_BERLIN` | on | Polizei Berlin press releases from berlin.de (`off` to disable) |
 | `LEBENSMITTELWARNUNG_URL` | official feed | Product and food recalls from lebensmittelwarnung.de (`off` to disable) |
+| `FDA_RECALLS_URL` | `https://api.fda.gov` | US food and drug recalls from openFDA enforcement reports (`off` to disable) |
+| `CPSC_RECALLS_URL` | saferproducts.gov API | US consumer-product recalls from CPSC (`off` to disable) |
 | `DWD_DIRECT` | fallback | DWD warnings straight from DWD open data: `fallback` (only while NINA's DWD channel fails), `always`, or `off` |
 | `PRESSEPORTAL_AGENCIES` | all | Presseportal Blaulicht press releases: `all`, `off`, or a comma list of agency keys (`polizei-hamburg`, `feuerwehr-hamburg`, `bundespolizei-hamburg`, `polizei-koeln`, `feuerwehr-koeln`, `feuerwehr-muenchen`, `bundespolizei-muenchen`, `bundespolizei-berlin`, and `polizei-<city>` for the 24 city police added 2026-11-22, e.g. `polizei-frankfurt`, `polizei-mittelfranken`; full list in `server/src/sources/presseportal.ts`) |
 | `NWS_AREAS` | – | US National Weather Service alerts for testing in the US: state codes (`CA`) or `lat,lon` points, separated by `;`. Off when empty |

@@ -18,6 +18,7 @@ import { fetchIpaws } from './sources/ipaws.js';
 import { fetchQuakes } from './sources/usgs.js';
 import { fetchPegelonline } from './sources/pegelonline.js';
 import { fetchRecalls } from './sources/lebensmittelwarnung.js';
+import { fetchFdaRecalls, fetchCpscRecalls } from './sources/us-recalls.js';
 import { fetchWildfires } from './sources/wildfire.js';
 import { fetchAir } from './sources/air.js';
 import { fetchSachet } from './sources/sachet.js';
@@ -77,6 +78,10 @@ let pegelLast = 0;
 // Recalls: a few a day; the feed is ~450 kB.
 const RECALLS_EVERY_MS = 30 * 60_000;
 let recallsLast = 0;
+// US recalls: FDA reports weekly, CPSC a handful a week; openFDA allows 1000 calls a day without a key.
+const US_RECALLS_EVERY_MS = 6 * 3600_000;
+let fdaLast = 0;
+let cpscLast = 0;
 const FIRES_EVERY_MS = 5 * 60_000;
 let firesLast = 0;
 
@@ -151,6 +156,24 @@ const tasks: SourceTask[] = [
       if (Date.now() - recallsLast < RECALLS_EVERY_MS) return { skipped: 'checked less than 30 minutes ago' };
       const r = await ingest(await fetchRecalls(seen('lebensmittelwarnung'), undefined, { url: config.lebensmittelwarnung! }));
       recallsLast = Date.now();
+      return r;
+    },
+  }] : []),
+  ...(config.fdaRecalls ? [{
+    key: 'fda:US',
+    run: async () => {
+      if (Date.now() - fdaLast < US_RECALLS_EVERY_MS) return { skipped: 'checked less than 6 hours ago' };
+      const r = await ingest(await fetchFdaRecalls(seen('fda'), undefined, { url: config.fdaRecalls! }));
+      fdaLast = Date.now();
+      return r;
+    },
+  }] : []),
+  ...(config.cpscRecalls ? [{
+    key: 'cpsc:US',
+    run: async () => {
+      if (Date.now() - cpscLast < US_RECALLS_EVERY_MS) return { skipped: 'checked less than 6 hours ago' };
+      const r = await ingest(await fetchCpscRecalls(seen('cpsc'), undefined, { url: config.cpscRecalls! }));
+      cpscLast = Date.now();
       return r;
     },
   }] : []),

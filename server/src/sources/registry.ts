@@ -46,6 +46,10 @@ export function describeSource(key: string): SourceInfo {
       return { key, name: 'Polizei Berlin', country: 'DE', official: false, category: 'police', docs: 'https://www.berlin.de/polizei/polizeimeldungen/' };
     case 'lebensmittelwarnung':
       return { key, name: 'lebensmittelwarnung.de · Rückrufe', country: 'DE', official: true, category: 'recall', docs: 'https://www.lebensmittelwarnung.de/___LMW-Redaktion/RSSNewsfeed/rssnewsfeed_node.html' };
+    case 'fda':
+      return { key, name: 'FDA · Food and drug recalls', country: 'US', official: true, category: 'recall', docs: 'https://open.fda.gov/apis/food/enforcement/' };
+    case 'cpsc':
+      return { key, name: 'CPSC · Product recalls', country: 'US', official: true, category: 'recall', docs: 'https://www.cpsc.gov/Recalls/CPSC-Recalls-Application-Program-Interface-API-Information' };
     case 'owm':
       return { key, name: rest === 'air' ? 'OpenWeatherMap · Luftqualität' : 'OpenWeatherMap · Hitze', country: '*', official: false, category: 'weather', docs: 'https://openweathermap.org/forecast5' };
     case 'nws':

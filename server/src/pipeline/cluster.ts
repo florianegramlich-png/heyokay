@@ -37,6 +37,8 @@ export function findCluster(ext: ExtractedEvent, item: SourceItem, active: RiskE
   // different warnings even when their wording is alike ("... until November 18 at ..."), so never fuzzy-merge.
   // Same for status-page incidents: each has its own id, and every outage sits on the same
   // country-wide area, so the distance rule would merge them all. Gauges and fires: one event each, by id.
+  // Recalls too: every recall sits on the same country centre, so two recalls on one day would merge.
+  if (item.source === 'lebensmittelwarnung' || item.source === 'fda' || item.source === 'cpsc') return null;
   if (item.source === 'nws' || item.source === 'statuspage' || item.source === 'ipaws' || item.source === 'sachet' || item.source === 'usgs' || item.source === 'pegelonline' || item.source === 'wfigs') return null;
   let best: { e: RiskEvent; score: number } | null = null;
   for (const e of active) {
