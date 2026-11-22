@@ -139,6 +139,16 @@ const HAZARD: Record<Hazard, Record<Language, Advice>> = {
     },
   },
   recall: { de: LIBRARY.recall, en: LIBRARY_EN.recall },
+  road_closure: {
+    de: {
+      low: t('Mehr Zeit einplanen und die ausgeschilderte Umleitung nutzen.'),
+      high: t('Strecke meiden, Umleitung nutzen. Im Stau Rettungsgasse bilden.'),
+    },
+    en: {
+      low: t('Allow extra time and follow the signed detour.'),
+      high: t('Avoid this stretch and use the detour. In a jam, leave a lane for emergency vehicles.'),
+    },
+  },
   assembly: {
     de: {
       low: t('Umwege einplanen: Straßen entlang der Strecke können zeitweise gesperrt sein. Busse und Bahnen können umgeleitet werden.'),
@@ -195,7 +205,7 @@ export function recommendedAction(
   category: Category, severity: Severity, language: Language = 'de', hazard?: Hazard, country: CountryPack = packFor({ language }),
 ): string {
   const lib = hazard ? HAZARD[hazard][language] : (language === 'en' ? LIBRARY_EN : LIBRARY)[category];
-  const high = hazard === 'air' || hazard === 'pollen' || hazard === 'uv' ? severity >= 2 : hazard ? severity >= 3 : severity >= 4;
+  const high = hazard === 'air' || hazard === 'pollen' || hazard === 'uv' || hazard === 'road_closure' ? severity >= 2 : hazard ? severity >= 3 : severity >= 4;
   return (high ? lib.high : lib.low)(country.numbers);
 }
 

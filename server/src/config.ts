@@ -6,6 +6,7 @@ import { LEBENSMITTELWARNUNG_URL } from './sources/lebensmittelwarnung.js';
 import { OPENFDA_URL, CPSC_URL } from './sources/us-recalls.js';
 import { DWD_HEALTH_URL } from './sources/dwd-health.js';
 import { BERLIN_VERSAMMLUNGEN_URL } from './sources/berlin-versammlungen.js';
+import { AUTOBAHN_URL } from './sources/autobahn.js';
 import { WFIGS_URL } from './sources/wildfire.js';
 import { IPAWS_URL } from './sources/ipaws.js';
 import { SACHET_RSS_URL } from './sources/sachet.js';
@@ -94,6 +95,8 @@ export interface Config {
   dwdHealth: string | null;
   /** Polizei Berlin list of registered assemblies (marches only; URL override or "off"). Polled at most every hour. */
   berlinVersammlungen: string | null;
+  /** Autobahn GmbH closures (full closures only; base URL override or "off"). Polled at most every 15 minutes. */
+  autobahn: string | null;
   /** NIFC WFIGS wildfire incidents, US (ArcGIS layer URL override or "off"). Polled at most every 5 minutes. */
   wfigs: string | null;
   /** AI cost guard: daily cap in EUR (0 = off) and prices per million tokens. */
@@ -175,6 +178,7 @@ export function loadConfig(env = process.env): Config {
     fdaRecalls: /^off$/i.test(env.FDA_RECALLS_URL ?? '') ? null : (env.FDA_RECALLS_URL || OPENFDA_URL),
     cpscRecalls: /^off$/i.test(env.CPSC_RECALLS_URL ?? '') ? null : (env.CPSC_RECALLS_URL || CPSC_URL),
     dwdHealth: /^off$/i.test(env.DWD_HEALTH_URL ?? '') ? null : (env.DWD_HEALTH_URL || DWD_HEALTH_URL),
+    autobahn: /^off$/i.test(env.AUTOBAHN_URL ?? '') ? null : (env.AUTOBAHN_URL || AUTOBAHN_URL),
     berlinVersammlungen: /^off$/i.test(env.BERLIN_VERSAMMLUNGEN_URL ?? '') ? null : (env.BERLIN_VERSAMMLUNGEN_URL || BERLIN_VERSAMMLUNGEN_URL),
     llmDailyBudgetEur: Number(env.LLM_DAILY_BUDGET_EUR ?? 5),
     llmPriceInPerMTok: Number(env.LLM_PRICE_IN_EUR_PER_MTOK ?? 1),

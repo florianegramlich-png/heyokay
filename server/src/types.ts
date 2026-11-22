@@ -11,7 +11,7 @@ export type Category = (typeof CATEGORIES)[number];
 /** 1 = info, 2 = minor, 3 = moderate, 4 = severe, 5 = extreme. Same meaning across all sources. */
 export type Severity = 1 | 2 | 3 | 4 | 5;
 
-export type SourceKind = 'nina' | 'dwd' | 'nws' | 'rss' | 'presseportal' | 'owm' | 'statuspage' | 'ipaws' | 'sachet' | 'usgs' | 'pegelonline' | 'wfigs' | 'lebensmittelwarnung' | 'fda' | 'cpsc' | 'dwd-health' | 'berlin-versammlungen' | 'manual';
+export type SourceKind = 'nina' | 'dwd' | 'nws' | 'rss' | 'presseportal' | 'owm' | 'statuspage' | 'ipaws' | 'sachet' | 'usgs' | 'pegelonline' | 'wfigs' | 'lebensmittelwarnung' | 'fda' | 'cpsc' | 'dwd-health' | 'berlin-versammlungen' | 'autobahn' | 'manual';
 
 export type Language = 'de' | 'en';
 /**
@@ -23,7 +23,7 @@ export type UiLanguage = Language | 'ta';
 export const UI_LANGUAGES = ['de', 'en', 'ta'] as const satisfies readonly UiLanguage[];
 export const contentLanguage = (l: UiLanguage | null | undefined): Language => (l === 'de' ? 'de' : 'en');
 
-export type Hazard = 'heat' | 'outage' | 'earthquake' | 'air' | 'flood' | 'wildfire' | 'recall' | 'pollen' | 'uv' | 'assembly';
+export type Hazard = 'heat' | 'outage' | 'earthquake' | 'air' | 'flood' | 'wildfire' | 'recall' | 'pollen' | 'uv' | 'assembly' | 'road_closure';
 
 /** A raw item as it arrives from a source, before the AI pipeline touches it. */
 export interface SourceItem {

@@ -52,6 +52,7 @@ npm start
 | `LEBENSMITTELWARNUNG_URL` | official feed | Product and food recalls from lebensmittelwarnung.de (`off` to disable) |
 | `FDA_RECALLS_URL` | `https://api.fda.gov` | US food and drug recalls from openFDA enforcement reports (`off` to disable) |
 | `CPSC_RECALLS_URL` | saferproducts.gov API | US consumer-product recalls from CPSC (`off` to disable) |
+| `AUTOBAHN_URL` | Autobahn GmbH API | Full motorway closures (planned and after accidents), topic "Verkehr" (`off` to disable) |
 | `BERLIN_VERSAMMLUNGEN_URL` | official list | Registered marches in Berlin from Polizei Berlin, topic "Veranstaltungen & Demos" (`off` to disable) |
 | `DWD_HEALTH_URL` | DWD open data | Pollen and UV forecasts for the opt-in "Pollen & UV" topic (`off` to disable) |
 | `DWD_DIRECT` | fallback | DWD warnings straight from DWD open data: `fallback` (only while NINA's DWD channel fails), `always`, or `off` |

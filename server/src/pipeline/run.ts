@@ -267,6 +267,7 @@ export class Pipeline {
         now: this.now(),
         pushesLast24h: await this.d.store.pushCountSince(user.id, since),
         feedback: await this.d.store.feedbackByCategory(user.id),
+        matchedPlace: m.place,
         ...(event.category === 'pollen_uv' ? { pollenUvPushedRecently: await this.pollenUvPushedRecently(user.id) } : {}),
       });
       // First sync after install: show what's going on without a burst of notifications.

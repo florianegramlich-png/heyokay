@@ -46,6 +46,8 @@ export function describeSource(key: string): SourceInfo {
       return { key, name: 'Polizei Berlin', country: 'DE', official: false, category: 'police', docs: 'https://www.berlin.de/polizei/polizeimeldungen/' };
     case 'lebensmittelwarnung':
       return { key, name: 'lebensmittelwarnung.de · Rückrufe', country: 'DE', official: true, category: 'recall', docs: 'https://www.lebensmittelwarnung.de/___LMW-Redaktion/RSSNewsfeed/rssnewsfeed_node.html' };
+    case 'autobahn':
+      return { key, name: 'Die Autobahn GmbH · Sperrungen', country: 'DE', official: true, category: 'transit', docs: 'https://autobahn.api.bund.dev/' };
     case 'berlin-versammlungen':
       return { key, name: 'Polizei Berlin · Versammlungen', country: 'DE', official: true, category: 'police', docs: 'https://www.berlin.de/polizei/service/versammlungsbehoerde/versammlungen-aufzuege/' };
     case 'dwd-health':

@@ -21,6 +21,7 @@ import { fetchRecalls } from './sources/lebensmittelwarnung.js';
 import { fetchFdaRecalls, fetchCpscRecalls } from './sources/us-recalls.js';
 import { berlinDate, fetchPollenUv, pollenUvDue } from './sources/dwd-health.js';
 import { fetchAssemblies } from './sources/berlin-versammlungen.js';
+import { fetchAutobahn } from './sources/autobahn.js';
 import { fetchWildfires } from './sources/wildfire.js';
 import { fetchAir } from './sources/air.js';
 import { fetchSachet } from './sources/sachet.js';
@@ -89,6 +90,9 @@ let pollenUvDate: string | null = null;
 // Berlin assemblies: the export is ~600 kB and changes a few times a day.
 const ASSEMBLIES_EVERY_MS = 60 * 60_000;
 let assembliesLast = 0;
+// Autobahn: ~230 small requests per round, so not more often than every 15 minutes.
+const AUTOBAHN_EVERY_MS = 15 * 60_000;
+let autobahnLast = 0;
 const FIRES_EVERY_MS = 5 * 60_000;
 let firesLast = 0;
 
@@ -181,6 +185,16 @@ const tasks: SourceTask[] = [
       if (Date.now() - cpscLast < US_RECALLS_EVERY_MS) return { skipped: 'checked less than 6 hours ago' };
       const r = await ingest(await fetchCpscRecalls(seen('cpsc'), undefined, { url: config.cpscRecalls! }));
       cpscLast = Date.now();
+      return r;
+    },
+  }] : []),
+  ...(config.autobahn ? [{
+    key: 'autobahn:DE',
+    run: async () => {
+      if (Date.now() - autobahnLast < AUTOBAHN_EVERY_MS) return { skipped: 'checked less than 15 minutes ago' };
+      // Closures that leave the list early get an all-clear.
+      const r = await ingestAndReconcile(await fetchAutobahn(seen('autobahn'), undefined, { url: config.autobahn! }));
+      autobahnLast = Date.now();
       return r;
     },
   }] : []),

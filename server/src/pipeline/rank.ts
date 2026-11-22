@@ -40,6 +40,8 @@ export interface RankContext {
   feedback: Record<string, { relevant: number; notRelevant: number }>;
   /** Pollen & UV: this person already had a pollen/UV push in the last 12 hours. */
   pollenUvPushedRecently?: boolean;
+  /** The saved place this alert is for (null = the person's current location). */
+  matchedPlace?: string | null;
 }
 
 /** Pollen & UV may push only in the morning (local time), so it never wakes anyone at night. */
@@ -73,6 +75,8 @@ export function decide(user: User, event: RiskEvent, ctx: RankContext): { delive
     if (!inQuietHours(ctx.now, POLLEN_UV_PUSH_HOURS.from, POLLEN_UV_PUSH_HOURS.to, prefs.timezone)) return { delivery: 'feed', reason: 'pollen/UV: push only in the morning' };
     if (ctx.pollenUvPushedRecently) return { delivery: 'feed', reason: 'pollen/UV: one push a day' };
   }
+  // Motorway closures: in the feed, a push only when one of the person's saved places is near it.
+  if (event.hazard === 'road_closure' && !ctx.matchedPlace) return { delivery: 'feed', reason: 'road closure: push only near a saved place' };
   if (isAhead(event, ctx.now)) return { delivery: 'feed', reason: 'coming up' };
   if (event.severity <= 1) return { delivery: 'feed', reason: 'information only' };
 
