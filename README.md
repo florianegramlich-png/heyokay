@@ -49,7 +49,7 @@ npm start
 | `RSS_FEEDS` | [] | JSON list of police / transit feeds |
 | `FEUERWEHR_BERLIN` | on | Berliner Feuerwehr incident reports (`off` to disable) |
 | `DWD_DIRECT` | fallback | DWD warnings straight from DWD open data: `fallback` (only while NINA's DWD channel fails), `always`, or `off` |
-| `PRESSEPORTAL_AGENCIES` | all | Presseportal Blaulicht press releases: `all`, `off`, or a comma list of agency keys (`polizei-hamburg`, `feuerwehr-hamburg`, `bundespolizei-hamburg`, `polizei-koeln`, `feuerwehr-koeln`, `feuerwehr-muenchen`, `bundespolizei-muenchen`, `bundespolizei-berlin`) |
+| `PRESSEPORTAL_AGENCIES` | all | Presseportal Blaulicht press releases: `all`, `off`, or a comma list of agency keys (`polizei-hamburg`, `feuerwehr-hamburg`, `bundespolizei-hamburg`, `polizei-koeln`, `feuerwehr-koeln`, `feuerwehr-muenchen`, `bundespolizei-muenchen`, `bundespolizei-berlin`, and `polizei-<city>` for the 24 city police added 2026-11-22, e.g. `polizei-frankfurt`, `polizei-mittelfranken`; full list in `server/src/sources/presseportal.ts`) |
 | `NWS_AREAS` | – | US National Weather Service alerts for testing in the US: state codes (`CA`) or `lat,lon` points, separated by `;`. Off when empty |
 | `NWS_USER_AGENT` | `GEOCODER_USER_AGENT` | Contact string NWS requires, e.g. `HeyOkay (you@example.com)` |
 | `POLL_INTERVAL_SEC` | 120 | |
