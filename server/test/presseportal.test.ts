@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { z } from 'zod';
 import {
-  PRESSEPORTAL_AGENCIES, cleanTitle, externalId, feedUrl, fetchAgency, parseAgencyFeed, parseArticle, selectAgencies,
+  PRESSEPORTAL_AGENCIES, cleanTitle, externalId, feedUrl, fetchAgency, isNeverAnAlert, parseAgencyFeed, parseArticle, selectAgencies,
 } from '../src/sources/presseportal.js';
 import { loadConfig } from '../src/config.js';
 import { SqliteStore } from '../src/db.js';
@@ -41,6 +41,56 @@ describe('Presseportal Blaulicht: parsing', () => {
     expect(cleanTitle('Bundespolizeidirektion München: Zwei Zwölfjährige surfen auf S-Bahn')).toBe('Zwei Zwölfjährige surfen auf S-Bahn');
     expect(cleanTitle('Ohne Kürzel')).toBe('Ohne Kürzel');
     expect(cleanTitle('Brand: Feuer in Altona')).toBe('Brand: Feuer in Altona'); // an ordinary word before a colon stays
+  });
+
+  it('cleans the numbering styles of the other city police (live titles, 2026-11-22)', () => {
+    expect(cleanTitle('POL-HB: Nr.: 0734 --Schüsse in Gröpelingen--')).toBe('Schüsse in Gröpelingen');
+    expect(cleanTitle('POL-MFR: (973) Pfefferspray in Turnhalle versprüht - Polizei ermittelt')).toBe('Pfefferspray in Turnhalle versprüht - Polizei ermittelt');
+    expect(cleanTitle('POL-KA: (KA) Malsch - Brand in Lagerhalle')).toBe('Malsch - Brand in Lagerhalle');
+    expect(cleanTitle('POL-KI: 261120.3 Kiel: Einsatzlage anlässlich einer Versammlung')).toBe('Kiel: Einsatzlage anlässlich einer Versammlung');
+    expect(cleanTitle('POL-W: W Versammlung mit Aufzug in der Elberfelder Innenstadt')).toBe('Versammlung mit Aufzug in der Elberfelder Innenstadt');
+    expect(cleanTitle('POL-W: SG Brand in Solingen-Ohligs')).toBe('Brand in Solingen-Ohligs');
+    expect(cleanTitle('POL-MA: Eppelheim: Starke Rauchentwicklung im Hochhaus, PM 1')).toBe('Eppelheim: Starke Rauchentwicklung im Hochhaus, PM 1');
+    expect(cleanTitle('POL-DO: Schülerin in Wambel von Auto erfasst')).toBe('Schülerin in Wambel von Auto erfasst');
+    expect(cleanTitle('POL-BO: Wohnungsbrand in Herne')).toBe('Wohnungsbrand in Herne');
+  });
+
+  it('drops manhunts, found persons, press invitations and statistics before any model call', () => {
+    for (const t of [
+      'Öffentlichkeitsfahndung: Vermisste 13-Jährige',
+      'Rücknahme der Öffentlichkeitsfahndung - 68-Jähriger angetroffen',
+      'Nachtragsmeldung: 12-Jähriger aus Hannover-Misburg wohlbehalten zurück',
+      'Gesuchter 13-Jähriger stellt sich auf Wache',
+      'Führungswechsel im Polizeikommissariat Helmstedt',
+      'Aktion "Siehst Du mich?" - Einladung für Medienvertreter',
+      'Wohnungseinbruchsradar Oberhausen',
+      'Mobile Wache der Polizei Münster öffnet zum Weihnachtsmarkt',
+    ]) expect(isNeverAnAlert(t), t).toBe(true);
+    for (const t of ['Schüsse in Gröpelingen', 'Schwerer Raub auf Raststätte', 'Polizei fahndet nach Räuber - Zeugen gesucht']) expect(isNeverAnAlert(t), t).toBe(false);
+  });
+
+  it('reads a real city police feed (Polizeipräsidium Frankfurt): new releases only, full article text', async () => {
+    const pp = PRESSEPORTAL_AGENCIES.find((a) => a.key === 'polizei-frankfurt')!;
+    expect(pp).toMatchObject({ id: 4970, categoryHint: 'crime', city: 'Frankfurt' });
+    const web = fakeWeb({
+      [feedUrl(pp)]: fx('presseportal-polizei-frankfurt.rss2'),
+      'https://www.presseportal.de/blaulicht/pm/4970/6395201': fx('presseportal-article-4970_6395201.html'),
+    });
+    const items = await fetchAgency(pp, () => true, web.get, { now: new Date('2026-11-21T13:00:00Z') });
+    // 5 in the feed: 2 from today; yesterday's (incl. a withdrawn missing-person search) are history.
+    expect(items.map((i) => i.title)).toEqual(['Frankfurt- Bockenheim: Fahrzeug flüchtet vor Kontrollstelle - Fahrer festgenommen', 'Frankfurt- Bornheim: Trickdiebstahl']);
+    expect(items[0]).toMatchObject({ source: 'presseportal', sourceName: 'Polizeipräsidium Frankfurt am Main', category: 'crime', country: 'DE', official: false });
+    expect(items[0].body).toContain('Kontrollstelle');
+    expect(items[1].body.length).toBeGreaterThan(20); // article not served: the teaser is used
+    expect(parseAgencyFeed(fx('presseportal-polizei-frankfurt.rss2')).some((e) => isNeverAnAlert(e.title))).toBe(true);
+  });
+
+  it('covers the biggest cities, police first', () => {
+    const cities = new Set(PRESSEPORTAL_AGENCIES.filter((a) => a.categoryHint === 'crime').map((a) => a.city));
+    for (const c of ['Hamburg', 'Köln', 'Frankfurt', 'Stuttgart', 'Düsseldorf', 'Dortmund', 'Essen', 'Bremen', 'Hannover', 'Nürnberg', 'Duisburg', 'Bochum', 'Wuppertal', 'Bielefeld', 'Bonn', 'Münster', 'Mannheim', 'Karlsruhe', 'Wiesbaden'] as const) {
+      expect(cities.has(c), c).toBe(true);
+    }
+    expect(cities.size).toBeGreaterThanOrEqual(25);
   });
 
   it('reads a real agency feed (Polizei Hamburg)', () => {

@@ -55,7 +55,7 @@ export function template(event: RiskEvent): { title: string; body: string } {
   const label = (event.language === 'en' ? CATEGORY_LABEL_EN : CATEGORY_LABEL_DE)[event.category];
   const srcTitle = src?.title || event.title;
   // Heat from a forecast: our own grounded text already says what and how hot ("Hitze: bis 36 °C gefühlt").
-  if (event.hazard === 'heat' || event.hazard === 'outage' || event.hazard === 'earthquake' || event.hazard === 'air' || event.hazard === 'flood' || event.hazard === 'wildfire') return { title: truncate(srcTitle, TITLE_MAX), body: truncate(event.summary || srcTitle, BODY_MAX) };
+  if (event.hazard === 'heat' || event.hazard === 'outage' || event.hazard === 'earthquake' || event.hazard === 'air' || event.hazard === 'flood' || event.hazard === 'wildfire' || event.hazard === 'recall' || event.hazard === 'pollen' || event.hazard === 'uv' || event.hazard === 'assembly' || event.hazard === 'road_closure') return { title: truncate(srcTitle, TITLE_MAX), body: truncate(event.summary || srcTitle, BODY_MAX) };
   // NWS lists several forecast zones ("San Francisco; Coastal North Bay; …"). Naming only the first
   // would mislead people in the others, so name the warning instead: "Weather: Wind Advisory".
   if (event.areaName.includes(';')) {

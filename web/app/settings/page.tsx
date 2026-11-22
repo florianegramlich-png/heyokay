@@ -18,6 +18,7 @@ import { AccountSection } from '@/components/account-section';
 import { useDevice } from '@/lib/use-device';
 import { CATEGORIES, type Category, type SavedPlace, type TechService, type UserPrefs } from '@/lib/types';
 import { followsService, toggleService } from '@/lib/services';
+import { POLLEN_UV_KEYS, pollenStringKey } from '@/lib/pollen';
 import { cn } from '@/lib/utils';
 
 const LIMITS = [1, 3, 5, 10];
@@ -137,6 +138,27 @@ export default function Settings() {
                   onClick={() => save({ techServices: svc.key === '*' ? null : toggleService(prefs.techServices, svc.key) })}
                   className={cn('rounded-full border px-3.5 py-1.5 text-sm font-medium', on ? 'border-purple-500 bg-purple-500/20 text-purple-100' : 'border-border text-muted-foreground')}
                 >{svc.name}</button>
+              );
+            })}
+          </div>
+        </Section>
+      )}
+
+      {prefs.categories.includes('pollen_uv') && (
+        <Section title={t('set.pollen')}>
+          <p className="text-xs text-muted-foreground">{t('set.pollen.hint')}</p>
+          <div className="flex flex-wrap gap-2">
+            {(['*', ...POLLEN_UV_KEYS] as const).map((key) => {
+              const on = key === '*' ? !prefs.pollenUv : !!prefs.pollenUv && followsService(prefs.pollenUv, key);
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  role="checkbox"
+                  aria-checked={on}
+                  onClick={() => save({ pollenUv: key === '*' ? null : toggleService(prefs.pollenUv, key) })}
+                  className={cn('rounded-full border px-3.5 py-1.5 text-sm font-medium', on ? 'border-purple-500 bg-purple-500/20 text-purple-100' : 'border-border text-muted-foreground')}
+                >{key === '*' ? t('set.pollen.all') : t(pollenStringKey(key))}</button>
               );
             })}
           </div>

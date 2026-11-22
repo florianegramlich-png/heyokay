@@ -94,7 +94,7 @@ describe('status pages → technology outages', () => {
 
   it('existing people get the new category switched on once; after that their choice stands', () => {
     const old = normalizePrefs({ categories: ['weather', 'crime'] });
-    expect(old.categories).toEqual(['weather', 'crime', 'technology']);
+    expect(old.categories).toEqual(['weather', 'crime', 'technology', 'recall', 'events']);
     expect(normalizePrefs({ ...old, categories: ['weather'] }).categories).toEqual(['weather']); // turned off later: stays off
   });
 });

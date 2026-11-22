@@ -16,7 +16,7 @@ export type Status = 'calm' | 'info' | 'watch' | 'act';
 export interface CategoryTile {
   category: Category;
   count: number;
-  /** Highest severity among its current alerts; null for none and always for police activity. */
+  /** Highest severity among its current alerts; null for none and always for police activity, recalls and pollen/UV. */
   highest: Severity | null;
   /** The most severe current alert, opened when the tile is tapped. */
   top: Alert | null;
@@ -32,6 +32,8 @@ export interface Dashboard {
 }
 
 const DAY = 24 * 60 * 60_000;
+/** Topics shown as a tile with a count only, outside the status. */
+const COUNT_ONLY_STATUSLESS: readonly Category[] = ['recall', 'pollen_uv'];
 
 export function statusFor(highest: Severity | null): Status {
   if (highest === null) return 'calm';
@@ -46,14 +48,18 @@ export function statusFor(highest: Severity | null): Status {
  */
 export function buildDashboard(alerts: Alert[], followed: readonly Category[] = CATEGORIES, now = Date.now()): Dashboard {
   const current = currentAlerts(alerts);
-  const highest = current.length ? (Math.max(...current.map((a) => a.severity)) as Severity) : null;
+  // Recalls are things to check at home, not something happening around you: they get their tile
+  // but leave the status at "All okay" (there's nearly always a nationwide recall somewhere).
+  // Pollen and UV likewise: a forecast to plan the day with, not something happening around you.
+  const around = current.filter((a) => !COUNT_ONLY_STATUSLESS.includes(a.category));
+  const highest = around.length ? (Math.max(...around.map((a) => a.severity)) as Severity) : null;
   const tiles = CATEGORIES
     .map((category): CategoryTile => {
       const mine = current.filter((a) => a.category === category); // already most severe first
       return {
         category,
         count: mine.length,
-        highest: category === 'crime' || !mine.length ? null : mine[0].severity,
+        highest: category === 'crime' || COUNT_ONLY_STATUSLESS.includes(category) || !mine.length ? null : mine[0].severity,
         top: mine[0] ?? null,
       };
     })
@@ -61,5 +67,5 @@ export function buildDashboard(alerts: Alert[], followed: readonly Category[] = 
   const next24 = aheadAlerts(alerts, now)
     .map((alert) => ({ alert, at: (Date.parse(alert.startsAt!) - now) / DAY }))
     .filter((x) => x.at <= 1);
-  return { status: statusFor(highest), current: current.length, highest, tiles, next24 };
+  return { status: statusFor(highest), current: around.length, highest, tiles, next24 };
 }

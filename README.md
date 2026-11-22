@@ -48,8 +48,16 @@ npm start
 | `NINA_CHANNELS` | mowas,katwarn,biwapp,dwd,lhp,police | Official BBK warnings |
 | `RSS_FEEDS` | [] | JSON list of police / transit feeds |
 | `FEUERWEHR_BERLIN` | on | Berliner Feuerwehr incident reports (`off` to disable) |
+| `POLIZEI_BERLIN` | on | Polizei Berlin press releases from berlin.de (`off` to disable) |
+| `LEBENSMITTELWARNUNG_URL` | official feed | Product and food recalls from lebensmittelwarnung.de (`off` to disable) |
+| `FDA_RECALLS_URL` | `https://api.fda.gov` | US food and drug recalls from openFDA enforcement reports (`off` to disable) |
+| `CPSC_RECALLS_URL` | saferproducts.gov API | US consumer-product recalls from CPSC (`off` to disable) |
+| `AUTOBAHN_URL` | Autobahn GmbH API | Full motorway closures (planned and after accidents), topic "Verkehr" (`off` to disable) |
+| `BERLIN_VERSAMMLUNGEN_URL` | official list | Registered marches in Berlin from Polizei Berlin, topic "Veranstaltungen & Demos" (`off` to disable) |
+| `EPA_UV_URL` | EPA Envirofacts | UV index for California, same opt-in topic (`off` to disable) |
+| `DWD_HEALTH_URL` | DWD open data | Pollen and UV forecasts for the opt-in "Pollen & UV" topic (`off` to disable) |
 | `DWD_DIRECT` | fallback | DWD warnings straight from DWD open data: `fallback` (only while NINA's DWD channel fails), `always`, or `off` |
-| `PRESSEPORTAL_AGENCIES` | all | Presseportal Blaulicht press releases: `all`, `off`, or a comma list of agency keys (`polizei-hamburg`, `feuerwehr-hamburg`, `bundespolizei-hamburg`, `polizei-koeln`, `feuerwehr-koeln`, `feuerwehr-muenchen`, `bundespolizei-muenchen`, `bundespolizei-berlin`) |
+| `PRESSEPORTAL_AGENCIES` | all | Presseportal Blaulicht press releases: `all`, `off`, or a comma list of agency keys (`polizei-hamburg`, `feuerwehr-hamburg`, `bundespolizei-hamburg`, `polizei-koeln`, `feuerwehr-koeln`, `feuerwehr-muenchen`, `bundespolizei-muenchen`, `bundespolizei-berlin`, and `polizei-<city>` for the 24 city police added 2026-11-22, e.g. `polizei-frankfurt`, `polizei-mittelfranken`; full list in `server/src/sources/presseportal.ts`) |
 | `NWS_AREAS` | – | US National Weather Service alerts for testing in the US: state codes (`CA`) or `lat,lon` points, separated by `;`. Off when empty |
 | `NWS_USER_AGENT` | `GEOCODER_USER_AGENT` | Contact string NWS requires, e.g. `HeyOkay (you@example.com)` |
 | `POLL_INTERVAL_SEC` | 120 | |

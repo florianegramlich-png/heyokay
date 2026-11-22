@@ -11,11 +11,18 @@ import { fetchAgency } from './sources/presseportal.js';
 import { fetchDwdSnapshot } from './sources/dwd.js';
 import { CELL_DEG, fetchHeat, owmFetcher } from './sources/heat.js';
 import { FEUERWEHR_BERLIN_AREA, fetchFeuerwehrBerlin } from './sources/feuerwehr-berlin.js';
+import { POLIZEI_BERLIN_AREA, fetchPolizeiBerlin } from './sources/polizei-berlin.js';
 import { fetchNwsArea, nwsFetcher } from './sources/nws.js';
 import { fetchStatusPage } from './sources/statuspage.js';
 import { fetchIpaws } from './sources/ipaws.js';
 import { fetchQuakes } from './sources/usgs.js';
 import { fetchPegelonline } from './sources/pegelonline.js';
+import { fetchRecalls } from './sources/lebensmittelwarnung.js';
+import { fetchFdaRecalls, fetchCpscRecalls } from './sources/us-recalls.js';
+import { berlinDate, fetchPollenUv, pollenUvDue } from './sources/dwd-health.js';
+import { fetchAssemblies } from './sources/berlin-versammlungen.js';
+import { fetchAutobahn } from './sources/autobahn.js';
+import { californiaUvDue, fetchCaliforniaUv, localDate } from './sources/us-uv.js';
 import { fetchWildfires } from './sources/wildfire.js';
 import { fetchAir } from './sources/air.js';
 import { fetchSachet } from './sources/sachet.js';
@@ -72,6 +79,22 @@ const airChecked = new Map<string, number>();
 // Gauges report every 15 minutes; the full list is ~600 kB, so don't fetch it more often.
 const PEGEL_EVERY_MS = 15 * 60_000;
 let pegelLast = 0;
+// Recalls: a few a day; the feed is ~450 kB.
+const RECALLS_EVERY_MS = 30 * 60_000;
+let recallsLast = 0;
+// US recalls: FDA reports weekly, CPSC a handful a week; openFDA allows 1000 calls a day without a key.
+const US_RECALLS_EVERY_MS = 6 * 3600_000;
+let fdaLast = 0;
+let cpscLast = 0;
+// Pollen & UV: once a day, in the morning (Berlin date of the last successful read).
+let pollenUvDate: string | null = null;
+let caUvDate: string | null = null;
+// Berlin assemblies: the export is ~600 kB and changes a few times a day.
+const ASSEMBLIES_EVERY_MS = 60 * 60_000;
+let assembliesLast = 0;
+// Autobahn: ~230 small requests per round, so not more often than every 15 minutes.
+const AUTOBAHN_EVERY_MS = 15 * 60_000;
+let autobahnLast = 0;
 const FIRES_EVERY_MS = 5 * 60_000;
 let firesLast = 0;
 
@@ -105,6 +128,10 @@ const tasks: SourceTask[] = [
     key: 'feuerwehr-berlin',
     run: async () => ingest(await fetchFeuerwehrBerlin(seen('rss')), FEUERWEHR_BERLIN_AREA),
   }] : []),
+  ...(config.polizeiBerlin ? [{
+    key: 'polizei-berlin',
+    run: async () => ingest(await fetchPolizeiBerlin(seen('rss')), POLIZEI_BERLIN_AREA),
+  }] : []),
   ...(config.openWeatherApiKey ? [{
     key: 'owm:heat',
     run: async () => {
@@ -133,6 +160,72 @@ const tasks: SourceTask[] = [
       // Levels that fell back to normal get an all-clear.
       const r = await ingestAndReconcile(await fetchPegelonline(seen('pegelonline'), undefined, { url: config.pegelonline! }));
       pegelLast = Date.now();
+      return r;
+    },
+  }] : []),
+  ...(config.lebensmittelwarnung ? [{
+    key: 'lebensmittelwarnung:DE',
+    run: async () => {
+      if (Date.now() - recallsLast < RECALLS_EVERY_MS) return { skipped: 'checked less than 30 minutes ago' };
+      const r = await ingest(await fetchRecalls(seen('lebensmittelwarnung'), undefined, { url: config.lebensmittelwarnung! }));
+      recallsLast = Date.now();
+      return r;
+    },
+  }] : []),
+  ...(config.fdaRecalls ? [{
+    key: 'fda:US',
+    run: async () => {
+      if (Date.now() - fdaLast < US_RECALLS_EVERY_MS) return { skipped: 'checked less than 6 hours ago' };
+      const r = await ingest(await fetchFdaRecalls(seen('fda'), undefined, { url: config.fdaRecalls! }));
+      fdaLast = Date.now();
+      return r;
+    },
+  }] : []),
+  ...(config.cpscRecalls ? [{
+    key: 'cpsc:US',
+    run: async () => {
+      if (Date.now() - cpscLast < US_RECALLS_EVERY_MS) return { skipped: 'checked less than 6 hours ago' };
+      const r = await ingest(await fetchCpscRecalls(seen('cpsc'), undefined, { url: config.cpscRecalls! }));
+      cpscLast = Date.now();
+      return r;
+    },
+  }] : []),
+  ...(config.autobahn ? [{
+    key: 'autobahn:DE',
+    run: async () => {
+      if (Date.now() - autobahnLast < AUTOBAHN_EVERY_MS) return { skipped: 'checked less than 15 minutes ago' };
+      // Closures that leave the list early get an all-clear.
+      const r = await ingestAndReconcile(await fetchAutobahn(seen('autobahn'), undefined, { url: config.autobahn! }));
+      autobahnLast = Date.now();
+      return r;
+    },
+  }] : []),
+  ...(config.berlinVersammlungen ? [{
+    key: 'berlin-versammlungen:DE',
+    run: async () => {
+      if (Date.now() - assembliesLast < ASSEMBLIES_EVERY_MS) return { skipped: 'checked less than an hour ago' };
+      const r = await ingest(await fetchAssemblies(seen('berlin-versammlungen'), undefined, { url: config.berlinVersammlungen!, geocoder }));
+      assembliesLast = Date.now();
+      return r;
+    },
+  }] : []),
+  ...(config.epaUv ? [{
+    key: 'epa-uv:US',
+    run: async () => {
+      const now = new Date();
+      if (!californiaUvDue(now, caUvDate)) return { skipped: 'read once a day after 07:05 California time' };
+      const r = await ingest(await fetchCaliforniaUv(seen('epa-uv'), undefined, { url: config.epaUv!, now }));
+      caUvDate = localDate(now, 'America/Los_Angeles');
+      return r;
+    },
+  }] : []),
+  ...(config.dwdHealth ? [{
+    key: 'dwd-health:DE',
+    run: async () => {
+      const now = new Date();
+      if (!pollenUvDue(now, pollenUvDate)) return { skipped: 'read once a day after 07:05' };
+      const r = await ingest(await fetchPollenUv(seen('dwd-health'), undefined, { url: config.dwdHealth!, now }));
+      pollenUvDate = berlinDate(now);
       return r;
     },
   }] : []),

@@ -1,0 +1,605 @@
+{
+ "messages": {
+  "messages": [
+   "Ende des Berichts"
+  ],
+  "success": true
+ },
+ "results": {
+  "count": 59,
+  "items_per_page": 99999
+ },
+ "index": [
+  {
+   "id": 2,
+   "datum": "22.11.2026",
+   "von": "00:00",
+   "bis": "23:59",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "10557",
+   "strasse_nr": "Platz der Republik 1",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 5,
+   "datum": "22.11.2026",
+   "von": "00:00",
+   "bis": "23:59",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "10117",
+   "strasse_nr": "Werderscher Markt",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 8,
+   "datum": "22.11.2026",
+   "von": "10:00",
+   "bis": "18:00",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "13509",
+   "strasse_nr": "An der Heide 1",
+   "aufzugsstrecke": "An der Heide, Kehrwieder, Am Rosensteg, Am Brunnen    - > alle 2 Stunden im Wechsel"
+  },
+  {
+   "id": 11,
+   "datum": "22.11.2026",
+   "von": "11:00",
+   "bis": "14:00",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "10117",
+   "strasse_nr": "Pariser Platz",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 14,
+   "datum": "22.11.2026",
+   "von": "11:00",
+   "bis": "18:00",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "10437",
+   "strasse_nr": "Eberswalder Str.",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 17,
+   "datum": "22.11.2026",
+   "von": "12:00",
+   "bis": "14:30",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "10179",
+   "strasse_nr": "Jannowitzbrücke",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 20,
+   "datum": "22.11.2026",
+   "von": "12:30",
+   "bis": "15:30",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "12435",
+   "strasse_nr": "S-Bhf. Treptower Park",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 23,
+   "datum": "22.11.2026",
+   "von": "13:00",
+   "bis": "15:00",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "14195",
+   "strasse_nr": "Podbielskiallee 67",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 26,
+   "datum": "22.11.2026",
+   "von": "13:00",
+   "bis": "17:00",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "10117",
+   "strasse_nr": "Pariser Platz",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 29,
+   "datum": "22.11.2026",
+   "von": "14:00",
+   "bis": "16:00",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "10117",
+   "strasse_nr": "Pariser Platz 1",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 32,
+   "datum": "22.11.2026",
+   "von": "14:30",
+   "bis": "18:15",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "10117",
+   "strasse_nr": "Pariser Platz",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 35,
+   "datum": "22.11.2026",
+   "von": "18:00",
+   "bis": "18:30",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "13129",
+   "strasse_nr": "Alt-Blankenburg 12",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 38,
+   "datum": "23.11.2026",
+   "von": "00:00",
+   "bis": "23:59",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "10557",
+   "strasse_nr": "Platz der Republik 1",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 41,
+   "datum": "23.11.2026",
+   "von": "00:00",
+   "bis": "23:59",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "10117",
+   "strasse_nr": "Werderscher Markt",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 44,
+   "datum": "23.11.2026",
+   "von": "08:00",
+   "bis": "10:00",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "",
+   "strasse_nr": "Dorotheenstr./ Ebertstr.",
+   "aufzugsstrecke": "Neue Wegstrecke:  Reichstag (Eingang Süd) - Scheidemannstraße (Gehweg) - Platz der Republik (Gehweg) - Paul-Löbe-Allee (Gehweg) - Reichstagufer - Wilhelmstr. - Wilhelmstr. 61A     alte Wegstrecke:  Reichstag (Eingang Süd) - Friedrich-Ebert-Platz - Reichstagufer - Wilhelmstr. (ARD Hauptstadtstudio)"
+  },
+  {
+   "id": 47,
+   "datum": "23.11.2026",
+   "von": "09:30",
+   "bis": "10:15",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "12099",
+   "strasse_nr": "Oberlandstr. 75",
+   "aufzugsstrecke": "NEU:    Oberlandstr. 75 - 84 (von Procter and Gamble Manufactoring GmbH (Gillette) - Komturstr. - Schätzelbergstr. - Ullsteinstr. - Mariendorfer Damm - Lichtenrader Damm - Barnetstr. - Schichauweg - Motzener Str. 35-37 (SKF  Lubrication System Germany) - Zehrensdorfer Str. -Säntisstr. - Daimlerstr. 125 - 135 (EK vor Mercedes Benz)    ALT:    Ober- landstr. 75-84 (vor dem Gilette Werk) - Komturstr. - Schätzelbergstr. - Ullsteinstr. - Mariendorfer Damm - Alt-Mariendorf - Großbeerenstr. - Daimlerstr. 135-125"
+  },
+  {
+   "id": 50,
+   "datum": "23.11.2026",
+   "von": "09:30",
+   "bis": "11:45",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "12277",
+   "strasse_nr": "Culemeyerstr. 1",
+   "aufzugsstrecke": "Culemeyerstr. 1 (vor dem Tor der Firma GE Energy Power Conversion GmbH) - Daimlerstr. - Daimlerstr. 135-125 (vor dem Mercedes-Werk)"
+  },
+  {
+   "id": 53,
+   "datum": "23.11.2026",
+   "von": "10:00",
+   "bis": "12:00",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "12277",
+   "strasse_nr": "Daimlerstr.",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 56,
+   "datum": "23.11.2026",
+   "von": "10:30",
+   "bis": "13:00",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "10179",
+   "strasse_nr": "Jannowitzbrücke",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 59,
+   "datum": "23.11.2026",
+   "von": "11:00",
+   "bis": "13:00",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "10117",
+   "strasse_nr": "Pariser Platz",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 62,
+   "datum": "23.11.2026",
+   "von": "11:00",
+   "bis": "13:30",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "10557",
+   "strasse_nr": "Paul-Löbe-Allee",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 65,
+   "datum": "23.11.2026",
+   "von": "11:00",
+   "bis": "15:00",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "14195",
+   "strasse_nr": "Podbielskiallee 67",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 68,
+   "datum": "23.11.2026",
+   "von": "11:30",
+   "bis": "13:00",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "10179",
+   "strasse_nr": "Paula-Thiede-Ufer 10",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 71,
+   "datum": "23.11.2026",
+   "von": "12:00",
+   "bis": "14:00",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "13353",
+   "strasse_nr": "Nordufer 20",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 74,
+   "datum": "23.11.2026",
+   "von": "13:00",
+   "bis": "15:00",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "13599",
+   "strasse_nr": "Am Juliusturm 14",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 77,
+   "datum": "23.11.2026",
+   "von": "13:00",
+   "bis": "17:00",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "12435",
+   "strasse_nr": "S-Bhf. Treptower Park",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 80,
+   "datum": "23.11.2026",
+   "von": "14:00",
+   "bis": "19:00",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "13086",
+   "strasse_nr": "Antonplatz 1",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 83,
+   "datum": "23.11.2026",
+   "von": "17:30",
+   "bis": "19:00",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "",
+   "strasse_nr": "",
+   "aufzugsstrecke": "Savignyplatz, Kantstr. Nordseite (AK) - Kantstr. Richtung Westen - Kehre Kaiser-Friedrich-Str. - Kantstr. - Kehre Joachimsthaler Str. - Kantstr. - Kehre Kaiser-Friedrich-Str. - Kantstr. - ZK zwischen Wilmersdorferstr. und Krumme Str. - Kantstr. - Kehre Joachimsthaler Str. - Kantstr. - Kehre Kaiser-Friedrich-Str. - Kantstr. - Kehre Joachimsthaler Str. - Kantstr. bis Savignyplatz - Savignyplatz Nordseite, östlich, Savignyplatz 3-4 (EK)"
+  },
+  {
+   "id": 86,
+   "datum": "23.11.2026",
+   "von": "17:45",
+   "bis": "19:00",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "12559",
+   "strasse_nr": "Alt-Müggelheim 22",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 89,
+   "datum": "23.11.2026",
+   "von": "17:45",
+   "bis": "19:30",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "14163",
+   "strasse_nr": "Kirchstr. 1",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 92,
+   "datum": "23.11.2026",
+   "von": "18:00",
+   "bis": "19:00",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "12559",
+   "strasse_nr": "Alt-Müggelheim 17",
+   "aufzugsstrecke": "Alt-Müggelheim 17 (AP auf dem Dorfanger) - Müggelheimer Damm - Müggelheimer Damm 244 - Müggelheimer Damm - Alt-Müggelheim 17 (EP auf dem Dorfanger)"
+  },
+  {
+   "id": 95,
+   "datum": "23.11.2026",
+   "von": "18:00",
+   "bis": "19:00",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "10178",
+   "strasse_nr": "Alexanderplatz 1",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 98,
+   "datum": "23.11.2026",
+   "von": "18:00",
+   "bis": "20:00",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "",
+   "strasse_nr": "",
+   "aufzugsstrecke": "Wilmersdorfer Str./Ecke Krumme Str. - (AK) - Wilmersdorfer Str. - Schillerstr. - wenden - Wilmersdorfer Str. (ZK vor Lidl) - Wilmersdorfer Str. 55 - wenden - Wilmersdorfer Str. - Goethestr. (EK)"
+  },
+  {
+   "id": 101,
+   "datum": "23.11.2026",
+   "von": "18:00",
+   "bis": "20:00",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "",
+   "strasse_nr": "",
+   "aufzugsstrecke": "John-F.-Kennedy-Platz (Rathaus Schöneberg) - Belziger Str. - Heinrich-Lassen-Park - Hauptstr. - Akazienstr. - Apostel-Paulus-Kirche (ZK) - Goltzstr. - Winterfeldplatz - Maaßenstr. (ZK) - Nollendorfplatz - Winterfeldplatz"
+  },
+  {
+   "id": 104,
+   "datum": "23.11.2026",
+   "von": "18:00",
+   "bis": "20:30",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "",
+   "strasse_nr": "",
+   "aufzugsstrecke": "Alt-Tegel 2 (Am Schinkelbrunnen, AK) - Alt-Tegel - Medebacher Weg - Am Tegeler Hafen - Berliner Str. - Bernstorffstr. - Buddestr. - Gorkistr. (Fußgängerzone) - Berliner Str. - Grußdorfstr. - Buddestr. - Brunowstr. - Berliner Str. - Veitstraße) - Berliner Str. (zurück) - Alt-Tegel 2 (am Schinkelbrunnen, EK)"
+  },
+  {
+   "id": 107,
+   "datum": "23.11.2026",
+   "von": "18:00",
+   "bis": "22:00",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "10785",
+   "strasse_nr": "Potsdamer Platz",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 110,
+   "datum": "23.11.2026",
+   "von": "18:00",
+   "bis": "22:00",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "10178",
+   "strasse_nr": "Alexanderufer / Kapelleufer",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 113,
+   "datum": "23.11.2026",
+   "von": "19:00",
+   "bis": "20:00",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "12587",
+   "strasse_nr": "Bölschestr. 100",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 116,
+   "datum": "24.11.2026",
+   "von": "00:00",
+   "bis": "23:59",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "10557",
+   "strasse_nr": "Platz der Republik 1",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 119,
+   "datum": "24.11.2026",
+   "von": "00:00",
+   "bis": "23:59",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "10117",
+   "strasse_nr": "Werderscher Markt",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 122,
+   "datum": "24.11.2026",
+   "von": "06:00",
+   "bis": "06:00",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "13599",
+   "strasse_nr": "Nonnendammallee 44",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 125,
+   "datum": "24.11.2026",
+   "von": "08:15",
+   "bis": "09:30",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "10559",
+   "strasse_nr": "Turmstr. 91",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 128,
+   "datum": "24.11.2026",
+   "von": "10:00",
+   "bis": "11:00",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "",
+   "strasse_nr": "",
+   "aufzugsstrecke": "Paulsternstr. 26 - Paulsternstr. - Nonnendammallee - Nonnendammallee 44"
+  },
+  {
+   "id": 131,
+   "datum": "24.11.2026",
+   "von": "10:00",
+   "bis": "12:00",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "12359",
+   "strasse_nr": "Woermannkehre 1",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 134,
+   "datum": "24.11.2026",
+   "von": "10:30",
+   "bis": "13:00",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "10179",
+   "strasse_nr": "Jannowitzbrücke",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 137,
+   "datum": "24.11.2026",
+   "von": "11:00",
+   "bis": "15:00",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "14195",
+   "strasse_nr": "Podbielskiallee 67",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 140,
+   "datum": "24.11.2026",
+   "von": "13:00",
+   "bis": "17:00",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "12435",
+   "strasse_nr": "S-Bhf. Treptower Park",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 143,
+   "datum": "24.11.2026",
+   "von": "16:00",
+   "bis": "17:00",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "13357",
+   "strasse_nr": "Hanne-Sobek-Platz",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 146,
+   "datum": "24.11.2026",
+   "von": "16:00",
+   "bis": "18:00",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "12051",
+   "strasse_nr": "Schierker Platz",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 149,
+   "datum": "24.11.2026",
+   "von": "16:30",
+   "bis": "18:30",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "12555",
+   "strasse_nr": "Alt-Köpenick 32",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 152,
+   "datum": "24.11.2026",
+   "von": "16:30",
+   "bis": "18:30",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "",
+   "strasse_nr": "",
+   "aufzugsstrecke": "Platz am Denkmal für Albrecht von Preußen (EK) - Schloßstraße runter bis Wendepunkt - Schloßstraße/Knobelsdorff- straße, Schloßstraße zurück bis zum Platz am Denkmal für Albrecht von Preußen (AK)"
+  },
+  {
+   "id": 155,
+   "datum": "24.11.2026",
+   "von": "17:00",
+   "bis": "18:00",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "",
+   "strasse_nr": "",
+   "aufzugsstrecke": "Stephanplatz (AK) - Stendaler Str. - Rathenower Str. - Stephanstr. - Stephanplatz (EK)"
+  },
+  {
+   "id": 158,
+   "datum": "24.11.2026",
+   "von": "17:00",
+   "bis": "18:30",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "12163",
+   "strasse_nr": "Schloßstr. 90",
+   "aufzugsstrecke": "Mittelstreifen zwischen den Hausnummern 90- 96"
+  },
+  {
+   "id": 161,
+   "datum": "24.11.2026",
+   "von": "17:30",
+   "bis": "18:30",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "10365",
+   "strasse_nr": "Frankfurter Allee 172",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 164,
+   "datum": "24.11.2026",
+   "von": "17:30",
+   "bis": "19:00",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "",
+   "strasse_nr": "",
+   "aufzugsstrecke": "Marienfelder Allee 107/109,  12277 Berlin, vor der Bibliothek Marienfelde  Marienfelder Allee nördliche Richtung -  Großbeerenstraße bis Friedenstraße - Wende -  Großbeerenstraße - Marienfelder Allee - Friedenfelser  Straße - rechts in Hildburghauser Straße bis  Weskammstraße - Wende - Hildburghauser Straße -  Marienfelder Allee 145/146 (Happy Buddha, ZK) -   Marienfelder Allee - bis Bahnstraße - Wende -  Marienfelder Allee bis 107/109"
+  },
+  {
+   "id": 167,
+   "datum": "24.11.2026",
+   "von": "18:00",
+   "bis": "19:30",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "",
+   "strasse_nr": "",
+   "aufzugsstrecke": "Albrechtstr. 26 (vor der ukrainischen Botschaft) über  die Albrechtstr. - Weidendammer Brücke - Friedrichstr. -   Unter den Linden Nr. 63-65 vor der russischen Botschaft,  auf dem Mittelweg (ZK) - Brandenburger Tor"
+  },
+  {
+   "id": 170,
+   "datum": "24.11.2026",
+   "von": "18:00",
+   "bis": "19:30",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "10365",
+   "strasse_nr": "Stefan-Heym-Platz 1",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 173,
+   "datum": "24.11.2026",
+   "von": "18:00",
+   "bis": "19:30",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "10365",
+   "strasse_nr": "Stefan-Heym-Platz  1",
+   "aufzugsstrecke": ""
+  },
+  {
+   "id": 176,
+   "datum": "24.11.2026",
+   "von": "18:40",
+   "bis": "19:15",
+   "thema": "(Thema im Test entfernt)",
+   "plz": "10785",
+   "strasse_nr": "Potsdamer Platz",
+   "aufzugsstrecke": ""
+  }
+ ],
+ "item": []
+}

@@ -1,16 +1,17 @@
 import type { CountryCode } from './countries.js';
 // Shared domain types. app/src/lib/types.ts mirrors the client-facing parts — keep them in sync.
 
-export const CATEGORIES = ['weather', 'crime', 'transit', 'public_safety', 'health', 'infrastructure', 'technology'] as const;
-/** Categories added after launch that are on for everyone who hasn't seen them yet (see normalizePrefs). */
-export const NEW_DEFAULT_ON: Category[] = ['technology'];
+export const CATEGORIES = ['weather', 'crime', 'transit', 'public_safety', 'health', 'infrastructure', 'technology', 'recall', 'pollen_uv', 'events'] as const;
+/** Categories added after launch that are on for everyone who hasn't seen them yet (see normalizePrefs).
+ *  Pollen & UV (2026-11-22) is not among them: it is opt-in. */
+export const NEW_DEFAULT_ON: Category[] = ['technology', 'recall', 'events'];
 const ORIGINAL_CATEGORIES: Category[] = ['weather', 'crime', 'transit', 'public_safety', 'health', 'infrastructure'];
 export type Category = (typeof CATEGORIES)[number];
 
 /** 1 = info, 2 = minor, 3 = moderate, 4 = severe, 5 = extreme. Same meaning across all sources. */
 export type Severity = 1 | 2 | 3 | 4 | 5;
 
-export type SourceKind = 'nina' | 'dwd' | 'nws' | 'rss' | 'presseportal' | 'owm' | 'statuspage' | 'ipaws' | 'sachet' | 'usgs' | 'pegelonline' | 'wfigs' | 'manual';
+export type SourceKind = 'nina' | 'dwd' | 'nws' | 'rss' | 'presseportal' | 'owm' | 'statuspage' | 'ipaws' | 'sachet' | 'usgs' | 'pegelonline' | 'wfigs' | 'lebensmittelwarnung' | 'fda' | 'cpsc' | 'dwd-health' | 'berlin-versammlungen' | 'autobahn' | 'epa-uv' | 'manual';
 
 export type Language = 'de' | 'en';
 /**
@@ -22,7 +23,7 @@ export type UiLanguage = Language | 'ta';
 export const UI_LANGUAGES = ['de', 'en', 'ta'] as const satisfies readonly UiLanguage[];
 export const contentLanguage = (l: UiLanguage | null | undefined): Language => (l === 'de' ? 'de' : 'en');
 
-export type Hazard = 'heat' | 'outage' | 'earthquake' | 'air' | 'flood' | 'wildfire';
+export type Hazard = 'heat' | 'outage' | 'earthquake' | 'air' | 'flood' | 'wildfire' | 'recall' | 'pollen' | 'uv' | 'assembly' | 'road_closure';
 
 /** A raw item as it arrives from a source, before the AI pipeline touches it. */
 export interface SourceItem {
@@ -42,6 +43,8 @@ export interface SourceItem {
   hazard?: Hazard;
   /** Technology outages: which service (status-page key, e.g. "zoom"), for per-service follow. */
   service?: string;
+  /** Pollen & UV: which pollen type ("birke") or "uv". See UserPrefs.pollenUv. */
+  pollenUv?: string;
   /** When the hazard begins, if the source says (CAP onset, forecast peak). Future = "coming up". */
   onsetAt?: string;
   /** ISO country (countries.ts) — decides emergency numbers and units. Missing = inferred from language. */
@@ -127,6 +130,8 @@ export interface RiskEvent {
   hazard?: Hazard;
   /** Technology outages: the service it concerns (status-page key). See UserPrefs.techServices. */
   service?: string;
+  /** Pollen & UV: the pollen type ("birke") or "uv". See UserPrefs.pollenUv. */
+  pollenUv?: string;
   /** When the hazard begins, if the source says (CAP onset, forecast peak). Future = "coming up". */
   onsetAt?: string;
   /** ISO country (countries.ts) — decides emergency numbers and units. Missing = inferred from language. */
@@ -175,10 +180,15 @@ export interface UserPrefs {
    * null or missing = every service. Services added later are then included automatically.
    */
   techServices?: string[] | null;
+  /**
+   * Pollen & UV, per pollen type and UV ("birke", "graeser", …, "uv"; sources/dwd-health.ts).
+   * null or missing = all of them.
+   */
+  pollenUv?: string[] | null;
 }
 
 export const DEFAULT_PREFS: UserPrefs = {
-  categories: ['weather', 'crime', 'transit', 'public_safety', 'technology'],
+  categories: ['weather', 'crime', 'transit', 'public_safety', 'technology', 'recall', 'events'],
   quietHours: { start: '22:00', end: '07:00' },
   dailyLimit: 3,
   timezone: 'Europe/Berlin',

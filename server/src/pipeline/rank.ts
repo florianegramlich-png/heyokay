@@ -38,7 +38,14 @@ export interface RankContext {
   now: Date;
   pushesLast24h: number;
   feedback: Record<string, { relevant: number; notRelevant: number }>;
+  /** Pollen & UV: this person already had a pollen/UV push in the last 12 hours. */
+  pollenUvPushedRecently?: boolean;
+  /** The saved place this alert is for (null = the person's current location). */
+  matchedPlace?: string | null;
 }
+
+/** Pollen & UV may push only in the morning (local time), so it never wakes anyone at night. */
+export const POLLEN_UV_PUSH_HOURS = { from: '06:00', to: '11:00' };
 
 /**
  * Send now / feed (digest) / suppress. Rules today; the Phase 2 ranking model replaces
@@ -57,6 +64,19 @@ export function decide(user: User, event: RiskEvent, ctx: RankContext): { delive
   }
   // Risk outlook (PRD 6.1 #14): something that begins later goes to the feed under "Ahead";
   // a push comes with the actual warning, not the forecast.
+  // Product recalls are never a push (Flori, 2026-11-21): the feed and the daily summary.
+  if (event.category === 'recall') return { delivery: 'feed', reason: 'recall: feed only' };
+  // Demonstrations and events: something to plan around, not a warning (Flori, 2026-11-21: feed by default).
+  if (event.category === 'events') return { delivery: 'feed', reason: 'events: feed only' };
+  // Pollen & UV (opt-in): only the types the person picked; "hoch" may push once, in the morning.
+  if (event.category === 'pollen_uv') {
+    if (event.pollenUv && prefs.pollenUv && !prefs.pollenUv.includes(event.pollenUv)) return { delivery: 'suppressed', reason: 'pollen type not followed' };
+    if (event.severity <= 1) return { delivery: 'feed', reason: 'pollen/UV: moderate, feed only' };
+    if (!inQuietHours(ctx.now, POLLEN_UV_PUSH_HOURS.from, POLLEN_UV_PUSH_HOURS.to, prefs.timezone)) return { delivery: 'feed', reason: 'pollen/UV: push only in the morning' };
+    if (ctx.pollenUvPushedRecently) return { delivery: 'feed', reason: 'pollen/UV: one push a day' };
+  }
+  // Motorway closures: in the feed, a push only when one of the person's saved places is near it.
+  if (event.hazard === 'road_closure' && !ctx.matchedPlace) return { delivery: 'feed', reason: 'road closure: push only near a saved place' };
   if (isAhead(event, ctx.now)) return { delivery: 'feed', reason: 'coming up' };
   if (event.severity <= 1) return { delivery: 'feed', reason: 'information only' };
 

@@ -1,4 +1,5 @@
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
+import { POLLEN_UV_KEYS } from './sources/dwd-health.js';
 import cors from '@fastify/cors';
 import { z } from 'zod';
 import type { Store } from './store.js';
@@ -25,6 +26,7 @@ const PrefsSchema = z.object({
   digestTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).nullable(),
   // Status-page keys; unknown keys are kept (a service may come back to the list later).
   techServices: z.array(z.string().regex(/^[a-z0-9][a-z0-9_-]{0,39}$/)).max(100).nullable(),
+  pollenUv: z.array(z.enum(POLLEN_UV_KEYS)).max(POLLEN_UV_KEYS.length).nullable(),
 }).partial();
 
 const Coord = { lat: z.number().min(-90).max(90), lon: z.number().min(-180).max(180) };

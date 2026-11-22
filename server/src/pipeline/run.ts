@@ -240,6 +240,12 @@ export class Pipeline {
     return out;
   }
 
+  /** "One pollen/UV push a day": was there one in the last 12 hours? */
+  private async pollenUvPushedRecently(userId: string): Promise<boolean> {
+    const since = this.now().getTime() - 12 * 3600_000;
+    return (await this.d.store.alertsForUser(userId, 50)).some((a) => a.category === 'pollen_uv' && a.delivery === 'push' && Date.parse(a.createdAt) >= since);
+  }
+
   /** Write copy if needed, then create alerts for every affected user. Only for released events. */
   async deliver(event: RiskEvent, onlyUsers?: User[], backfill = false): Promise<{ alerts: number; pushes: number }> {
     if (event.status !== 'auto' && event.status !== 'approved') return { alerts: 0, pushes: 0 };
@@ -261,6 +267,8 @@ export class Pipeline {
         now: this.now(),
         pushesLast24h: await this.d.store.pushCountSince(user.id, since),
         feedback: await this.d.store.feedbackByCategory(user.id),
+        matchedPlace: m.place,
+        ...(event.category === 'pollen_uv' ? { pollenUvPushedRecently: await this.pollenUvPushedRecently(user.id) } : {}),
       });
       // First sync after install: show what's going on without a burst of notifications.
       if (backfill && delivery === 'push' && !(event.official && event.severity === 5)) { delivery = 'feed'; reason = 'catch-up after setup'; }

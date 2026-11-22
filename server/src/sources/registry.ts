@@ -17,7 +17,7 @@ export interface SourceInfo {
   /** '*' = follows people's places (any country), e.g. heat forecasts. */
   country: CountryCode | '*';
   official: boolean;
-  category: 'warnings' | 'weather' | 'police' | 'fire' | 'transit' | 'technology' | 'news' | 'system';
+  category: 'warnings' | 'weather' | 'police' | 'fire' | 'transit' | 'technology' | 'recall' | 'news' | 'system';
   /** Key (prefix) of the source that covers this one's area when it fails. */
   fallback?: string;
   /** Where its terms and format are documented. */
@@ -42,6 +42,22 @@ export function describeSource(key: string): SourceInfo {
       return { key, name: `Presseportal · ${rest}`, country: 'DE', official: false, category: rest.startsWith('feuerwehr') ? 'fire' : 'police', docs: 'https://www.presseportal.de/blaulicht/' };
     case 'feuerwehr-berlin':
       return { key, name: 'Berliner Feuerwehr', country: 'DE', official: false, category: 'fire', docs: 'https://www.berliner-feuerwehr.de/service/rss-feeds/' };
+    case 'polizei-berlin':
+      return { key, name: 'Polizei Berlin', country: 'DE', official: false, category: 'police', docs: 'https://www.berlin.de/polizei/polizeimeldungen/' };
+    case 'lebensmittelwarnung':
+      return { key, name: 'lebensmittelwarnung.de · Rückrufe', country: 'DE', official: true, category: 'recall', docs: 'https://www.lebensmittelwarnung.de/___LMW-Redaktion/RSSNewsfeed/rssnewsfeed_node.html' };
+    case 'autobahn':
+      return { key, name: 'Die Autobahn GmbH · Sperrungen', country: 'DE', official: true, category: 'transit', docs: 'https://autobahn.api.bund.dev/' };
+    case 'berlin-versammlungen':
+      return { key, name: 'Polizei Berlin · Versammlungen', country: 'DE', official: true, category: 'police', docs: 'https://www.berlin.de/polizei/service/versammlungsbehoerde/versammlungen-aufzuege/' };
+    case 'epa-uv':
+      return { key, name: 'US EPA · UV Index (California)', country: 'US', official: true, category: 'weather', docs: 'https://www.epa.gov/enviro/uv-index-overview' };
+    case 'dwd-health':
+      return { key, name: 'Deutscher Wetterdienst · Pollen & UV', country: 'DE', official: true, category: 'weather', docs: 'https://opendata.dwd.de/climate_environment/health/alerts/' };
+    case 'fda':
+      return { key, name: 'FDA · Food and drug recalls', country: 'US', official: true, category: 'recall', docs: 'https://open.fda.gov/apis/food/enforcement/' };
+    case 'cpsc':
+      return { key, name: 'CPSC · Product recalls', country: 'US', official: true, category: 'recall', docs: 'https://www.cpsc.gov/Recalls/CPSC-Recalls-Application-Program-Interface-API-Information' };
     case 'owm':
       return { key, name: rest === 'air' ? 'OpenWeatherMap · Luftqualität' : 'OpenWeatherMap · Hitze', country: '*', official: false, category: 'weather', docs: 'https://openweathermap.org/forecast5' };
     case 'nws':

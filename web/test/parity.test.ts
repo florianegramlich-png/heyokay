@@ -4,7 +4,7 @@ import { buildDashboard, statusFor } from '../lib/dashboard';
 import { followsService, toggleService } from '../lib/services';
 import { groupByDay } from '../lib/history';
 import { createApi } from '../lib/api';
-import { APP_STRINGS } from '../lib/app-strings';
+import { APP_STRINGS, CATEGORY } from '../lib/app-strings';
 import type { Alert } from '../lib/types';
 
 // Features the phone app has, now on the web too (2026-11-20): overview, service picker, history search.
@@ -33,6 +33,18 @@ test('overview: status from the highest current alert; tiles for followed topics
   assert.equal(d.next24.length, 1);
   assert.ok(Math.abs(d.next24[0].at - 8 / 24) < 1e-9);
   assert.deepEqual([null, 1, 2, 3, 5].map((s) => statusFor(s as never)), ['calm', 'info', 'info', 'watch', 'act']);
+});
+
+test('recalls: their own tile with a count, no level, and they never change the status', () => {
+  const now = Date.now();
+  const recall = alert({ category: 'recall', severity: 1, title: 'Rückruf: Wildsalami' });
+  const only = buildDashboard([recall], ['weather', 'recall'], now);
+  assert.equal(only.status, 'calm');
+  assert.equal(only.current, 0);
+  assert.deepEqual(only.tiles.map((t) => [t.category, t.count, t.highest]), [['weather', 0, null], ['recall', 1, null]]);
+  assert.equal(only.tiles[1].top?.title, 'Rückruf: Wildsalami');
+  assert.equal(buildDashboard([recall, alert({ severity: 2 })], ['weather'], now).status, 'info');
+  for (const lang of ['de', 'en', 'ta'] as const) assert.ok(CATEGORY[lang].recall.label.length > 0 && CATEGORY[lang].recall.hint.length > 0, lang);
 });
 
 test('service picker: from "all" the first tap means only that one; unpicking the last goes back to all', () => {
@@ -70,4 +82,39 @@ test('the new strings exist in every language', () => {
       assert.ok(APP_STRINGS[lang][k], `${lang} ${k}`);
     }
   }
+});
+
+test('pollen & UV: opt-in topic with its own tile and no status, the same keys as the server, strings in every language', async () => {
+  const { POLLEN_UV_KEYS, pollenStringKey } = await import('../lib/pollen');
+  const { readFileSync } = await import('node:fs');
+  const { DEFAULT_PREFS } = await import('../lib/types');
+  assert.ok(!DEFAULT_PREFS.categories.includes('pollen_uv'));
+  const now = Date.now();
+  const birch = alert({ category: 'pollen_uv', severity: 2, title: 'Pollenflug heute: Birke hoch' });
+  const d = buildDashboard([birch], ['weather', 'pollen_uv'], now);
+  assert.equal(d.status, 'calm');
+  assert.deepEqual(d.tiles.map((t) => [t.category, t.count, t.highest]), [['weather', 0, null], ['pollen_uv', 1, null]]);
+  // Same keys and order as server/src/sources/dwd-health.ts.
+  const server = readFileSync(new URL('../../server/src/sources/dwd-health.ts', import.meta.url), 'utf8');
+  const serverKeys = [...server.matchAll(/key: '([a-z]+)'/g)].map((m) => m[1]);
+  assert.deepEqual([...POLLEN_UV_KEYS], [...serverKeys, 'uv']);
+  // The phone app uses the same module.
+  assert.equal(readFileSync(new URL('../../app/src/lib/pollen.ts', import.meta.url), 'utf8'), readFileSync(new URL('../lib/pollen.ts', import.meta.url), 'utf8'));
+  assert.match(readFileSync(new URL('../../app/src/lib/dashboard.ts', import.meta.url), 'utf8'), /COUNT_ONLY_STATUSLESS: readonly Category\[\] = \['recall', 'pollen_uv'\]/);
+  assert.deepEqual(toggleService(null, 'birke'), ['birke']);
+  assert.equal(toggleService(['birke'], 'birke'), null);
+  for (const lang of ['de', 'en', 'ta'] as const) {
+    for (const k of POLLEN_UV_KEYS) assert.ok(APP_STRINGS[lang][pollenStringKey(k)]?.length > 0, `${lang} ${k}`);
+    for (const k of ['set.pollen', 'set.pollen.hint', 'set.pollen.all'] as const) assert.ok(APP_STRINGS[lang][k].length > 0, `${lang} ${k}`);
+    assert.ok(CATEGORY[lang].pollen_uv.label.length > 0 && CATEGORY[lang].pollen_uv.hint.length > 0, lang);
+  }
+});
+
+test('events & demos: on by default, labels in every language', async () => {
+  const { DEFAULT_PREFS, CATEGORIES } = await import('../lib/types');
+  assert.ok(CATEGORIES.includes('events') && DEFAULT_PREFS.categories.includes('events'));
+  for (const lang of ['de', 'en', 'ta'] as const) assert.ok(CATEGORY[lang].events.label.length > 0 && CATEGORY[lang].events.hint.length > 0, lang);
+  const d = buildDashboard([alert({ category: 'events', severity: 1, title: 'Demo ab Savignyplatz, 17:30–19:00' })], ['events'], Date.now());
+  assert.equal(d.tiles[0].category, 'events');
+  assert.equal(d.tiles[0].count, 1);
 });

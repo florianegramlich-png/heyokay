@@ -37,6 +37,14 @@ export function findCluster(ext: ExtractedEvent, item: SourceItem, active: RiskE
   // different warnings even when their wording is alike ("... until November 18 at ..."), so never fuzzy-merge.
   // Same for status-page incidents: each has its own id, and every outage sits on the same
   // country-wide area, so the distance rule would merge them all. Gauges and fires: one event each, by id.
+  // Recalls too: every recall sits on the same country centre, so two recalls on one day would merge.
+  if (item.source === 'lebensmittelwarnung' || item.source === 'fda' || item.source === 'cpsc') return null;
+  // Pollen and UV: one forecast per area, type and day, by id.
+  if (item.source === 'dwd-health' || item.source === 'epa-uv') return null;
+  // Assemblies: each registered march is its own event, even two on the same square.
+  if (item.source === 'berlin-versammlungen') return null;
+  // Motorway closures: one event per closure, by id (two closures on one motorway are two).
+  if (item.source === 'autobahn') return null;
   if (item.source === 'nws' || item.source === 'statuspage' || item.source === 'ipaws' || item.source === 'sachet' || item.source === 'usgs' || item.source === 'pegelonline' || item.source === 'wfigs') return null;
   let best: { e: RiskEvent; score: number } | null = null;
   for (const e of active) {
@@ -69,6 +77,7 @@ export function newEvent(ext: ExtractedEvent, item: SourceItem, status: EventSta
     language: item.language ?? 'de',
     ...(item.hazard ? { hazard: item.hazard } : {}),
     ...(item.service ? { service: item.service } : {}),
+    ...(item.pollenUv ? { pollenUv: item.pollenUv } : {}),
     ...(item.onsetAt ? { onsetAt: item.onsetAt } : {}),
     country: packFor(item).code,
     ...(item.feedKey ? { feedKeys: [item.feedKey] } : {}),

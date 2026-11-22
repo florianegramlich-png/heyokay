@@ -35,6 +35,18 @@ const LIBRARY: Record<Category, Advice> = {
     low: t('Mit Störungen bei diesem Dienst rechnen. Später erneut versuchen.'),
     high: t('Eine Alternative bereithalten, z. B. Bargeld oder eine andere App. Statusseite des Anbieters beachten.'),
   },
+  events: {
+    low: t('Mehr Zeit einplanen, den Bereich nach Möglichkeit umfahren.'),
+    high: t('Bereich meiden und Hinweise der Polizei beachten.'),
+  },
+  pollen_uv: {
+    low: t('Bei Beschwerden Aufenthalt im Freien planen und Medikamente bereithalten.'),
+    high: t('Aufenthalt im Freien kurz halten, Medikamente bereithalten, Sonnenschutz nutzen.'),
+  },
+  recall: {
+    low: t('Produkt nicht verwenden. Im Geschäft zurückgeben, der Kaufpreis wird in der Regel erstattet.'),
+    high: t('Produkt nicht verwenden. Im Geschäft zurückgeben. Bei Beschwerden ärztlichen Rat einholen.'),
+  },
   infrastructure: {
     low: t('Mit Einschränkungen rechnen.'),
     high: (n) => `Bereich meiden. Bei Gasgeruch Gebäude verlassen und ${n.emergency} anrufen.`,
@@ -65,6 +77,18 @@ const LIBRARY_EN: Record<Category, Advice> = {
   technology: {
     low: t('Expect problems with this service. Try again later.'),
     high: t('Have a backup ready, such as cash or another app. Check the provider\'s status page.'),
+  },
+  events: {
+    low: t('Allow extra time and go around the area if you can.'),
+    high: t('Avoid the area and follow police instructions.'),
+  },
+  pollen_uv: {
+    low: t('If you are sensitive, plan time outdoors and keep your medication at hand.'),
+    high: t('Keep time outdoors short, keep your medication at hand, use sun protection.'),
+  },
+  recall: {
+    low: t('Don\'t use the product. Return it to the shop; you usually get your money back.'),
+    high: t('Don\'t use the product. Return it to the shop. If you feel unwell, get medical advice.'),
   },
   infrastructure: {
     low: t('Expect disruptions.'),
@@ -114,6 +138,47 @@ const HAZARD: Record<Hazard, Record<Language, Advice>> = {
       high: (n) => `Keep away from riverbanks, stay out of basements and underground car parks, follow official advice. Emergency: ${n.emergency}.`,
     },
   },
+  recall: { de: LIBRARY.recall, en: LIBRARY_EN.recall },
+  road_closure: {
+    de: {
+      low: t('Mehr Zeit einplanen und die ausgeschilderte Umleitung nutzen.'),
+      high: t('Strecke meiden, Umleitung nutzen. Im Stau Rettungsgasse bilden.'),
+    },
+    en: {
+      low: t('Allow extra time and follow the signed detour.'),
+      high: t('Avoid this stretch and use the detour. In a jam, leave a lane for emergency vehicles.'),
+    },
+  },
+  assembly: {
+    de: {
+      low: t('Umwege einplanen: Straßen entlang der Strecke können zeitweise gesperrt sein. Busse und Bahnen können umgeleitet werden.'),
+      high: t('Bereich meiden und Hinweise der Polizei beachten.'),
+    },
+    en: {
+      low: t('Plan a detour: streets along the route may be closed for a while. Buses and trams may be diverted.'),
+      high: t('Avoid the area and follow police instructions.'),
+    },
+  },
+  pollen: {
+    de: {
+      low: t('Bei Allergie: Medikamente bereithalten, Lüften am besten am frühen Morgen.'),
+      high: t('Bei Allergie: Aufenthalt im Freien kurz halten, Medikamente bereithalten, abends Haare waschen, Wäsche drinnen trocknen.'),
+    },
+    en: {
+      low: t('If you have an allergy: keep your medication at hand, air rooms early in the morning.'),
+      high: t('If you have an allergy: keep time outdoors short, keep your medication at hand, wash your hair in the evening, dry laundry indoors.'),
+    },
+  },
+  uv: {
+    de: {
+      low: t('Mittags Schatten suchen, Sonnencreme, Hut und Sonnenbrille nutzen.'),
+      high: t('Zwischen 11 und 16 Uhr möglichst im Schatten bleiben. Sonnencreme mit hohem Lichtschutz, Hut, Sonnenbrille.'),
+    },
+    en: {
+      low: t('Seek shade around midday, use sunscreen, a hat and sunglasses.'),
+      high: t('Stay in the shade between 11 am and 4 pm if you can. High-factor sunscreen, a hat, sunglasses.'),
+    },
+  },
   wildfire: {
     de: {
       low: t('Hinweise der örtlichen Feuerwehr beachten. Bei Rauch Fenster schließen.'),
@@ -140,18 +205,18 @@ export function recommendedAction(
   category: Category, severity: Severity, language: Language = 'de', hazard?: Hazard, country: CountryPack = packFor({ language }),
 ): string {
   const lib = hazard ? HAZARD[hazard][language] : (language === 'en' ? LIBRARY_EN : LIBRARY)[category];
-  const high = hazard === 'air' ? severity >= 2 : hazard ? severity >= 3 : severity >= 4;
+  const high = hazard === 'air' || hazard === 'pollen' || hazard === 'uv' || hazard === 'road_closure' ? severity >= 2 : hazard ? severity >= 3 : severity >= 4;
   return (high ? lib.high : lib.low)(country.numbers);
 }
 
 export const CATEGORY_LABEL_DE: Record<Category, string> = {
   weather: 'Wetter', crime: 'Polizei', transit: 'Verkehr', public_safety: 'Sicherheit',
-  health: 'Gesundheit', infrastructure: 'Infrastruktur', technology: 'Technik',
+  health: 'Gesundheit', infrastructure: 'Infrastruktur', technology: 'Technik', recall: 'Rückruf', pollen_uv: 'Pollen & UV', events: 'Veranstaltung',
 };
 
 export const CATEGORY_LABEL_EN: Record<Category, string> = {
   weather: 'Weather', crime: 'Police', transit: 'Transit', public_safety: 'Safety',
-  health: 'Health', infrastructure: 'Infrastructure', technology: 'Technology',
+  health: 'Health', infrastructure: 'Infrastructure', technology: 'Technology', recall: 'Recall', pollen_uv: 'Pollen & UV', events: 'Event',
 };
 
 /** Wording for update and all-clear alerts (PRD 5.4). Calm, no alarm words. */
