@@ -40,7 +40,7 @@ export function findCluster(ext: ExtractedEvent, item: SourceItem, active: RiskE
   // Recalls too: every recall sits on the same country centre, so two recalls on one day would merge.
   if (item.source === 'lebensmittelwarnung' || item.source === 'fda' || item.source === 'cpsc') return null;
   // Pollen and UV: one forecast per area, type and day, by id.
-  if (item.source === 'dwd-health') return null;
+  if (item.source === 'dwd-health' || item.source === 'epa-uv') return null;
   // Assemblies: each registered march is its own event, even two on the same square.
   if (item.source === 'berlin-versammlungen') return null;
   // Motorway closures: one event per closure, by id (two closures on one motorway are two).

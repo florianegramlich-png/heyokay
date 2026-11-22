@@ -22,6 +22,7 @@ import { fetchFdaRecalls, fetchCpscRecalls } from './sources/us-recalls.js';
 import { berlinDate, fetchPollenUv, pollenUvDue } from './sources/dwd-health.js';
 import { fetchAssemblies } from './sources/berlin-versammlungen.js';
 import { fetchAutobahn } from './sources/autobahn.js';
+import { californiaUvDue, fetchCaliforniaUv, localDate } from './sources/us-uv.js';
 import { fetchWildfires } from './sources/wildfire.js';
 import { fetchAir } from './sources/air.js';
 import { fetchSachet } from './sources/sachet.js';
@@ -87,6 +88,7 @@ let fdaLast = 0;
 let cpscLast = 0;
 // Pollen & UV: once a day, in the morning (Berlin date of the last successful read).
 let pollenUvDate: string | null = null;
+let caUvDate: string | null = null;
 // Berlin assemblies: the export is ~600 kB and changes a few times a day.
 const ASSEMBLIES_EVERY_MS = 60 * 60_000;
 let assembliesLast = 0;
@@ -204,6 +206,16 @@ const tasks: SourceTask[] = [
       if (Date.now() - assembliesLast < ASSEMBLIES_EVERY_MS) return { skipped: 'checked less than an hour ago' };
       const r = await ingest(await fetchAssemblies(seen('berlin-versammlungen'), undefined, { url: config.berlinVersammlungen!, geocoder }));
       assembliesLast = Date.now();
+      return r;
+    },
+  }] : []),
+  ...(config.epaUv ? [{
+    key: 'epa-uv:US',
+    run: async () => {
+      const now = new Date();
+      if (!californiaUvDue(now, caUvDate)) return { skipped: 'read once a day after 07:05 California time' };
+      const r = await ingest(await fetchCaliforniaUv(seen('epa-uv'), undefined, { url: config.epaUv!, now }));
+      caUvDate = localDate(now, 'America/Los_Angeles');
       return r;
     },
   }] : []),

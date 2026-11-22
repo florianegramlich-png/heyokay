@@ -50,6 +50,8 @@ export function describeSource(key: string): SourceInfo {
       return { key, name: 'Die Autobahn GmbH · Sperrungen', country: 'DE', official: true, category: 'transit', docs: 'https://autobahn.api.bund.dev/' };
     case 'berlin-versammlungen':
       return { key, name: 'Polizei Berlin · Versammlungen', country: 'DE', official: true, category: 'police', docs: 'https://www.berlin.de/polizei/service/versammlungsbehoerde/versammlungen-aufzuege/' };
+    case 'epa-uv':
+      return { key, name: 'US EPA · UV Index (California)', country: 'US', official: true, category: 'weather', docs: 'https://www.epa.gov/enviro/uv-index-overview' };
     case 'dwd-health':
       return { key, name: 'Deutscher Wetterdienst · Pollen & UV', country: 'DE', official: true, category: 'weather', docs: 'https://opendata.dwd.de/climate_environment/health/alerts/' };
     case 'fda':
