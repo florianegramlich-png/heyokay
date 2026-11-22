@@ -11,6 +11,7 @@ import { fetchAgency } from './sources/presseportal.js';
 import { fetchDwdSnapshot } from './sources/dwd.js';
 import { CELL_DEG, fetchHeat, owmFetcher } from './sources/heat.js';
 import { FEUERWEHR_BERLIN_AREA, fetchFeuerwehrBerlin } from './sources/feuerwehr-berlin.js';
+import { POLIZEI_BERLIN_AREA, fetchPolizeiBerlin } from './sources/polizei-berlin.js';
 import { fetchNwsArea, nwsFetcher } from './sources/nws.js';
 import { fetchStatusPage } from './sources/statuspage.js';
 import { fetchIpaws } from './sources/ipaws.js';
@@ -104,6 +105,10 @@ const tasks: SourceTask[] = [
   ...(config.feuerwehrBerlin ? [{
     key: 'feuerwehr-berlin',
     run: async () => ingest(await fetchFeuerwehrBerlin(seen('rss')), FEUERWEHR_BERLIN_AREA),
+  }] : []),
+  ...(config.polizeiBerlin ? [{
+    key: 'polizei-berlin',
+    run: async () => ingest(await fetchPolizeiBerlin(seen('rss')), POLIZEI_BERLIN_AREA),
   }] : []),
   ...(config.openWeatherApiKey ? [{
     key: 'owm:heat',

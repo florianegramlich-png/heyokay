@@ -42,6 +42,8 @@ export function describeSource(key: string): SourceInfo {
       return { key, name: `Presseportal · ${rest}`, country: 'DE', official: false, category: rest.startsWith('feuerwehr') ? 'fire' : 'police', docs: 'https://www.presseportal.de/blaulicht/' };
     case 'feuerwehr-berlin':
       return { key, name: 'Berliner Feuerwehr', country: 'DE', official: false, category: 'fire', docs: 'https://www.berliner-feuerwehr.de/service/rss-feeds/' };
+    case 'polizei-berlin':
+      return { key, name: 'Polizei Berlin', country: 'DE', official: false, category: 'police', docs: 'https://www.berlin.de/polizei/polizeimeldungen/' };
     case 'owm':
       return { key, name: rest === 'air' ? 'OpenWeatherMap · Luftqualität' : 'OpenWeatherMap · Hitze', country: '*', official: false, category: 'weather', docs: 'https://openweathermap.org/forecast5' };
     case 'nws':

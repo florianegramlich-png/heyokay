@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?><rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Aktuelle Polizeimeldungen</title>
+    <link>https://www.berlin.de/polizei/</link>
+    <description>Pressemeldungen der Polizei Berlin und Fahndungsaufrufe (Zeugen gesucht, Vermisste, Unbekannte Tote, Sachfahndung; Tötungsdelikte, Gesuchte Personen).</description>
+    <language>de</language>
+    <copyright>Polizei Berlin</copyright>
+    <pubDate>Fri, 16 Oct 2026 07:27:52 +0200</pubDate>
+    <image>
+      <url>https://www.berlin.de/imgscale4/sitelogo/polizei/_assets/polizeistern_gold_50x75px.png</url>
+      <title>Aktuelle Polizeimeldungen</title>
+            <link>https://www.berlin.de/polizei/</link>
+    </image>
+
+    <!-- Für View "Bo\Views\Flex\TextFlex" kein Link -->
+    <item>
+            <title>Nach Unfall Rettungskräfte angegriffen</title>
+            <description><![CDATA[]]></description>
+        <link>https://www.berlin.de/polizei/polizeimeldungen/2026/pressemitteilung.1742166.php</link>
+<guid>/polizei/polizeimeldungen/2026/pressemitteilung.1742166.php</guid>
+            <pubDate>Sat, 21 Nov 2026 16:36:00 +0100</pubDate>
+    </item>
+<item>
+            <title>Festnahme nach Taschendiebstahl</title>
+            <description><![CDATA[]]></description>
+        <link>https://www.berlin.de/polizei/polizeimeldungen/pressemitteilung.1742160.php</link>
+<guid>/polizei/polizeimeldungen/pressemitteilung.1742160.php</guid>
+            <pubDate>Sat, 21 Nov 2026 13:56:11 +0100</pubDate>
+    </item>
+<item>
+            <title>Raubüberfall auf Restaurant</title>
+            <description><![CDATA[]]></description>
+        <link>https://www.berlin.de/polizei/polizeimeldungen/pressemitteilung.1742154.php</link>
+<guid>/polizei/polizeimeldungen/pressemitteilung.1742154.php</guid>
+            <pubDate>Sat, 21 Nov 2026 11:54:15 +0100</pubDate>
+    </item>
+<item>
+            <title>Unbekannter Toter – die Polizei bittet um Ihre Mithilfe</title>
+            <description><![CDATA[]]></description>
+        <link>https://www.berlin.de/polizei/polizeimeldungen/2026/pressemitteilung.1741436.php</link>
+<guid>/polizei/polizeimeldungen/2026/pressemitteilung.1741436.php</guid>
+            <pubDate>Thu, 19 Nov 2026 14:22:00 +0100</pubDate>
+    </item>
+<item>
+            <title>Gemeinsame Präventionsaktion im ÖPNV im Advent 2026</title>
+            <description><![CDATA[]]></description>
+        <link>https://www.berlin.de/polizei/polizeimeldungen/2026/pressemitteilung.1741226.php</link>
+<guid>/polizei/polizeimeldungen/2026/pressemitteilung.1741226.php</guid>
+            <pubDate>Thu, 19 Nov 2026 10:03:41 +0100</pubDate>
+    </item>
+<item>
+            <title>Hochschwangere Frau und ihre beiden Kinder wieder da</title>
+            <description><![CDATA[]]></description>
+        <link>https://www.berlin.de/polizei/polizeimeldungen/2026/pressemitteilung.1738829.php</link>
+<guid>/polizei/polizeimeldungen/2026/pressemitteilung.1738829.php</guid>
+            <pubDate>Fri, 13 Nov 2026 10:54:00 +0100</pubDate>
+    </item>
+<item>
+            <title>Erstes Urteil gegen zwei Männer nach Schüssen in der Ebersstraße</title>
+            <description><![CDATA[]]></description>
+        <link>https://www.berlin.de/polizei/polizeimeldungen/2026/pressemitteilung.1655065.php</link>
+<guid>/polizei/polizeimeldungen/2026/pressemitteilung.1655065.php</guid>
+            <pubDate>Thu, 12 Nov 2026 16:29:00 +0100</pubDate>
+    </item>
+  </channel>
+</rss>

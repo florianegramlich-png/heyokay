@@ -47,6 +47,8 @@ export interface Config {
   rssFeeds: RssFeedConfig[];
   /** Berliner Feuerwehr incident reports (FEUERWEHR_BERLIN=off to disable). */
   feuerwehrBerlin: boolean;
+  /** Polizei Berlin press releases from berlin.de (POLIZEI_BERLIN=off to disable). */
+  polizeiBerlin: boolean;
   /** Email sign-in codes via Resend; both unset = email sign-in off. */
   resendApiKey: string | null;
   /** Sign in with Apple: accepted audiences (iOS bundle id, web Services ID); null = off. */
@@ -143,6 +145,7 @@ export function loadConfig(env = process.env): Config {
     googleClientIds: parseClientIds(env.GOOGLE_CLIENT_IDS),
     heatThresholdC: Number(env.HEAT_THRESHOLD_C ?? 32),
     feuerwehrBerlin: !/^(off|false|0|no)$/i.test(env.FEUERWEHR_BERLIN ?? 'on'),
+    polizeiBerlin: !/^(off|false|0|no)$/i.test(env.POLIZEI_BERLIN ?? 'on'),
     nwsAreas: (env.NWS_AREAS ?? '').split(';').flatMap((a) => (a.includes(',') && /\d/.test(a) ? [a] : a.split(','))).map((s) => s.trim()).filter(Boolean),
     nwsUserAgent: env.NWS_USER_AGENT ?? env.GEOCODER_USER_AGENT ?? 'HeyOkay/0.1 (set NWS_USER_AGENT to your contact)',
     pollIntervalSec: Number(env.POLL_INTERVAL_SEC ?? 120),
