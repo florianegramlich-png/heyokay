@@ -38,6 +38,7 @@ export const categoryColor: Record<Category, string> = {
   health: '#34D399',
   infrastructure: '#C4B5FD',
   technology: '#F0ABFC',
+  recall: '#BEF264',
 };
 
 // Severity labels and timeAgo live in lib/i18n.ts (German + English).

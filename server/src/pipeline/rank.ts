@@ -57,6 +57,8 @@ export function decide(user: User, event: RiskEvent, ctx: RankContext): { delive
   }
   // Risk outlook (PRD 6.1 #14): something that begins later goes to the feed under "Ahead";
   // a push comes with the actual warning, not the forecast.
+  // Product recalls are never a push (Flori, 2026-11-21): the feed and the daily summary.
+  if (event.category === 'recall') return { delivery: 'feed', reason: 'recall: feed only' };
   if (isAhead(event, ctx.now)) return { delivery: 'feed', reason: 'coming up' };
   if (event.severity <= 1) return { delivery: 'feed', reason: 'information only' };
 

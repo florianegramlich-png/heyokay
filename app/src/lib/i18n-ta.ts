@@ -173,6 +173,7 @@ export const TA_CATEGORY: Record<Category, { label: string; hint: string }> = {
   health: { label: 'உடல்நலம்', hint: 'குடிநீர், காற்றின் தரம்' },
   infrastructure: { label: 'பொதுச் சேவைகள்', hint: 'மின்சாரம், தண்ணீர், நெட்வொர்க் தடைகள்' },
   technology: { label: 'தொழில்நுட்பத் தடைகள்', hint: 'கார்டு பணம் செலுத்துதல், செயலிகள், இணையம் போன்ற சேவைகளின் தடைகள்' },
+  recall: { label: 'திரும்பப்பெறுதல்கள்', hint: 'திரும்பப்பெறப்பட்ட உணவு மற்றும் பொருட்கள், ஊட்டத்தில் மட்டும்' },
 };
 
 export const TA_SEVERITY: Record<Severity, string> = { 1: 'தகவல்', 2: 'சிறியது', 3: 'மிதமானது', 4: 'கடுமையானது', 5: 'மிகக் கடுமையானது' };

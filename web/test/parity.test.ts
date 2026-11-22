@@ -4,7 +4,7 @@ import { buildDashboard, statusFor } from '../lib/dashboard';
 import { followsService, toggleService } from '../lib/services';
 import { groupByDay } from '../lib/history';
 import { createApi } from '../lib/api';
-import { APP_STRINGS } from '../lib/app-strings';
+import { APP_STRINGS, CATEGORY } from '../lib/app-strings';
 import type { Alert } from '../lib/types';
 
 // Features the phone app has, now on the web too (2026-11-20): overview, service picker, history search.
@@ -33,6 +33,18 @@ test('overview: status from the highest current alert; tiles for followed topics
   assert.equal(d.next24.length, 1);
   assert.ok(Math.abs(d.next24[0].at - 8 / 24) < 1e-9);
   assert.deepEqual([null, 1, 2, 3, 5].map((s) => statusFor(s as never)), ['calm', 'info', 'info', 'watch', 'act']);
+});
+
+test('recalls: their own tile with a count, no level, and they never change the status', () => {
+  const now = Date.now();
+  const recall = alert({ category: 'recall', severity: 1, title: 'Rückruf: Wildsalami' });
+  const only = buildDashboard([recall], ['weather', 'recall'], now);
+  assert.equal(only.status, 'calm');
+  assert.equal(only.current, 0);
+  assert.deepEqual(only.tiles.map((t) => [t.category, t.count, t.highest]), [['weather', 0, null], ['recall', 1, null]]);
+  assert.equal(only.tiles[1].top?.title, 'Rückruf: Wildsalami');
+  assert.equal(buildDashboard([recall, alert({ severity: 2 })], ['weather'], now).status, 'info');
+  for (const lang of ['de', 'en', 'ta'] as const) assert.ok(CATEGORY[lang].recall.label.length > 0 && CATEGORY[lang].recall.hint.length > 0, lang);
 });
 
 test('service picker: from "all" the first tap means only that one; unpicking the last goes back to all', () => {

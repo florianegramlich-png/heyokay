@@ -17,6 +17,7 @@ import { fetchStatusPage } from './sources/statuspage.js';
 import { fetchIpaws } from './sources/ipaws.js';
 import { fetchQuakes } from './sources/usgs.js';
 import { fetchPegelonline } from './sources/pegelonline.js';
+import { fetchRecalls } from './sources/lebensmittelwarnung.js';
 import { fetchWildfires } from './sources/wildfire.js';
 import { fetchAir } from './sources/air.js';
 import { fetchSachet } from './sources/sachet.js';
@@ -73,6 +74,9 @@ const airChecked = new Map<string, number>();
 // Gauges report every 15 minutes; the full list is ~600 kB, so don't fetch it more often.
 const PEGEL_EVERY_MS = 15 * 60_000;
 let pegelLast = 0;
+// Recalls: a few a day; the feed is ~450 kB.
+const RECALLS_EVERY_MS = 30 * 60_000;
+let recallsLast = 0;
 const FIRES_EVERY_MS = 5 * 60_000;
 let firesLast = 0;
 
@@ -138,6 +142,15 @@ const tasks: SourceTask[] = [
       // Levels that fell back to normal get an all-clear.
       const r = await ingestAndReconcile(await fetchPegelonline(seen('pegelonline'), undefined, { url: config.pegelonline! }));
       pegelLast = Date.now();
+      return r;
+    },
+  }] : []),
+  ...(config.lebensmittelwarnung ? [{
+    key: 'lebensmittelwarnung:DE',
+    run: async () => {
+      if (Date.now() - recallsLast < RECALLS_EVERY_MS) return { skipped: 'checked less than 30 minutes ago' };
+      const r = await ingest(await fetchRecalls(seen('lebensmittelwarnung'), undefined, { url: config.lebensmittelwarnung! }));
+      recallsLast = Date.now();
       return r;
     },
   }] : []),

@@ -11,7 +11,7 @@ import { cn } from '@/lib/utils';
 export const SEVERITY_HEX: Record<Severity, string> = { 1: '#94A3B8', 2: '#22D3EE', 3: '#FBBF24', 4: '#FB923C', 5: '#F87171' };
 const CATEGORY_HEX: Record<Category, string> = {
   weather: '#38BDF8', crime: '#A5B4FC', transit: '#22D3EE', public_safety: '#FDBA74',
-  health: '#34D399', infrastructure: '#C4B5FD', technology: '#F0ABFC',
+  health: '#34D399', infrastructure: '#C4B5FD', technology: '#F0ABFC', recall: '#BEF264',
 };
 const CYAN = '#22D3EE';
 const statusColor = (status: Status, highest: Severity | null) => (status === 'calm' ? CYAN : SEVERITY_HEX[highest ?? 1]);

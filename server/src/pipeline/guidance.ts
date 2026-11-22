@@ -35,6 +35,10 @@ const LIBRARY: Record<Category, Advice> = {
     low: t('Mit Störungen bei diesem Dienst rechnen. Später erneut versuchen.'),
     high: t('Eine Alternative bereithalten, z. B. Bargeld oder eine andere App. Statusseite des Anbieters beachten.'),
   },
+  recall: {
+    low: t('Produkt nicht verwenden. Im Geschäft zurückgeben, der Kaufpreis wird in der Regel erstattet.'),
+    high: t('Produkt nicht verwenden. Im Geschäft zurückgeben. Bei Beschwerden ärztlichen Rat einholen.'),
+  },
   infrastructure: {
     low: t('Mit Einschränkungen rechnen.'),
     high: (n) => `Bereich meiden. Bei Gasgeruch Gebäude verlassen und ${n.emergency} anrufen.`,
@@ -65,6 +69,10 @@ const LIBRARY_EN: Record<Category, Advice> = {
   technology: {
     low: t('Expect problems with this service. Try again later.'),
     high: t('Have a backup ready, such as cash or another app. Check the provider\'s status page.'),
+  },
+  recall: {
+    low: t('Don\'t use the product. Return it to the shop; you usually get your money back.'),
+    high: t('Don\'t use the product. Return it to the shop. If you feel unwell, get medical advice.'),
   },
   infrastructure: {
     low: t('Expect disruptions.'),
@@ -114,6 +122,7 @@ const HAZARD: Record<Hazard, Record<Language, Advice>> = {
       high: (n) => `Keep away from riverbanks, stay out of basements and underground car parks, follow official advice. Emergency: ${n.emergency}.`,
     },
   },
+  recall: { de: LIBRARY.recall, en: LIBRARY_EN.recall },
   wildfire: {
     de: {
       low: t('Hinweise der örtlichen Feuerwehr beachten. Bei Rauch Fenster schließen.'),
@@ -146,12 +155,12 @@ export function recommendedAction(
 
 export const CATEGORY_LABEL_DE: Record<Category, string> = {
   weather: 'Wetter', crime: 'Polizei', transit: 'Verkehr', public_safety: 'Sicherheit',
-  health: 'Gesundheit', infrastructure: 'Infrastruktur', technology: 'Technik',
+  health: 'Gesundheit', infrastructure: 'Infrastruktur', technology: 'Technik', recall: 'Rückruf',
 };
 
 export const CATEGORY_LABEL_EN: Record<Category, string> = {
   weather: 'Weather', crime: 'Police', transit: 'Transit', public_safety: 'Safety',
-  health: 'Health', infrastructure: 'Infrastructure', technology: 'Technology',
+  health: 'Health', infrastructure: 'Infrastructure', technology: 'Technology', recall: 'Recall',
 };
 
 /** Wording for update and all-clear alerts (PRD 5.4). Calm, no alarm words. */

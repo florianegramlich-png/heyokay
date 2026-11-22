@@ -17,7 +17,7 @@ export interface SourceInfo {
   /** '*' = follows people's places (any country), e.g. heat forecasts. */
   country: CountryCode | '*';
   official: boolean;
-  category: 'warnings' | 'weather' | 'police' | 'fire' | 'transit' | 'technology' | 'news' | 'system';
+  category: 'warnings' | 'weather' | 'police' | 'fire' | 'transit' | 'technology' | 'recall' | 'news' | 'system';
   /** Key (prefix) of the source that covers this one's area when it fails. */
   fallback?: string;
   /** Where its terms and format are documented. */
@@ -44,6 +44,8 @@ export function describeSource(key: string): SourceInfo {
       return { key, name: 'Berliner Feuerwehr', country: 'DE', official: false, category: 'fire', docs: 'https://www.berliner-feuerwehr.de/service/rss-feeds/' };
     case 'polizei-berlin':
       return { key, name: 'Polizei Berlin', country: 'DE', official: false, category: 'police', docs: 'https://www.berlin.de/polizei/polizeimeldungen/' };
+    case 'lebensmittelwarnung':
+      return { key, name: 'lebensmittelwarnung.de · Rückrufe', country: 'DE', official: true, category: 'recall', docs: 'https://www.lebensmittelwarnung.de/___LMW-Redaktion/RSSNewsfeed/rssnewsfeed_node.html' };
     case 'owm':
       return { key, name: rest === 'air' ? 'OpenWeatherMap · Luftqualität' : 'OpenWeatherMap · Hitze', country: '*', official: false, category: 'weather', docs: 'https://openweathermap.org/forecast5' };
     case 'nws':

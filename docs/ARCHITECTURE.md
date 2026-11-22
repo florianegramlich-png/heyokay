@@ -2,7 +2,7 @@
 
 Living document. The build agent updates it whenever a component, source, integration or setting changes (see `AGENT.md`). A copy lives in the Claude project "Hey Okey" (`claude/architecture.md`).
 
-Last updated: 2026-11-22 (Polizei Berlin press releases; city police for 26 cities on Presseportal; AI provider failover: Mistral / OpenAI-compatible; Sign in with Apple / Google on the server; web app catches up with the phone app; tech outages per service, more services + incident.io; alert history search; daily summary; US wildfires; river gauges/floods; earthquakes, air quality; AI cost guard, insights consent, language dropdown; India pack + SACHET, FEMA IPAWS; technology outages US; scaling plan; worker roles; country packs; Supabase; delivery queue; source registry; observability; staging + EAS Update).
+Last updated: 2026-11-22 (product recalls: new topic, lebensmittelwarnung.de, Länder outlines; Polizei Berlin press releases; city police for 26 cities on Presseportal; AI provider failover: Mistral / OpenAI-compatible; Sign in with Apple / Google on the server; web app catches up with the phone app; tech outages per service, more services + incident.io; alert history search; daily summary; US wildfires; river gauges/floods; earthquakes, air quality; AI cost guard, insights consent, language dropdown; India pack + SACHET, FEMA IPAWS; technology outages US; scaling plan; worker roles; country packs; Supabase; delivery queue; source registry; observability; staging + EAS Update).
 
 ## 1. System overview
 
@@ -81,6 +81,7 @@ Health: `GET /health` (per-source status, no error texts). CORS: any origin, bea
 | NWS (US) | Active alerts per state/point | `sources/nws.ts` | Public, User-Agent required | `NWS_AREAS=CA` (US test mode) | Zone shapes cached |
 | Presseportal Blaulicht | Police/fire press releases, 33 agencies: city police in 26 of the largest cities (HH, K, F, S, D, DO, E, HB, H, Nürnberg/Mittelfranken, DU, BO, W, BI, BN, MS, MA, KA, WI, GE, AC, MG, KI, BS, KR, OB), fire brigades HH/K/M, Bundespolizei B/M/HH | `sources/presseportal.ts` | Public RSS + article pages | On (`PRESSEPORTAL_AGENCIES`) | Missing-person searches and public manhunts dropped |
 | Berliner Feuerwehr | Incident reports (`einsaetze.xml`) | `sources/feuerwehr-berlin.ts` | Public RSS | On (`FEUERWEHR_BERLIN`) | Street + district as place |
+| lebensmittelwarnung.de (Länder + BVL) | Product and food recalls, topic `recall` (feed only) | `sources/lebensmittelwarnung.ts`, `data/de-states.ts` | Public RSS, every 30 min | On (`LEBENSMITTELWARNUNG_URL`, `off`) | Matched by the Länder named (coarse outlines; Berlin inside Brandenburg's) |
 | Polizei Berlin | Press releases (berlin.de RSS, titles only; each new release page fetched once for district + text) | `sources/polizei-berlin.ts` | Public RSS + release pages | On (`POLIZEI_BERLIN`) | Missing persons, unidentified dead, verdicts, prevention dropped |
 | Generic RSS/Atom | e.g. Polizei Berlin (berlin.de) | `sources/rss.ts` | Public | `RSS_FEEDS` (JSON) | |
 | Manual (Alert Desk) | Curated alerts | `pipeline/run.ts` | Admin token | — | Concierge pilot |
@@ -135,6 +136,7 @@ Health: `GET /health` (per-source status, no error texts). CORS: any origin, bea
 | `PRESSEPORTAL_AGENCIES` | all | `all` / `off` / agency keys |
 | `FEUERWEHR_BERLIN` | on | `off` to disable |
 | `POLIZEI_BERLIN` | on | Polizei Berlin press releases; `off` to disable |
+| `LEBENSMITTELWARNUNG_URL` | lebensmittelwarnung.de feed | Product and food recalls (Germany); `off` to disable |
 | `RSS_FEEDS` | [] | JSON list of feeds |
 | `RESEND_API_KEY`, `MAIL_FROM` | – | Email sign-in codes (off without both) |
 | `APPLE_CLIENT_IDS` | – | Sign in with Apple: accepted audiences, comma-separated (iOS bundle id, web Services ID); off when unset |

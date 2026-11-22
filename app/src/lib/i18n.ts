@@ -368,6 +368,7 @@ const CATEGORY: Record<Lang, Record<Category, { label: string; hint: string }>> 
     health: { label: 'Gesundheit', hint: 'Trinkwasser, Luftqualität' },
     infrastructure: { label: 'Infrastruktur', hint: 'Strom-, Wasser- und Netzausfälle' },
     technology: { label: 'Technik', hint: 'Ausfälle von Diensten wie Kartenzahlung, Apps und Internet' },
+    recall: { label: 'Rückrufe', hint: 'Zurückgerufene Lebensmittel und Produkte, nur im Feed' },
   },
   en: {
     weather: { label: 'Severe weather', hint: 'Storms, wind, heat, floods' },
@@ -377,6 +378,7 @@ const CATEGORY: Record<Lang, Record<Category, { label: string; hint: string }>> 
     health: { label: 'Health', hint: 'Drinking water, air quality' },
     infrastructure: { label: 'Utilities', hint: 'Power, water and network outages' },
     technology: { label: 'Tech outages', hint: 'Outages of services like card payments, apps and the internet' },
+    recall: { label: 'Recalls', hint: 'Food and products being recalled, in the feed only' },
   },
   ta: TA_CATEGORY,
 };

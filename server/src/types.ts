@@ -1,16 +1,16 @@
 import type { CountryCode } from './countries.js';
 // Shared domain types. app/src/lib/types.ts mirrors the client-facing parts — keep them in sync.
 
-export const CATEGORIES = ['weather', 'crime', 'transit', 'public_safety', 'health', 'infrastructure', 'technology'] as const;
+export const CATEGORIES = ['weather', 'crime', 'transit', 'public_safety', 'health', 'infrastructure', 'technology', 'recall'] as const;
 /** Categories added after launch that are on for everyone who hasn't seen them yet (see normalizePrefs). */
-export const NEW_DEFAULT_ON: Category[] = ['technology'];
+export const NEW_DEFAULT_ON: Category[] = ['technology', 'recall'];
 const ORIGINAL_CATEGORIES: Category[] = ['weather', 'crime', 'transit', 'public_safety', 'health', 'infrastructure'];
 export type Category = (typeof CATEGORIES)[number];
 
 /** 1 = info, 2 = minor, 3 = moderate, 4 = severe, 5 = extreme. Same meaning across all sources. */
 export type Severity = 1 | 2 | 3 | 4 | 5;
 
-export type SourceKind = 'nina' | 'dwd' | 'nws' | 'rss' | 'presseportal' | 'owm' | 'statuspage' | 'ipaws' | 'sachet' | 'usgs' | 'pegelonline' | 'wfigs' | 'manual';
+export type SourceKind = 'nina' | 'dwd' | 'nws' | 'rss' | 'presseportal' | 'owm' | 'statuspage' | 'ipaws' | 'sachet' | 'usgs' | 'pegelonline' | 'wfigs' | 'lebensmittelwarnung' | 'manual';
 
 export type Language = 'de' | 'en';
 /**
@@ -22,7 +22,7 @@ export type UiLanguage = Language | 'ta';
 export const UI_LANGUAGES = ['de', 'en', 'ta'] as const satisfies readonly UiLanguage[];
 export const contentLanguage = (l: UiLanguage | null | undefined): Language => (l === 'de' ? 'de' : 'en');
 
-export type Hazard = 'heat' | 'outage' | 'earthquake' | 'air' | 'flood' | 'wildfire';
+export type Hazard = 'heat' | 'outage' | 'earthquake' | 'air' | 'flood' | 'wildfire' | 'recall';
 
 /** A raw item as it arrives from a source, before the AI pipeline touches it. */
 export interface SourceItem {
@@ -178,7 +178,7 @@ export interface UserPrefs {
 }
 
 export const DEFAULT_PREFS: UserPrefs = {
-  categories: ['weather', 'crime', 'transit', 'public_safety', 'technology'],
+  categories: ['weather', 'crime', 'transit', 'public_safety', 'technology', 'recall'],
   quietHours: { start: '22:00', end: '07:00' },
   dailyLimit: 3,
   timezone: 'Europe/Berlin',
