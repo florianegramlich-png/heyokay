@@ -31,7 +31,7 @@ export const DESK_HTML = `<!doctype html>
   <section><h2>Active events</h2><p class="muted">Released events that haven't ended. "End now" sends an all-clear to everyone who got the alert.</p><div id="active"></div></section>
   <section><h2>Send a curated alert (concierge pilot)</h2>
     <form id="manual" onsubmit="sendManual(event)">
-      <div><label>Category</label><select name="category"><option>transit</option><option>crime</option><option>public_safety</option><option>weather</option><option>health</option><option>infrastructure</option><option>recall</option></select></div>
+      <div><label>Category</label><select name="category"><option>transit</option><option>crime</option><option>public_safety</option><option>weather</option><option>health</option><option>infrastructure</option><option>recall</option><option>events</option></select></div>
       <div><label>Severity 1–5</label><input name="severity" type="number" min="1" max="5" value="3"></div>
       <div><label>Title (≤50) <span class="count" id="tc"></span></label><input name="title" maxlength="50" oninput="tc.textContent=this.value.length" required></div>
       <div><label>Body (≤100) <span class="count" id="bc"></span></label><input name="body" maxlength="100" oninput="bc.textContent=this.value.length" required></div>

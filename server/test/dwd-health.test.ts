@@ -113,7 +113,7 @@ describe('DWD pollen and UV forecasts', () => {
   it('opt-in, only the picked types, "hoch" pushes once and only in the morning', () => {
     expect(CATEGORIES).toContain('pollen_uv');
     expect(DEFAULT_PREFS.categories).not.toContain('pollen_uv');
-    expect(normalizePrefs({ categories: ['weather'], knownCategories: ['weather', 'crime', 'transit', 'public_safety', 'health', 'infrastructure', 'technology', 'recall'] }).categories).toEqual(['weather']);
+    expect(normalizePrefs({ categories: ['weather'], knownCategories: ['weather', 'crime', 'transit', 'public_safety', 'health', 'infrastructure', 'technology', 'recall'] }).categories).toEqual(['weather', 'events']); // events (added later) yes, pollen_uv no
     expect(normalizePrefs({}).categories).not.toContain('pollen_uv');
     const base = { id: 'u', tokenHash: '', pushToken: 'x', lat: null, lon: null, locationUpdatedAt: null, createdAt: '' };
     const user = (pollenUv?: string[] | null, on = true) => ({ ...base, prefs: { ...normalizePrefs({ categories: on ? ['weather', 'pollen_uv'] : ['weather'] }), pollenUv } });

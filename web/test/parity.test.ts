@@ -109,3 +109,12 @@ test('pollen & UV: opt-in topic with its own tile and no status, the same keys a
     assert.ok(CATEGORY[lang].pollen_uv.label.length > 0 && CATEGORY[lang].pollen_uv.hint.length > 0, lang);
   }
 });
+
+test('events & demos: on by default, labels in every language', async () => {
+  const { DEFAULT_PREFS, CATEGORIES } = await import('../lib/types');
+  assert.ok(CATEGORIES.includes('events') && DEFAULT_PREFS.categories.includes('events'));
+  for (const lang of ['de', 'en', 'ta'] as const) assert.ok(CATEGORY[lang].events.label.length > 0 && CATEGORY[lang].events.hint.length > 0, lang);
+  const d = buildDashboard([alert({ category: 'events', severity: 1, title: 'Demo ab Savignyplatz, 17:30–19:00' })], ['events'], Date.now());
+  assert.equal(d.tiles[0].category, 'events');
+  assert.equal(d.tiles[0].count, 1);
+});

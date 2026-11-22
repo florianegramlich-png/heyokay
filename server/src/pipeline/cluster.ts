@@ -41,6 +41,8 @@ export function findCluster(ext: ExtractedEvent, item: SourceItem, active: RiskE
   if (item.source === 'lebensmittelwarnung' || item.source === 'fda' || item.source === 'cpsc') return null;
   // Pollen and UV: one forecast per area, type and day, by id.
   if (item.source === 'dwd-health') return null;
+  // Assemblies: each registered march is its own event, even two on the same square.
+  if (item.source === 'berlin-versammlungen') return null;
   if (item.source === 'nws' || item.source === 'statuspage' || item.source === 'ipaws' || item.source === 'sachet' || item.source === 'usgs' || item.source === 'pegelonline' || item.source === 'wfigs') return null;
   let best: { e: RiskEvent; score: number } | null = null;
   for (const e of active) {

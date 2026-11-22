@@ -20,6 +20,7 @@ import { fetchPegelonline } from './sources/pegelonline.js';
 import { fetchRecalls } from './sources/lebensmittelwarnung.js';
 import { fetchFdaRecalls, fetchCpscRecalls } from './sources/us-recalls.js';
 import { berlinDate, fetchPollenUv, pollenUvDue } from './sources/dwd-health.js';
+import { fetchAssemblies } from './sources/berlin-versammlungen.js';
 import { fetchWildfires } from './sources/wildfire.js';
 import { fetchAir } from './sources/air.js';
 import { fetchSachet } from './sources/sachet.js';
@@ -85,6 +86,9 @@ let fdaLast = 0;
 let cpscLast = 0;
 // Pollen & UV: once a day, in the morning (Berlin date of the last successful read).
 let pollenUvDate: string | null = null;
+// Berlin assemblies: the export is ~600 kB and changes a few times a day.
+const ASSEMBLIES_EVERY_MS = 60 * 60_000;
+let assembliesLast = 0;
 const FIRES_EVERY_MS = 5 * 60_000;
 let firesLast = 0;
 
@@ -177,6 +181,15 @@ const tasks: SourceTask[] = [
       if (Date.now() - cpscLast < US_RECALLS_EVERY_MS) return { skipped: 'checked less than 6 hours ago' };
       const r = await ingest(await fetchCpscRecalls(seen('cpsc'), undefined, { url: config.cpscRecalls! }));
       cpscLast = Date.now();
+      return r;
+    },
+  }] : []),
+  ...(config.berlinVersammlungen ? [{
+    key: 'berlin-versammlungen:DE',
+    run: async () => {
+      if (Date.now() - assembliesLast < ASSEMBLIES_EVERY_MS) return { skipped: 'checked less than an hour ago' };
+      const r = await ingest(await fetchAssemblies(seen('berlin-versammlungen'), undefined, { url: config.berlinVersammlungen!, geocoder }));
+      assembliesLast = Date.now();
       return r;
     },
   }] : []),

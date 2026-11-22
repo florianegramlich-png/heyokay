@@ -1,6 +1,6 @@
 // Client-facing mirror of server/src/types.ts (same as app/src/lib/types.ts) — keep in sync.
 
-export const CATEGORIES = ['weather', 'crime', 'transit', 'public_safety', 'health', 'infrastructure', 'technology', 'recall', 'pollen_uv'] as const;
+export const CATEGORIES = ['weather', 'crime', 'transit', 'public_safety', 'health', 'infrastructure', 'technology', 'recall', 'pollen_uv', 'events'] as const;
 export type Category = (typeof CATEGORIES)[number];
 export type Severity = 1 | 2 | 3 | 4 | 5;
 export type Delivery = 'push' | 'feed' | 'suppressed';
@@ -28,7 +28,7 @@ export interface UserPrefs {
 }
 
 export const DEFAULT_PREFS: UserPrefs = {
-  categories: ['weather', 'crime', 'transit', 'public_safety', 'technology', 'recall'],
+  categories: ['weather', 'crime', 'transit', 'public_safety', 'technology', 'recall', 'events'],
   quietHours: { start: '22:00', end: '07:00' },
   dailyLimit: 3,
   timezone: 'Europe/Berlin',

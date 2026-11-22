@@ -35,6 +35,10 @@ const LIBRARY: Record<Category, Advice> = {
     low: t('Mit Störungen bei diesem Dienst rechnen. Später erneut versuchen.'),
     high: t('Eine Alternative bereithalten, z. B. Bargeld oder eine andere App. Statusseite des Anbieters beachten.'),
   },
+  events: {
+    low: t('Mehr Zeit einplanen, den Bereich nach Möglichkeit umfahren.'),
+    high: t('Bereich meiden und Hinweise der Polizei beachten.'),
+  },
   pollen_uv: {
     low: t('Bei Beschwerden Aufenthalt im Freien planen und Medikamente bereithalten.'),
     high: t('Aufenthalt im Freien kurz halten, Medikamente bereithalten, Sonnenschutz nutzen.'),
@@ -73,6 +77,10 @@ const LIBRARY_EN: Record<Category, Advice> = {
   technology: {
     low: t('Expect problems with this service. Try again later.'),
     high: t('Have a backup ready, such as cash or another app. Check the provider\'s status page.'),
+  },
+  events: {
+    low: t('Allow extra time and go around the area if you can.'),
+    high: t('Avoid the area and follow police instructions.'),
   },
   pollen_uv: {
     low: t('If you are sensitive, plan time outdoors and keep your medication at hand.'),
@@ -131,6 +139,16 @@ const HAZARD: Record<Hazard, Record<Language, Advice>> = {
     },
   },
   recall: { de: LIBRARY.recall, en: LIBRARY_EN.recall },
+  assembly: {
+    de: {
+      low: t('Umwege einplanen: Straßen entlang der Strecke können zeitweise gesperrt sein. Busse und Bahnen können umgeleitet werden.'),
+      high: t('Bereich meiden und Hinweise der Polizei beachten.'),
+    },
+    en: {
+      low: t('Plan a detour: streets along the route may be closed for a while. Buses and trams may be diverted.'),
+      high: t('Avoid the area and follow police instructions.'),
+    },
+  },
   pollen: {
     de: {
       low: t('Bei Allergie: Medikamente bereithalten, Lüften am besten am frühen Morgen.'),
@@ -183,12 +201,12 @@ export function recommendedAction(
 
 export const CATEGORY_LABEL_DE: Record<Category, string> = {
   weather: 'Wetter', crime: 'Polizei', transit: 'Verkehr', public_safety: 'Sicherheit',
-  health: 'Gesundheit', infrastructure: 'Infrastruktur', technology: 'Technik', recall: 'Rückruf', pollen_uv: 'Pollen & UV',
+  health: 'Gesundheit', infrastructure: 'Infrastruktur', technology: 'Technik', recall: 'Rückruf', pollen_uv: 'Pollen & UV', events: 'Veranstaltung',
 };
 
 export const CATEGORY_LABEL_EN: Record<Category, string> = {
   weather: 'Weather', crime: 'Police', transit: 'Transit', public_safety: 'Safety',
-  health: 'Health', infrastructure: 'Infrastructure', technology: 'Technology', recall: 'Recall', pollen_uv: 'Pollen & UV',
+  health: 'Health', infrastructure: 'Infrastructure', technology: 'Technology', recall: 'Recall', pollen_uv: 'Pollen & UV', events: 'Event',
 };
 
 /** Wording for update and all-clear alerts (PRD 5.4). Calm, no alarm words. */

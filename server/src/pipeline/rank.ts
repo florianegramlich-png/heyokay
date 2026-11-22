@@ -64,6 +64,8 @@ export function decide(user: User, event: RiskEvent, ctx: RankContext): { delive
   // a push comes with the actual warning, not the forecast.
   // Product recalls are never a push (Flori, 2026-11-21): the feed and the daily summary.
   if (event.category === 'recall') return { delivery: 'feed', reason: 'recall: feed only' };
+  // Demonstrations and events: something to plan around, not a warning (Flori, 2026-11-21: feed by default).
+  if (event.category === 'events') return { delivery: 'feed', reason: 'events: feed only' };
   // Pollen & UV (opt-in): only the types the person picked; "hoch" may push once, in the morning.
   if (event.category === 'pollen_uv') {
     if (event.pollenUv && prefs.pollenUv && !prefs.pollenUv.includes(event.pollenUv)) return { delivery: 'suppressed', reason: 'pollen type not followed' };

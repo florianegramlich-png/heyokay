@@ -96,7 +96,7 @@ describe('lebensmittelwarnung.de recalls', () => {
     expect(decide(user, { category: 'recall', severity: 5, official: true } as any, ctx).delivery).toBe('push'); // official extreme warnings still break through
     expect(CATEGORIES).toContain('recall');
     expect(DEFAULT_PREFS.categories).toContain('recall');
-    expect(normalizePrefs({ categories: ['weather'], knownCategories: ['weather', 'crime', 'transit', 'public_safety', 'health', 'infrastructure', 'technology'] }).categories).toEqual(['weather', 'recall']);
+    expect(normalizePrefs({ categories: ['weather'], knownCategories: ['weather', 'crime', 'transit', 'public_safety', 'health', 'infrastructure', 'technology'] }).categories).toEqual(['weather', 'recall', 'events']);
     expect(recommendedAction('recall', 1, 'de', 'recall')).toMatch(/^Produkt nicht verwenden\. Im Geschäft zurückgeben/);
     expect(recommendedAction('recall', 1, 'en', 'recall')).toMatch(/^Don't use the product/);
     expect(describeSource('lebensmittelwarnung:DE')).toMatchObject({ country: 'DE', official: true, category: 'recall' });
