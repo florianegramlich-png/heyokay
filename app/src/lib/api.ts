@@ -44,6 +44,8 @@ export const api = {
   sendLocation: (lat: number, lon: number, firstSync = false) =>
     request<{ ok: true; newAlerts: number }>('POST', '/v1/me/location', { lat, lon, firstSync }),
   places: () => request<{ places: SavedPlace[] }>('GET', '/v1/me/places'),
+  /** Active events nearby, for OS geofences (server: GET /v1/me/regions). */
+  regions: () => request<{ regions: { id: string; lat: number; lon: number; radiusM: number }[] }>('GET', '/v1/me/regions'),
   addPlace: (label: string, lat: number, lon: number, radiusM = 500) =>
     request<{ place: SavedPlace }>('POST', '/v1/me/places', { label, lat, lon, radiusM }),
   deletePlace: (id: string) => request<{ ok: true }>('DELETE', `/v1/me/places/${id}`),

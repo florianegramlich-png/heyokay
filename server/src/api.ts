@@ -7,7 +7,7 @@ import type { Pipeline } from './pipeline/run.js';
 import { CATEGORIES, DEFAULT_PREFS, UI_LANGUAGES, contentLanguage, stampConsent, type User } from './types.js';
 import { DESK_HTML } from './desk.js';
 import { sourceReport } from './sources/registry.js';
-import { MAX_PLACE_RADIUS_M } from './geo.js';
+import { MAX_PLACE_RADIUS_M, distanceM } from './geo.js';
 import { AuthError, checkEmailCode, signIn, signInWithIdentity, signOut, startEmailSignIn, type Mailer } from './auth.js';
 import { IdentityError, nonceMatches, type IdentityVerifier } from './identity.js';
 import type { IdentityProvider } from './store.js';
@@ -55,6 +55,11 @@ export interface ApiDeps {
   /** Where unexpected errors are logged (default: JSON lines on stderr). */
   errorSink?: ErrorSink;
 }
+
+const REGION_MAX_RADIUS_M = 30_000;
+const REGION_NEAR_M = 50_000;
+/** iOS watches at most 20 regions: one home area, up to 15 events, the rest for saved places. */
+const REGION_MAX = 15;
 
 export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus, roleStatus, pollIntervalSec = 120, aiBudgetEur = 0, mailer = null, identity = {}, statusPages = US_STATUS_PAGES, errorSink = defaultSink, now: clock = () => new Date() }: ApiDeps) {
   const app = Fastify({ logger: false });
@@ -223,6 +228,28 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
       const { user, token } = await signOut(store, bearer(req), u);
       return { userId: user.id, token, prefs: user.prefs };
     } catch (err) { return authError(reply, err); }
+  });
+
+  /**
+   * OS geofencing hint (PRD 5.3, 11): circles of active, approved events near the person's last
+   * location, so the phone can wake up when it enters one and send its location at once.
+   * Only local events (radius ≤ 30 km, within 50 km) in topics the person follows, closest first.
+   * No exact outlines and nothing about other people.
+   */
+  app.get('/v1/me/regions', async (req, reply) => {
+    const u = await authed(req, reply); if (!u) return;
+    if (u.lat == null || u.lon == null) return { regions: [] };
+    const now = clock();
+    const regions = (await store.activeEvents(now))
+      .filter((e) => e.status !== 'pending_review' && e.status !== 'rejected')
+      .filter((e) => !e.endsAt || Date.parse(e.endsAt) > now.getTime())
+      .filter((e) => u.prefs.categories.includes(e.category) && e.radiusM <= REGION_MAX_RADIUS_M)
+      .map((e) => ({ id: e.id, lat: e.lat, lon: e.lon, radiusM: Math.max(200, Math.round(e.radiusM)), d: distanceM(u.lat!, u.lon!, e.lat, e.lon) }))
+      .filter((r) => r.d - r.radiusM <= REGION_NEAR_M)
+      .sort((a, b) => a.d - b.d)
+      .slice(0, REGION_MAX)
+      .map(({ d: _d, ...r }) => r);
+    return { regions };
   });
 
   // ── alerts ───────────────────────────────────────────────────────────────

@@ -12,6 +12,18 @@
 
 ## 2026-11-22
 
+- **OS geofencing in the phone app** (roadmap "OS geofencing") [PRD 5.3, 11].
+  - What it does: besides the continuous location updates, the phone now asks the system to watch a few regions, which works even when iOS has paused the app (iOS restarts it for a region event):
+    - the **home area**, 1 km around the last position: leaving it sends the new position and re-centres the area;
+    - up to **15 active events nearby**: walking into one sends the position at once, so the alert comes without waiting for the next update;
+    - **saved places**: arriving at one sends the position.
+    At most 20 regions in all (Apple's limit). Positions still go out rounded to ~100 m; the server still keeps only the latest one. People see nothing new; alerts just arrive sooner when they move.
+  - Server: new `GET /v1/me/regions` (own token): circles of approved, running events within 50 km of the person's last location, radius at most 30 km (bigger areas like recalls or nationwide outages need no geofence), only topics they follow, closest first, at least 200 m so the phone notices them. No outlines, nothing about other people.
+  - Phone app: `app/src/lib/geofence.ts` (plan, compare, react; pure) and a new background task in `app/src/lib/location.ts`; regions are re-planned after each sync while the app is open and after each region event. Only with "always" location access. Stopped with the other location updates in Settings. Continuous updates stay exactly as before for now: relaxing them waits for the battery test on a real phone.
+  - Web: not possible in a browser (no background location), as `AGENT.md` allows.
+  - App tests: the phone app now has its first tests (`app/test/geofence.test.ts`, run by Node 22 directly, `npm test`; added to CI and to the checks in `AGENT.md`). The app's `tsconfig.json` allows `.ts` import paths for that (type checking only, no build change).
+  - Tests: `server/test/regions.test.ts` (2 new per backend: which events, order, limit), `app/test/geofence.test.ts` (4 new: plan order and limits, reactions, unchanged plans). Server 370/370 on SQLite + Postgres, app 4/4, web 23/23, typechecks clean, iOS bundle builds. Uses no new package (`expo-location` and `expo-task-manager` were there), so it ships with `npm run update:production`; geofences need the "always" permission people already gave for background location.
+  - For Flori (under "Needs a human"): on a real iPhone, leave the 1 km area with the app closed and check that the position reaches the server (Alert Desk → the person's last update), then the battery test.
 - **Sign in with Apple and Google: the buttons** (roadmap "Sign-in: Apple + Google, part 2", split: 2a done, Google on the phone next) [PRD 5.3].
   - What people see: in Settings → Account, above the email form, "Sign in with Apple" on iPhone (Apple's own button), and "Sign in with Apple" and "Sign in with Google" in the web app (Apple's and Google's own buttons). One tap, and places and settings come back as with the email code. If someone hides their email from Apple, the account uses Apple's relay address. Calm messages when no confirmed email comes back, when the email already belongs to an account with another sign-in, or when the sign-in can't be confirmed. Closing the sheet says nothing. German, English, Tamil.
   - Hidden until set up: a button shows only when the server has that provider switched on (new public `GET /v1/auth/providers`) and, on the web, the site has its id (`NEXT_PUBLIC_APPLE_SERVICE_ID`, `NEXT_PUBLIC_GOOGLE_CLIENT_ID`). Today none is set, so nothing changes for anyone yet.

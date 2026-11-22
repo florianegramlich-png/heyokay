@@ -66,6 +66,8 @@ jobs:
           cache-dependency-path: app/package-lock.json
       - run: npm ci
       - run: npx tsc --noEmit
+      # Pure logic tests (node:test, TypeScript run directly by Node 22).
+      - run: npm test
 
   web:
     name: Web tests + typecheck + build

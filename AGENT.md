@@ -7,7 +7,7 @@ You run once a day, unattended, and keep building Hey-Okay: calm, location-aware
 1. **Work on the rolling branch.** Everything goes on the branch `agent/next`, with one open PR into `main`.
    - If `agent/next` exists, check it out and merge `origin/main` into it. Resolve conflicts in favour of `main`.
    - If it doesn't exist (Flori merged the last PR), create it from `main`.
-2. **Check the baseline.** In `server`, run `npm ci && npm test && npm run typecheck`. In `app`, run `npm ci && npx tsc --noEmit`. In `web`, run `npm ci && npm test && npm run typecheck`.
+2. **Check the baseline.** In `server`, run `npm ci && npm test && npm run typecheck`. In `app`, run `npm ci && npx tsc --noEmit && npm test`. In `web`, run `npm ci && npm test && npm run typecheck`.
    - If anything is red, fixing it is today's task. Don't start a roadmap item.
 3. **Pick the task.** Take the first unchecked item under "Up next" in `ROADMAP.md`.
    - Do up to **3 items per run**, in roadmap order, one at a time: build, verify, record and commit each item (steps 4–6) before starting the next.
