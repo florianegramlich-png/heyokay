@@ -13,6 +13,7 @@ import { session } from '../lib/session';
 import { colors } from '../lib/theme';
 import { CATEGORIES, type SavedPlace, type TechService, type UserPrefs } from '../lib/types';
 import { followsService, toggleService } from '../lib/services';
+import { POLLEN_UV_KEYS, pollenStringKey } from '../lib/pollen';
 
 const LIMITS = [1, 3, 5, 10];
 const DIGEST_TIMES = ['07:00', '12:00', '18:00', '20:00'];
@@ -139,6 +140,31 @@ export default function Settings() {
                   }}
                 >
                   <Text style={{ color: on ? '#fff' : colors.muted, fontWeight: '600' }}>{svc.name}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </Section>
+      ) : null}
+
+      {prefs.categories.includes('pollen_uv') ? (
+        <Section title={t('set.pollen')}>
+          <Text style={[s.rowHint, { marginBottom: 10 }]}>{t('set.pollen.hint')}</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            {(['*', ...POLLEN_UV_KEYS] as const).map((key) => {
+              const on = key === '*' ? !prefs.pollenUv : !!prefs.pollenUv && followsService(prefs.pollenUv, key);
+              return (
+                <Pressable
+                  key={key}
+                  onPress={() => save({ pollenUv: key === '*' ? null : toggleService(prefs.pollenUv, key) })}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: on }}
+                  style={{
+                    paddingVertical: 8, paddingHorizontal: 14, borderRadius: 999,
+                    backgroundColor: on ? colors.brand : 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: on ? colors.brand : colors.line,
+                  }}
+                >
+                  <Text style={{ color: on ? '#fff' : colors.muted, fontWeight: '600' }}>{key === '*' ? t('set.pollen.all') : t(pollenStringKey(key))}</Text>
                 </Pressable>
               );
             })}

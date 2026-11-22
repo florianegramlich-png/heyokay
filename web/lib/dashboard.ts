@@ -16,7 +16,7 @@ export type Status = 'calm' | 'info' | 'watch' | 'act';
 export interface CategoryTile {
   category: Category;
   count: number;
-  /** Highest severity among its current alerts; null for none and always for police activity and recalls. */
+  /** Highest severity among its current alerts; null for none and always for police activity, recalls and pollen/UV. */
   highest: Severity | null;
   /** The most severe current alert, opened when the tile is tapped. */
   top: Alert | null;
@@ -33,7 +33,7 @@ export interface Dashboard {
 
 const DAY = 24 * 60 * 60_000;
 /** Topics shown as a tile with a count only, outside the status. */
-const COUNT_ONLY_STATUSLESS: readonly Category[] = ['recall'];
+const COUNT_ONLY_STATUSLESS: readonly Category[] = ['recall', 'pollen_uv'];
 
 export function statusFor(highest: Severity | null): Status {
   if (highest === null) return 'calm';
@@ -50,6 +50,7 @@ export function buildDashboard(alerts: Alert[], followed: readonly Category[] = 
   const current = currentAlerts(alerts);
   // Recalls are things to check at home, not something happening around you: they get their tile
   // but leave the status at "All okay" (there's nearly always a nationwide recall somewhere).
+  // Pollen and UV likewise: a forecast to plan the day with, not something happening around you.
   const around = current.filter((a) => !COUNT_ONLY_STATUSLESS.includes(a.category));
   const highest = around.length ? (Math.max(...around.map((a) => a.severity)) as Severity) : null;
   const tiles = CATEGORIES
@@ -58,7 +59,7 @@ export function buildDashboard(alerts: Alert[], followed: readonly Category[] = 
       return {
         category,
         count: mine.length,
-        highest: category === 'crime' || category === 'recall' || !mine.length ? null : mine[0].severity,
+        highest: category === 'crime' || COUNT_ONLY_STATUSLESS.includes(category) || !mine.length ? null : mine[0].severity,
         top: mine[0] ?? null,
       };
     })

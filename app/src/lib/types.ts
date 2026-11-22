@@ -1,6 +1,6 @@
 // Client-facing mirror of server/src/types.ts — keep in sync.
 
-export const CATEGORIES = ['weather', 'crime', 'transit', 'public_safety', 'health', 'infrastructure', 'technology', 'recall'] as const;
+export const CATEGORIES = ['weather', 'crime', 'transit', 'public_safety', 'health', 'infrastructure', 'technology', 'recall', 'pollen_uv'] as const;
 export type Category = (typeof CATEGORIES)[number];
 export type Severity = 1 | 2 | 3 | 4 | 5;
 export type Delivery = 'push' | 'feed' | 'suppressed';
@@ -23,6 +23,8 @@ export interface UserPrefs {
   digestTime?: string | null;
   /** Tech outages only for these services (status-page keys, GET /v1/services); null/missing = all. */
   techServices?: string[] | null;
+  /** Pollen & UV only for these (lib/pollen.ts keys: "birke", …, "uv"); null/missing = all. */
+  pollenUv?: string[] | null;
 }
 
 export const DEFAULT_PREFS: UserPrefs = {

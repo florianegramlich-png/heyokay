@@ -1,4 +1,4 @@
-import { Bus, CloudLightning, Droplets, Flame, PackageX, PlugZap, ServerCrash, Siren, type LucideIcon } from 'lucide-react';
+import { Bus, CloudLightning, Droplets, Flame, Flower2, PackageX, PlugZap, ServerCrash, Siren, type LucideIcon } from 'lucide-react';
 import type { Category } from '@/lib/types';
 
 export const CATEGORY_ICON: Record<Category, LucideIcon> = {
@@ -10,6 +10,7 @@ export const CATEGORY_ICON: Record<Category, LucideIcon> = {
   infrastructure: PlugZap,
   technology: ServerCrash,
   recall: PackageX,
+  pollen_uv: Flower2,
 };
 
 export const CATEGORY_COLOR: Record<Category, string> = {
@@ -21,6 +22,7 @@ export const CATEGORY_COLOR: Record<Category, string> = {
   infrastructure: 'text-violet-300',
   technology: 'text-fuchsia-300',
   recall: 'text-lime-300',
+  pollen_uv: 'text-yellow-300',
 };
 
 export function CategoryIcon({ category, className }: { category: Category; className?: string }) {

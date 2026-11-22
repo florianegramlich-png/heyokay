@@ -19,6 +19,7 @@ import { fetchQuakes } from './sources/usgs.js';
 import { fetchPegelonline } from './sources/pegelonline.js';
 import { fetchRecalls } from './sources/lebensmittelwarnung.js';
 import { fetchFdaRecalls, fetchCpscRecalls } from './sources/us-recalls.js';
+import { berlinDate, fetchPollenUv, pollenUvDue } from './sources/dwd-health.js';
 import { fetchWildfires } from './sources/wildfire.js';
 import { fetchAir } from './sources/air.js';
 import { fetchSachet } from './sources/sachet.js';
@@ -82,6 +83,8 @@ let recallsLast = 0;
 const US_RECALLS_EVERY_MS = 6 * 3600_000;
 let fdaLast = 0;
 let cpscLast = 0;
+// Pollen & UV: once a day, in the morning (Berlin date of the last successful read).
+let pollenUvDate: string | null = null;
 const FIRES_EVERY_MS = 5 * 60_000;
 let firesLast = 0;
 
@@ -174,6 +177,16 @@ const tasks: SourceTask[] = [
       if (Date.now() - cpscLast < US_RECALLS_EVERY_MS) return { skipped: 'checked less than 6 hours ago' };
       const r = await ingest(await fetchCpscRecalls(seen('cpsc'), undefined, { url: config.cpscRecalls! }));
       cpscLast = Date.now();
+      return r;
+    },
+  }] : []),
+  ...(config.dwdHealth ? [{
+    key: 'dwd-health:DE',
+    run: async () => {
+      const now = new Date();
+      if (!pollenUvDue(now, pollenUvDate)) return { skipped: 'read once a day after 07:05' };
+      const r = await ingest(await fetchPollenUv(seen('dwd-health'), undefined, { url: config.dwdHealth!, now }));
+      pollenUvDate = berlinDate(now);
       return r;
     },
   }] : []),

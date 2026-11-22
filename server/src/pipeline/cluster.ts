@@ -39,6 +39,8 @@ export function findCluster(ext: ExtractedEvent, item: SourceItem, active: RiskE
   // country-wide area, so the distance rule would merge them all. Gauges and fires: one event each, by id.
   // Recalls too: every recall sits on the same country centre, so two recalls on one day would merge.
   if (item.source === 'lebensmittelwarnung' || item.source === 'fda' || item.source === 'cpsc') return null;
+  // Pollen and UV: one forecast per area, type and day, by id.
+  if (item.source === 'dwd-health') return null;
   if (item.source === 'nws' || item.source === 'statuspage' || item.source === 'ipaws' || item.source === 'sachet' || item.source === 'usgs' || item.source === 'pegelonline' || item.source === 'wfigs') return null;
   let best: { e: RiskEvent; score: number } | null = null;
   for (const e of active) {
@@ -71,6 +73,7 @@ export function newEvent(ext: ExtractedEvent, item: SourceItem, status: EventSta
     language: item.language ?? 'de',
     ...(item.hazard ? { hazard: item.hazard } : {}),
     ...(item.service ? { service: item.service } : {}),
+    ...(item.pollenUv ? { pollenUv: item.pollenUv } : {}),
     ...(item.onsetAt ? { onsetAt: item.onsetAt } : {}),
     country: packFor(item).code,
     ...(item.feedKey ? { feedKeys: [item.feedKey] } : {}),

@@ -4,6 +4,7 @@ import { USGS_URL } from './sources/usgs.js';
 import { PEGELONLINE_URL } from './sources/pegelonline.js';
 import { LEBENSMITTELWARNUNG_URL } from './sources/lebensmittelwarnung.js';
 import { OPENFDA_URL, CPSC_URL } from './sources/us-recalls.js';
+import { DWD_HEALTH_URL } from './sources/dwd-health.js';
 import { WFIGS_URL } from './sources/wildfire.js';
 import { IPAWS_URL } from './sources/ipaws.js';
 import { SACHET_RSS_URL } from './sources/sachet.js';
@@ -88,6 +89,8 @@ export interface Config {
   fdaRecalls: string | null;
   /** CPSC product recalls, US (URL override or "off"). Polled at most every 6 hours. */
   cpscRecalls: string | null;
+  /** DWD pollen and UV forecasts, Germany (base URL override or "off"). Read once a day after 07:05 Berlin time. */
+  dwdHealth: string | null;
   /** NIFC WFIGS wildfire incidents, US (ArcGIS layer URL override or "off"). Polled at most every 5 minutes. */
   wfigs: string | null;
   /** AI cost guard: daily cap in EUR (0 = off) and prices per million tokens. */
@@ -168,6 +171,7 @@ export function loadConfig(env = process.env): Config {
     lebensmittelwarnung: /^off$/i.test(env.LEBENSMITTELWARNUNG_URL ?? '') ? null : (env.LEBENSMITTELWARNUNG_URL || LEBENSMITTELWARNUNG_URL),
     fdaRecalls: /^off$/i.test(env.FDA_RECALLS_URL ?? '') ? null : (env.FDA_RECALLS_URL || OPENFDA_URL),
     cpscRecalls: /^off$/i.test(env.CPSC_RECALLS_URL ?? '') ? null : (env.CPSC_RECALLS_URL || CPSC_URL),
+    dwdHealth: /^off$/i.test(env.DWD_HEALTH_URL ?? '') ? null : (env.DWD_HEALTH_URL || DWD_HEALTH_URL),
     llmDailyBudgetEur: Number(env.LLM_DAILY_BUDGET_EUR ?? 5),
     llmPriceInPerMTok: Number(env.LLM_PRICE_IN_EUR_PER_MTOK ?? 1),
     llmPriceOutPerMTok: Number(env.LLM_PRICE_OUT_EUR_PER_MTOK ?? 5),

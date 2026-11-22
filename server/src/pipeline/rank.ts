@@ -38,7 +38,12 @@ export interface RankContext {
   now: Date;
   pushesLast24h: number;
   feedback: Record<string, { relevant: number; notRelevant: number }>;
+  /** Pollen & UV: this person already had a pollen/UV push in the last 12 hours. */
+  pollenUvPushedRecently?: boolean;
 }
+
+/** Pollen & UV may push only in the morning (local time), so it never wakes anyone at night. */
+export const POLLEN_UV_PUSH_HOURS = { from: '06:00', to: '11:00' };
 
 /**
  * Send now / feed (digest) / suppress. Rules today; the Phase 2 ranking model replaces
@@ -59,6 +64,13 @@ export function decide(user: User, event: RiskEvent, ctx: RankContext): { delive
   // a push comes with the actual warning, not the forecast.
   // Product recalls are never a push (Flori, 2026-11-21): the feed and the daily summary.
   if (event.category === 'recall') return { delivery: 'feed', reason: 'recall: feed only' };
+  // Pollen & UV (opt-in): only the types the person picked; "hoch" may push once, in the morning.
+  if (event.category === 'pollen_uv') {
+    if (event.pollenUv && prefs.pollenUv && !prefs.pollenUv.includes(event.pollenUv)) return { delivery: 'suppressed', reason: 'pollen type not followed' };
+    if (event.severity <= 1) return { delivery: 'feed', reason: 'pollen/UV: moderate, feed only' };
+    if (!inQuietHours(ctx.now, POLLEN_UV_PUSH_HOURS.from, POLLEN_UV_PUSH_HOURS.to, prefs.timezone)) return { delivery: 'feed', reason: 'pollen/UV: push only in the morning' };
+    if (ctx.pollenUvPushedRecently) return { delivery: 'feed', reason: 'pollen/UV: one push a day' };
+  }
   if (isAhead(event, ctx.now)) return { delivery: 'feed', reason: 'coming up' };
   if (event.severity <= 1) return { delivery: 'feed', reason: 'information only' };
 

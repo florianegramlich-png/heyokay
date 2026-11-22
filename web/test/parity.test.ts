@@ -83,3 +83,29 @@ test('the new strings exist in every language', () => {
     }
   }
 });
+
+test('pollen & UV: opt-in topic with its own tile and no status, the same keys as the server, strings in every language', async () => {
+  const { POLLEN_UV_KEYS, pollenStringKey } = await import('../lib/pollen');
+  const { readFileSync } = await import('node:fs');
+  const { DEFAULT_PREFS } = await import('../lib/types');
+  assert.ok(!DEFAULT_PREFS.categories.includes('pollen_uv'));
+  const now = Date.now();
+  const birch = alert({ category: 'pollen_uv', severity: 2, title: 'Pollenflug heute: Birke hoch' });
+  const d = buildDashboard([birch], ['weather', 'pollen_uv'], now);
+  assert.equal(d.status, 'calm');
+  assert.deepEqual(d.tiles.map((t) => [t.category, t.count, t.highest]), [['weather', 0, null], ['pollen_uv', 1, null]]);
+  // Same keys and order as server/src/sources/dwd-health.ts.
+  const server = readFileSync(new URL('../../server/src/sources/dwd-health.ts', import.meta.url), 'utf8');
+  const serverKeys = [...server.matchAll(/key: '([a-z]+)'/g)].map((m) => m[1]);
+  assert.deepEqual([...POLLEN_UV_KEYS], [...serverKeys, 'uv']);
+  // The phone app uses the same module.
+  assert.equal(readFileSync(new URL('../../app/src/lib/pollen.ts', import.meta.url), 'utf8'), readFileSync(new URL('../lib/pollen.ts', import.meta.url), 'utf8'));
+  assert.match(readFileSync(new URL('../../app/src/lib/dashboard.ts', import.meta.url), 'utf8'), /COUNT_ONLY_STATUSLESS: readonly Category\[\] = \['recall', 'pollen_uv'\]/);
+  assert.deepEqual(toggleService(null, 'birke'), ['birke']);
+  assert.equal(toggleService(['birke'], 'birke'), null);
+  for (const lang of ['de', 'en', 'ta'] as const) {
+    for (const k of POLLEN_UV_KEYS) assert.ok(APP_STRINGS[lang][pollenStringKey(k)]?.length > 0, `${lang} ${k}`);
+    for (const k of ['set.pollen', 'set.pollen.hint', 'set.pollen.all'] as const) assert.ok(APP_STRINGS[lang][k].length > 0, `${lang} ${k}`);
+    assert.ok(CATEGORY[lang].pollen_uv.label.length > 0 && CATEGORY[lang].pollen_uv.hint.length > 0, lang);
+  }
+});
