@@ -10,6 +10,18 @@
 
 - **BVG/VBB disruptions: which data access?** (2026-11-18) There's no open, documented source I can build on. Options: (1) apply for VBB's official API (HAFAS, includes disruption messages; it's on the "Needs a human" list as "VBB API access"); (2) ask BVG for permission to use the disruptions JSON their website loads (`bvg.de/disruption-reports-service/…`), which has no published terms; (3) use S-Bahn Berlin / VBB disruption RSS if they offer one. I'd go with (1) for the long run and (2) as a quick start if BVG agrees. Until then the item stays open and the other sources run.
 
+## 2026-11-23
+
+- **AI evaluation harness, part 1** (roadmap "AI evaluation harness", split: the Alert Desk export is part 2) [PRD 6.4, 6.5].
+  - What it is: a way to measure how well the AI steps work before changing models or prompts. `cd server && npm run eval` runs every labelled case through the real extraction and alert-text steps and prints extraction accuracy (alert or not, and the topic), alert precision and recall, severity agreement (exact and within one level), the verifier pass rate of AI-written texts (and how often the template took over), and cost per event at the `LLM_PRICE_IN/OUT_EUR_PER_MTOK` prices. Then a list of every disagreement. `--rules` (keyword rules only), `--set <file>`, `--json <path>`.
+  - Cases (`server/eval/cases/`, format in `server/eval/README.md`): `synthetic-de.json`, 50 written German cases (35 alerts across all six original topics, 15 that must not become alerts: past incidents, witness appeals, statistics, a court report, recruitment, an open day, a missing-person search); `fixtures.json`, 14 real press releases from the saved feeds (Polizei Berlin, Polizei and Feuerwehr Hamburg, Polizei Frankfurt), labelled by me. A label may accept several topics where more than one is right (a gas leak is infrastructure or public safety). My reading: most fixture press releases describe something already over, so they're labelled "no alert".
+  - Today's baseline with keyword rules only (no model key in the sandbox): extraction accuracy 62.5%, alert precision 65%, recall 72%, severity 69% exact / 100% within one. Any model should beat this clearly; the numbers with Claude are the first thing to look at once a key is in the environment.
+  - Runs outside the server: no database writes, the daily AI budget isn't touched. A model run makes about 1–2 calls per case (64 cases today).
+  - Code: `server/src/eval/cases.ts` (zod schema, loader, fixture items through the real feed parsers), `server/src/eval/run.ts` (scoring, report), `server/src/tools/eval.ts` (CLI). `factText` (cluster) and the Presseportal city areas are now exported for it.
+  - Tests: `server/test/eval.test.ts` (7 new: every case file valid, 50 synthetic cases, topic coverage, fixture cases resolve, broken files refused, rules baseline, scoring of a model that knows the labels incl. verifier rejections and cost). Server 286/286 (Postgres suite skipped: no database in this sandbox), app and web unchanged and green, typechecks clean.
+  - For Flori: run `npm run eval` once with `ANTHROPIC_API_KEY` set (≈ €0.05 at the default prices) and look at the disagreements; if you disagree with a label, change it in the JSON. Phone app and web: nothing to show, this is a developer tool.
+  - Still blocked today (checked again): FSIS (US meat recalls) and CISA feeds still answer 403 from the sandbox.
+
 ## 2026-11-22
 
 - **OS geofencing in the phone app** (roadmap "OS geofencing") [PRD 5.3, 11].
