@@ -13,6 +13,7 @@ npm run eval                        # models from LLM_PROVIDERS (keyword rules w
 npm run eval -- --rules             # the rules baseline, no model calls
 npm run eval -- --set synthetic-de  # one file
 npm run eval -- --json report.json  # full report with every case
+npm run eval -- --compare           # each LLM_PROVIDERS entry alone + the rules, side by side, suggested order
 ```
 
 Model runs cost money (about 1–2 calls per case) and use the API keys in your environment. They
