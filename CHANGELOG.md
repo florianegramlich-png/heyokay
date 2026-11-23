@@ -18,9 +18,15 @@
   - Today's baseline with keyword rules only (no model key in the sandbox): extraction accuracy 62.5%, alert precision 65%, recall 72%, severity 69% exact / 100% within one. Any model should beat this clearly; the numbers with Claude are the first thing to look at once a key is in the environment.
   - Runs outside the server: no database writes, the daily AI budget isn't touched. A model run makes about 1–2 calls per case (64 cases today).
   - Code: `server/src/eval/cases.ts` (zod schema, loader, fixture items through the real feed parsers), `server/src/eval/run.ts` (scoring, report), `server/src/tools/eval.ts` (CLI). `factText` (cluster) and the Presseportal city areas are now exported for it.
-  - Tests: `server/test/eval.test.ts` (7 new: every case file valid, 50 synthetic cases, topic coverage, fixture cases resolve, broken files refused, rules baseline, scoring of a model that knows the labels incl. verifier rejections and cost). Server 286/286 (Postgres suite skipped: no database in this sandbox), app and web unchanged and green, typechecks clean.
-  - For Flori: run `npm run eval` once with `ANTHROPIC_API_KEY` set (≈ €0.05 at the default prices) and look at the disagreements; if you disagree with a label, change it in the JSON. Phone app and web: nothing to show, this is a developer tool.
-  - Still blocked today (checked again): FSIS (US meat recalls) and CISA feeds still answer 403 from the sandbox.
+  - Tests: `server/test/eval.test.ts` (7 new: every case file valid, 50 synthetic cases, topic coverage, fixture cases resolve, broken files refused, rules baseline, scoring of a model that knows the labels incl. verifier rejections and cost). Server 377/377 on SQLite + Postgres, app and web unchanged and green, typechecks clean.
+  - For Flori: run `npm run eval` once with `ANTHROPIC_API_KEY` set (well under €1 at the default prices) and look at the disagreements; if you disagree with a label, change it in the JSON. Phone app and web: nothing to show, this is a developer tool.
+- **AI evaluation harness, part 2: labels from the Alert Desk** [PRD 6.4, 6.5].
+  - What it does: every decision at the Alert Desk can now feed the eval set. A new button under "Waiting for review", "Download reviewed cases (eval set)", saves a JSON file in the `server/eval/cases/` format: approved events as alerts with the severity the reviewer chose (and the event's topic), rejected events as "no alert", the input being the first source's title and text. Also as `GET /admin/api/eval-export?since=<ISO time>` (admin token) for only the newer decisions.
+  - Left out: concierge alerts written at the desk (no source text to extract from) and official warnings (they never reach the desk). Edited alert texts aren't exported: the eval scores extraction, and the verifier checks texts against the source anyway.
+  - Privacy: the texts are press releases as published, so they may contain names or ages. They're only downloaded, never stored anywhere new; the README says to remove personal details before committing a file to the repository.
+  - Tests: `server/test/eval-desk.test.ts` (3 new: approve with a changed severity, reject, concierge alert left out, admin token required, file passes the case schema and loader, `since` filter, bad date refused; first-source text). Server 380/380 on SQLite + Postgres, app 4/4, web 23/23, typechecks clean.
+  - For Flori: after a few days of reviews, download the file, check it for names, and commit it as `server/eval/cases/desk-<date>.json`.
+- **Still blocked today** (checked again): the FSIS (US meat recalls) and CISA feeds still answer 403 from the sandbox, so those roadmap items stay skipped.
 
 ## 2026-11-22
 

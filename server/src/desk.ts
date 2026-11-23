@@ -26,7 +26,7 @@ export const DESK_HTML = `<!doctype html>
 <header><h1>Hey-Okay · Alert Desk</h1><input id="token" type="password" placeholder="Admin token"><button onclick="saveToken()">Connect</button><button onclick="ingest()">Run ingest now</button></header>
 <main>
   <section><h2>Last 7 days</h2><div class="metrics" id="metrics">Connect with your admin token.</div></section>
-  <section><h2>Waiting for review</h2><p class="muted">Severity 4+ from non-official sources, and anything the AI was unsure about. Nothing here reaches users until approved.</p><div id="pending"></div></section>
+  <section><h2>Waiting for review</h2><p class="muted">Severity 4+ from non-official sources, and anything the AI was unsure about. Nothing here reaches users until approved. Every decision also becomes a label for the AI eval set.</p><div id="pending"></div><p class="row"><button onclick="exportLabels()">Download reviewed cases (eval set)</button><span class="muted">For <code>server/eval/cases/</code>. Remove names and personal details before committing.</span></p></section>
   <section><h2>Sources</h2><p class="muted">Every feed the worker polls, by country. Failing = the last poll failed; stale = no successful poll for 3 intervals. A fallback takes over where one is listed.</p><div id="sources"></div></section>
   <section><h2>Active events</h2><p class="muted">Released events that haven't ended. "End now" sends an all-clear to everyone who got the alert.</p><div id="active"></div></section>
   <section><h2>Send a curated alert (concierge pilot)</h2>
@@ -88,6 +88,9 @@ async function endEvent(id){if(!confirm('End this event and send an all-clear?')
 async function approve(id){const t=$('#t-'+id).value,b=$('#b-'+id).value,s=Number($('#s-'+id).value);
   const r=await api('/admin/api/events/'+id+'/approve',{method:'POST',body:JSON.stringify({...(t&&{title:t}),...(b&&{body:b}),severity:s})});
   alert('Sent: '+r.alerts+' alerts, '+r.pushes+' pushes');load();}
+async function exportLabels(){try{const f=await api('/admin/api/eval-export');if(!f.cases.length){alert('No reviewed events yet.');return;}
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(f,null,1)],{type:'application/json'}));a.download='desk-'+new Date().toISOString().slice(0,10)+'.json';a.click();URL.revokeObjectURL(a.href);}
+  catch(e){alert('Export failed: '+e.message);}}
 async function reject(id){await api('/admin/api/events/'+id+'/reject',{method:'POST'});load();}
 async function ingest(){const r=await api('/admin/api/ingest',{method:'POST'});alert(JSON.stringify(r,null,1));load();}
 async function sendManual(ev){ev.preventDefault();const f=Object.fromEntries(new FormData(ev.target));

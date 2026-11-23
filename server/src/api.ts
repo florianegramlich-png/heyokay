@@ -6,6 +6,7 @@ import type { Store } from './store.js';
 import type { Pipeline } from './pipeline/run.js';
 import { CATEGORIES, DEFAULT_PREFS, UI_LANGUAGES, contentLanguage, stampConsent, type User } from './types.js';
 import { DESK_HTML } from './desk.js';
+import { deskCases } from './eval/desk-export.js';
 import { sourceReport } from './sources/registry.js';
 import { MAX_PLACE_RADIUS_M, distanceM } from './geo.js';
 import { AuthError, checkEmailCode, signIn, signInWithIdentity, signOut, startEmailSignIn, type Mailer } from './auth.js';
@@ -329,6 +330,16 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
   app.post('/admin/api/events/:id/reject', async (req, reply) => {
     if (!admin(req, reply)) return;
     return { ok: await pipeline.reject((req.params as any).id) };
+  });
+
+  /** Reviewed events as labelled cases for the AI eval set (server/eval/cases/, PRD 6.4). */
+  app.get('/admin/api/eval-export', async (req, reply) => {
+    if (!admin(req, reply)) return;
+    const { since } = z.object({ since: z.string().refine((s) => !Number.isNaN(Date.parse(s)), 'not a date').optional() }).parse(req.query ?? {});
+    const events = [...(await store.eventsByStatus('approved')), ...(await store.eventsByStatus('rejected'))];
+    const file = deskCases(events, { since, now: clock() });
+    reply.header('content-disposition', `attachment; filename="desk-${clock().toISOString().slice(0, 10)}.json"`);
+    return file;
   });
 
   /** Concierge pilot: send a hand-curated alert. */

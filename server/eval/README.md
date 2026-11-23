@@ -37,3 +37,13 @@ with `sourceName`, `category` and `defaultArea` as the source adapter would add 
 - No names or personal details of people in written cases.
 
 Sets today: `synthetic-de` (50 written German cases, 35 alerts / 15 not) and `fixtures` (14 real press releases).
+
+## Labels from the Alert Desk
+
+Every event a reviewer approves (with the severity they chose) or rejects can become a case:
+Alert Desk → "Download reviewed cases (eval set)", or `GET /admin/api/eval-export?since=<ISO time>`
+with the admin token. The file is already in this format (`origin: "desk"`, id `desk-<event id>`);
+save it here as `cases/desk-<date>.json`. Concierge alerts and official warnings are left out.
+
+**Before committing**, read the texts and remove names, ages and other personal details: they are
+press releases as published.
