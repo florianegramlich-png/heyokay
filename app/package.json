@@ -7,8 +7,10 @@
     "@react-native-firebase/app": "^27.1.1",
     "@react-native-firebase/crashlytics": "^27.1.1",
     "expo": "~58.0.26",
+    "expo-apple-authentication": "~58.0.3",
     "expo-build-properties": "~58.0.12",
     "expo-constants": "~58.0.16",
+    "expo-crypto": "~58.0.8",
     "expo-dev-client": "~58.0.21",
     "expo-device": "~58.0.5",
     "expo-linking": "~58.0.17",
@@ -35,6 +37,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
+    "test": "node --test test/*.test.ts",
     "update:preview": "npx eas-cli@latest update --channel preview --platform all --auto",
     "update:production": "npx eas-cli@latest update --channel production --platform all --auto"
   },

@@ -5,14 +5,15 @@ import { UserRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { ProviderButtons } from '@/components/provider-buttons';
 import { api, ApiError } from '@/lib/api';
 import { useI18n, type Key } from '@/lib/i18n';
 import { session } from '@/lib/session';
 import type { SavedPlace, UserPrefs } from '@/lib/types';
 
 /**
- * Sign-in with an email code: the same account as on the phone, so places and settings are here
- * too. Optional — the web app works without it.
+ * Sign-in with an email code, Apple or Google: the same account as on the phone, so places and
+ * settings are here too. Optional — the web app works without it.
  */
 export function AccountSection({ email: signedIn, onChanged }: {
   email: string | null;
@@ -71,6 +72,7 @@ export function AccountSection({ email: signedIn, onChanged }: {
       ) : step === 'email' ? (
         <form onSubmit={sendCode} className="space-y-3">
           <p className="text-sm text-muted-foreground">{t('acc.intro')}</p>
+          <ProviderButtons onSignedIn={(n) => onChanged(n)} />
           <Input type="email" autoComplete="email" placeholder={t('acc.email')} aria-label={t('acc.email')} value={email} onChange={(e) => setEmail(e.target.value)} />
           <Button type="submit" className="w-full" disabled={busy || !email.trim()}>{t('acc.send')}</Button>
         </form>

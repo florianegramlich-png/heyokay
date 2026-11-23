@@ -1,4 +1,4 @@
-import { createPublicKey, verify as verifySignature, type KeyObject } from 'node:crypto';
+import { createHash, createPublicKey, timingSafeEqual, verify as verifySignature, type KeyObject } from 'node:crypto';
 import { fetchWithTimeout } from './http.js';
 import type { IdentityProvider } from './store.js';
 
@@ -16,7 +16,7 @@ import type { IdentityProvider } from './store.js';
  * provider has verified it. Names, pictures and anything else in the token are ignored.
  */
 
-export interface IdentityClaims { sub: string; email: string | null; emailVerified: boolean }
+export interface IdentityClaims { sub: string; email: string | null; emailVerified: boolean; /** The token's `nonce` claim, if any. */ nonce: string | null }
 
 export class IdentityError extends Error {
   constructor(public code: 'invalid_token' | 'provider_unavailable', message: string) { super(message); }
@@ -89,7 +89,7 @@ export class IdentityVerifier {
     const email = typeof claims.email === 'string' && claims.email.includes('@') ? claims.email : null;
     // Apple sends "true"/"false" as strings, Google as booleans.
     const emailVerified = email != null && (claims.email_verified === true || claims.email_verified === 'true');
-    return { sub: claims.sub, email, emailVerified };
+    return { sub: claims.sub, email, emailVerified, nonce: typeof claims.nonce === 'string' ? claims.nonce : null };
   }
 
   private async key(kid: string): Promise<KeyObject | undefined> {
@@ -138,4 +138,19 @@ export class IdentityVerifier {
 export function parseClientIds(raw: string | undefined): string[] | null {
   const ids = (raw ?? '').split(',').map((s) => s.trim()).filter(Boolean);
   return ids.length ? ids : null;
+}
+
+/**
+ * Replay protection: the app makes a random nonce, gives Apple/Google its SHA-256 (hex), and sends
+ * the raw nonce with the token. Only the app that asked for this token knows the raw value.
+ */
+export function nonceHash(raw: string): string {
+  return createHash('sha256').update(raw).digest('hex');
+}
+
+export function nonceMatches(claims: Pick<IdentityClaims, 'nonce'>, raw: string): boolean {
+  if (!claims.nonce) return false;
+  const a = Buffer.from(claims.nonce);
+  const b = Buffer.from(nonceHash(raw));
+  return a.length === b.length && timingSafeEqual(a, b);
 }

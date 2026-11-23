@@ -7,9 +7,9 @@ import type { Pipeline } from './pipeline/run.js';
 import { CATEGORIES, DEFAULT_PREFS, UI_LANGUAGES, contentLanguage, stampConsent, type User } from './types.js';
 import { DESK_HTML } from './desk.js';
 import { sourceReport } from './sources/registry.js';
-import { MAX_PLACE_RADIUS_M } from './geo.js';
+import { MAX_PLACE_RADIUS_M, distanceM } from './geo.js';
 import { AuthError, checkEmailCode, signIn, signInWithIdentity, signOut, startEmailSignIn, type Mailer } from './auth.js';
-import { IdentityError, type IdentityVerifier } from './identity.js';
+import { IdentityError, nonceMatches, type IdentityVerifier } from './identity.js';
 import type { IdentityProvider } from './store.js';
 import { logError, defaultSink, type ErrorSink } from './errors.js';
 import { HISTORY_SCAN, searchHistory } from './history.js';
@@ -55,6 +55,11 @@ export interface ApiDeps {
   /** Where unexpected errors are logged (default: JSON lines on stderr). */
   errorSink?: ErrorSink;
 }
+
+const REGION_MAX_RADIUS_M = 30_000;
+const REGION_NEAR_M = 50_000;
+/** iOS watches at most 20 regions: one home area, up to 15 events, the rest for saved places. */
+const REGION_MAX = 15;
 
 export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus, roleStatus, pollIntervalSec = 120, aiBudgetEur = 0, mailer = null, identity = {}, statusPages = US_STATUS_PAGES, errorSink = defaultSink, now: clock = () => new Date() }: ApiDeps) {
   const app = Fastify({ logger: false });
@@ -191,10 +196,13 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
    * Sign in with Apple / Google: the app sends the identity token from the provider's sheet;
    * the server checks it (identity.ts) and attaches this device like the email code does.
    */
+  /** Which sign-in methods this server has switched on, so apps only show buttons that work. */
+  app.get('/v1/auth/providers', async () => ({ email: mailer != null, apple: identity.apple != null, google: identity.google != null }));
+
   for (const provider of ['apple', 'google'] as const) {
     app.post(`/v1/auth/${provider}`, async (req, reply) => {
       const u = await authed(req, reply); if (!u) return;
-      const { idToken } = z.object({ idToken: z.string().min(20).max(8192) }).parse(req.body);
+      const { idToken, nonce } = z.object({ idToken: z.string().min(20).max(8192), nonce: z.string().min(16).max(128) }).parse(req.body);
       const verifier = identity[provider];
       if (!verifier) return reply.code(503).send({ error: 'provider_not_configured' });
       let claims;
@@ -205,6 +213,7 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
         }
         throw err;
       }
+      if (!nonceMatches(claims, nonce)) return reply.code(400).send({ error: 'invalid_token' });
       try {
         const { user, account } = await signInWithIdentity(store, bearer(req), u, provider, claims);
         return { userId: user.id, prefs: user.prefs, places: await store.places(user.id), account: { email: account.email } };
@@ -219,6 +228,28 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
       const { user, token } = await signOut(store, bearer(req), u);
       return { userId: user.id, token, prefs: user.prefs };
     } catch (err) { return authError(reply, err); }
+  });
+
+  /**
+   * OS geofencing hint (PRD 5.3, 11): circles of active, approved events near the person's last
+   * location, so the phone can wake up when it enters one and send its location at once.
+   * Only local events (radius ≤ 30 km, within 50 km) in topics the person follows, closest first.
+   * No exact outlines and nothing about other people.
+   */
+  app.get('/v1/me/regions', async (req, reply) => {
+    const u = await authed(req, reply); if (!u) return;
+    if (u.lat == null || u.lon == null) return { regions: [] };
+    const now = clock();
+    const regions = (await store.activeEvents(now))
+      .filter((e) => e.status !== 'pending_review' && e.status !== 'rejected')
+      .filter((e) => !e.endsAt || Date.parse(e.endsAt) > now.getTime())
+      .filter((e) => u.prefs.categories.includes(e.category) && e.radiusM <= REGION_MAX_RADIUS_M)
+      .map((e) => ({ id: e.id, lat: e.lat, lon: e.lon, radiusM: Math.max(200, Math.round(e.radiusM)), d: distanceM(u.lat!, u.lon!, e.lat, e.lon) }))
+      .filter((r) => r.d - r.radiusM <= REGION_NEAR_M)
+      .sort((a, b) => a.d - b.d)
+      .slice(0, REGION_MAX)
+      .map(({ d: _d, ...r }) => r);
+    return { regions };
   });
 
   // ── alerts ───────────────────────────────────────────────────────────────
