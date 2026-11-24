@@ -1,4 +1,5 @@
 import type { SourceStatus } from './ingest.js';
+import type { AppEvent, AppEventCount, Platform } from './app-events.js';
 import type { PushTicket } from './push.js';
 import type {
   Alert, Decision, DecisionKind, Reviewer, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
@@ -212,6 +213,11 @@ export interface Store {
   markAlertOpened(userId: string, alertId: string, nowIso: string): Promise<void>;
   /** Raw inputs for computeKpis: first alerts since `sinceIso` and every person's dates. */
   kpiInputs(sinceIso: string): Promise<KpiInputs>;
+
+  // ── anonymous app events (PRD 13): counts per day, platform and name only ──
+  addAppEvents(day: string, platform: Platform, counts: Map<AppEvent, number>): Promise<void>;
+  /** Rows from `sinceDay` (YYYY-MM-DD, inclusive). */
+  appEventCounts(sinceDay: string): Promise<AppEventCount[]>;
 
   // ── decision log (PRD 6.3) ──
   recordDecision(d: Decision): Promise<void>;

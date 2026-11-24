@@ -9,6 +9,7 @@ import { hashToken } from './db.js';
 import { LOCATION_MAX_AGE_MS, MAX_PLACE_RADIUS_M } from './geo.js';
 import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type AccountIdentity, type IdentityProvider, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob, type LlmUsageDay, type DecisionQuery, type KpiInputs, decisionLimit } from './store.js';
 import type { PushTicket } from './push.js';
+import type { AppEvent, AppEventCount, Platform } from './app-events.js';
 import type { SourceStatus } from './ingest.js';
 
 /**
@@ -187,6 +188,13 @@ export const MIGRATIONS: { version: number; sql: string }[] = [
     sql: `
       ALTER TABLE users ADD COLUMN last_seen_at timestamptz;
       ALTER TABLE alerts ADD COLUMN opened_at timestamptz;
+    `,
+  },
+  {
+    // Anonymous app events (PRD 13): counts per day, platform and name. No user, device or IP.
+    version: 16,
+    sql: `
+      CREATE TABLE app_events (day date NOT NULL, platform text NOT NULL, name text NOT NULL, count integer NOT NULL, PRIMARY KEY (day, platform, name));
     `,
   },
 ];
@@ -724,6 +732,21 @@ export class PgStore implements Store {
 
   async deleteReviewerSessionsFor(reviewerId: string): Promise<void> {
     await this.q(`DELETE FROM reviewer_sessions WHERE reviewer_id = $1`, [reviewerId]);
+  }
+
+  async addAppEvents(day: string, platform: Platform, counts: Map<AppEvent, number>): Promise<void> {
+    if (!counts.size) return;
+    const names = [...counts.keys()];
+    await this.q(
+      `INSERT INTO app_events (day, platform, name, count) SELECT $1::date, $2, n, c FROM unnest($3::text[], $4::int[]) AS t(n, c)
+       ON CONFLICT (day, platform, name) DO UPDATE SET count = app_events.count + excluded.count`,
+      [day, platform, names, names.map((n) => counts.get(n)!)],
+    );
+  }
+
+  async appEventCounts(sinceDay: string): Promise<AppEventCount[]> {
+    const { rows } = await this.q(`SELECT to_char(day, 'YYYY-MM-DD') AS day, platform, name, count FROM app_events WHERE day >= $1::date ORDER BY day, platform, name`, [sinceDay]);
+    return rows.map((r) => ({ day: r.day, platform: r.platform, name: r.name, count: Number(r.count) }));
   }
 
   async recordDecision(d: Decision): Promise<void> {

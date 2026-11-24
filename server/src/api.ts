@@ -11,6 +11,7 @@ import { DESK_HTML } from './desk.js';
 import { deskCases } from './eval/desk-export.js';
 import { decisionsCsv } from './decisions.js';
 import { computeKpis } from './kpis.js';
+import { AppEventsBody, countEvents, funnelReport } from './app-events.js';
 import { LoginLimiter, MIN_PASSWORD_LENGTH, SESSION_HOURS, clearedCookie, dummyHash, hashPassword, newSessionToken, readCookie, reviewTimes, sessionCookie, tokenEquals, verifyPassword } from './desk-auth.js';
 import { sourceReport } from './sources/registry.js';
 import { MAX_PLACE_RADIUS_M, distanceM } from './geo.js';
@@ -120,6 +121,8 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
     return false;
   };
   const loginLimiter = new LoginLimiter();
+  /** Anonymous app events: at most 60 requests per address per 10 minutes. */
+  const eventLimiter = new LoginLimiter(60, 10 * 60_000);
 
   // Always 200 while the process is up (Fly's health check). `sources` shows which feeds last worked when.
   app.get('/health', async () => {
@@ -131,6 +134,21 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
 
   // Public: the list behind "only the services I use" (no user data).
   app.get('/v1/services', async () => ({ services: followableServices(statusPages) }));
+
+  /**
+   * Anonymous app events (PRD 13): onboarding steps, permission answers, notifications switched off.
+   * Public, because onboarding happens before the device registers. Nothing that identifies the
+   * person is read or kept: only +1 per day, platform and event name.
+   */
+  app.post('/v1/events', async (req, reply) => {
+    const now = clock();
+    const key = [`events:${req.ip}`];
+    if (eventLimiter.blocked(key, now.getTime())) return reply.code(429).send({ error: 'too_many_requests' });
+    eventLimiter.fail(key, now.getTime());
+    const body = AppEventsBody.parse(req.body);
+    await store.addAppEvents(now.toISOString().slice(0, 10), body.platform, countEvents(body.events));
+    return { ok: true };
+  });
 
   // ── device / user ────────────────────────────────────────────────────────
   app.post('/v1/devices', async (req) => {
@@ -434,6 +452,14 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
     const retracted = (await store.decisions({ kind: 'desk', since: new Date(now.getTime() - (days + 30) * 86_400_000).toISOString(), limit: 10_000 }))
       .filter((d) => d.outcome === 'ended' && d.detail.reason === 'false_alert' && d.eventId).map((d) => d.eventId!);
     return { days, kpis: computeKpis(await store.kpiInputs(sinceIso), { sinceIso, now, falseAlertEvents: new Set(retracted) }) };
+  });
+
+  /** Onboarding funnel and permission answers from the anonymous app events, last `days` (default 7). */
+  app.get('/admin/api/funnel', async (req, reply) => {
+    const actor = await admin(req, reply); if (!actor) return;
+    const { days } = z.object({ days: z.coerce.number().int().min(1).max(90).default(7) }).parse(req.query ?? {});
+    const since = new Date(clock().getTime() - (days - 1) * 86_400_000).toISOString().slice(0, 10);
+    return { days, since, ...funnelReport(await store.appEventCounts(since)) };
   });
 
   /** Review time (target < 3 min) over the last `days` (default 7). */

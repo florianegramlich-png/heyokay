@@ -7,6 +7,7 @@ import type {
 import { DEFAULT_PREFS, normalizePrefs, savedPrefs } from './types.js';
 import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type AccountIdentity, type IdentityProvider, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob, type LlmUsageDay, type DecisionQuery, type KpiInputs, decisionLimit } from './store.js';
 import type { PushTicket } from './push.js';
+import type { AppEvent, AppEventCount, Platform } from './app-events.js';
 import type { SourceStatus } from './ingest.js';
 import { distanceM, LOCATION_MAX_AGE_MS } from './geo.js';
 import { cosine } from './embeddings.js';
@@ -93,6 +94,7 @@ export class SqliteStore implements Store {
       );
       CREATE TABLE IF NOT EXISTS reviewers (id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, name TEXT NOT NULL, password_hash TEXT NOT NULL, created_at TEXT NOT NULL, disabled INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS reviewer_sessions (token_hash TEXT PRIMARY KEY, reviewer_id TEXT NOT NULL REFERENCES reviewers(id) ON DELETE CASCADE, expires_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS app_events (day TEXT NOT NULL, platform TEXT NOT NULL, name TEXT NOT NULL, count INTEGER NOT NULL, PRIMARY KEY (day, platform, name));
       CREATE TABLE IF NOT EXISTS decisions (id TEXT PRIMARY KEY, at TEXT NOT NULL, kind TEXT NOT NULL, event_id TEXT, data TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS decisions_at ON decisions(at);
       CREATE INDEX IF NOT EXISTS decisions_event ON decisions(event_id, at);
@@ -540,6 +542,17 @@ export class SqliteStore implements Store {
 
   async deleteReviewerSessionsFor(reviewerId: string): Promise<void> {
     this.db.prepare(`DELETE FROM reviewer_sessions WHERE reviewer_id = ?`).run(reviewerId);
+  }
+
+  // ── anonymous app events ─────────────────────────────────────────────────
+  async addAppEvents(day: string, platform: Platform, counts: Map<AppEvent, number>): Promise<void> {
+    const st = this.db.prepare(`INSERT INTO app_events (day, platform, name, count) VALUES (?,?,?,?) ON CONFLICT (day, platform, name) DO UPDATE SET count = count + excluded.count`);
+    for (const [name, n] of counts) st.run(day, platform, name, n);
+  }
+
+  async appEventCounts(sinceDay: string): Promise<AppEventCount[]> {
+    return (this.db.prepare(`SELECT day, platform, name, count FROM app_events WHERE day >= ? ORDER BY day, platform, name`).all(sinceDay) as any[])
+      .map((r) => ({ day: r.day, platform: r.platform, name: r.name, count: Number(r.count) }));
   }
 
   // ── decision log ─────────────────────────────────────────────────────────

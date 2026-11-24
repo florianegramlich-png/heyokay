@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Linking, ScrollView, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Starfield } from '../components/Starfield';
@@ -10,6 +10,7 @@ import { setLanguage, useI18n } from '../lib/i18n';
 import { requestBackground, requestForeground, startBackgroundUpdates, syncNow } from '../lib/location';
 import { getPushToken, requestPermission } from '../lib/notifications';
 import { session } from '../lib/session';
+import { analytics } from '../lib/track';
 import { colors } from '../lib/theme';
 import { CATEGORIES, DEFAULT_PREFS, type Category } from '../lib/types';
 
@@ -25,6 +26,9 @@ export default function Onboarding() {
   const [insights, setInsights] = useState(false); // optional, off unless chosen
   const { t, lang, categoryLabel, categoryHint } = useI18n();
 
+  // Anonymous counts per screen (PRD 13 funnel): which step was shown, never who.
+  useEffect(() => { analytics.track(`onb_${step}`); }, [step]);
+
   const toggle = (c: Category, on: boolean) =>
     setCategories((cur) => (on ? [...new Set([...cur, c])] : cur.filter((x) => x !== c)));
 
@@ -39,6 +43,8 @@ export default function Onboarding() {
       await session.setOnboarded();
       await startBackgroundUpdates();
       await syncNow(true).catch(() => null); // backfill: current alerts go to the feed, no push burst
+      analytics.track('onb_done');
+      void analytics.flush();
       router.replace('/feed');
     } catch (e) {
       setError(t('onb.error'));
@@ -62,23 +68,27 @@ export default function Onboarding() {
           <Screen title={t('onb.location.title')} text={t('onb.location.text')}>
             <Button
               title={t('onb.location.cta')}
-              onPress={async () => setStep((await requestForeground()) ? 'always' : 'notifications')}
+              onPress={async () => {
+                const ok = await requestForeground();
+                analytics.permission('location', ok);
+                setStep(ok ? 'always' : 'notifications');
+              }}
             />
-            <Button kind="secondary" title={t('onb.later')} onPress={() => setStep('notifications')} />
+            <Button kind="secondary" title={t('onb.later')} onPress={() => { analytics.permission('location', 'later'); setStep('notifications'); }} />
           </Screen>
         )}
 
         {step === 'always' && (
           <Screen title={t('onb.always.title')} text={t('onb.always.text')}>
-            <Button title={t('onb.always.cta')} onPress={async () => { await requestBackground(); setStep('notifications'); }} />
-            <Button kind="secondary" title={t('onb.always.skip')} onPress={() => setStep('notifications')} />
+            <Button title={t('onb.always.cta')} onPress={async () => { analytics.permission('background', await requestBackground()); setStep('notifications'); }} />
+            <Button kind="secondary" title={t('onb.always.skip')} onPress={() => { analytics.permission('background', 'later'); setStep('notifications'); }} />
           </Screen>
         )}
 
         {step === 'notifications' && (
           <Screen title={t('onb.notif.title')} text={t('onb.notif.text')}>
-            <Button title={t('onb.notif.cta')} onPress={async () => { await requestPermission(); setStep('categories'); }} />
-            <Button kind="secondary" title={t('onb.notif.skip')} onPress={() => setStep('categories')} />
+            <Button title={t('onb.notif.cta')} onPress={async () => { analytics.permission('push', await requestPermission()); setStep('categories'); }} />
+            <Button kind="secondary" title={t('onb.notif.skip')} onPress={() => { analytics.permission('push', 'later'); setStep('categories'); }} />
           </Screen>
         )}
 

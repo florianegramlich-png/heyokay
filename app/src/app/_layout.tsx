@@ -3,13 +3,14 @@ import * as Notifications from 'expo-notifications';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
-import { Pressable, Text } from 'react-native';
+import { AppState, Pressable, Text } from 'react-native';
 import { ErrorScreen } from '../components/ErrorScreen';
 import { initCrashReporting } from '../lib/crash';
 import { loadLanguage, useI18n } from '../lib/i18n';
 import { flushPendingFeedback } from '../lib/feedback-queue';
 import { handleResponse, registerNotificationTask, setupCategories, setupChannels } from '../lib/notifications';
 import { colors } from '../lib/theme';
+import { analytics, checkPushPermission } from '../lib/track';
 
 // expo-router renders this when any screen below throws (PRD 5.3 crash reporting).
 export const ErrorBoundary = ErrorScreen;
@@ -37,7 +38,13 @@ export default function RootLayout() {
     // Cold start from a notification tap, then taps while running.
     Notifications.getLastNotificationResponseAsync().then(open);
     const sub = Notifications.addNotificationResponseReceivedListener(open);
-    return () => sub.remove();
+    // Anonymous count when notifications were switched off in the phone's settings (PRD 13).
+    void checkPushPermission().catch(() => null);
+    const state = AppState.addEventListener('change', (s) => {
+      if (s === 'active') void checkPushPermission().catch(() => null);
+      if (s === 'background') void analytics.flush();
+    });
+    return () => { sub.remove(); state.remove(); };
   }, [router]);
 
   return (
