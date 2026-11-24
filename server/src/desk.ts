@@ -34,12 +34,13 @@ export const DESK_HTML = `<!doctype html>
   </section>
   <div id="desk" hidden>
   <section><h2>Last 7 days</h2><div class="metrics" id="metrics">Loading…</div></section>
+  <section><h2>KPIs (last 7 days)</h2><p class="muted">The launch KPIs and their red lines (PRD 13), from the server's own data: totals only, no analytics service.</p><div id="kpis"></div></section>
   <section><h2>Waiting for review</h2><p class="muted">Severity 4+ from non-official sources, and anything the AI was unsure about. Nothing here reaches users until approved. Every decision also becomes a label for the AI eval set.</p><div id="pending"></div><p class="row"><button onclick="exportLabels()">Download reviewed cases (eval set)</button><span class="muted">For <code>server/eval/cases/</code>. Remove names and personal details before committing.</span></p></section>
   <section><h2>Sources</h2><p class="muted">Every feed the worker polls, by country. Failing = the last poll failed; stale = no successful poll for 3 intervals. A fallback takes over where one is listed.</p><div id="sources"></div></section>
   <section><h2>Decision log</h2><p class="muted">Every step the pipeline took and every action here: how an item was read (model, prompt version), the review gate, the alert text and the verifier, who got it (as counts), approvals and rejections with the reviewer who made them. Nothing about the people who get alerts.</p>
     <div class="row"><input id="dEvent" placeholder="Event id (optional)" style="max-width:320px"><select id="dKind" style="max-width:180px"><option value="">All steps</option><option>extract</option><option>review_gate</option><option>compose</option><option>rank</option><option>desk</option></select>
       <button onclick="loadDecisions()">Show</button><button onclick="decisionsCsv()">Download CSV</button></div><div id="decisions"></div></section>
-  <section><h2>Active events</h2><p class="muted">Released events that haven't ended. "End now" sends an all-clear to everyone who got the alert.</p><div id="active"></div></section>
+  <section><h2>Active events</h2><p class="muted">Released events that haven't ended. "End now" sends an all-clear to everyone who got the alert; "Retract" does the same for an alert that was wrong, and counts it as a false alert.</p><div id="active"></div></section>
   <section><h2>Send a curated alert (concierge pilot)</h2>
     <form id="manual" onsubmit="sendManual(event)">
       <div><label>Category</label><select name="category"><option>transit</option><option>crime</option><option>public_safety</option><option>weather</option><option>health</option><option>infrastructure</option><option>recall</option><option>events</option></select></div>
@@ -102,6 +103,10 @@ async function load(){
     const mins=(s)=>s==null?'—':(s<60?s+' s':(s/60).toFixed(1)+' min');
     $('#metrics').innerHTML+=[['Review time (median)',mins(rt.medianS)],['Reviews within 3 min',pct(rt.withinTarget)+' of '+rt.reviews]]
       .map(([k,v])=>'<div class="metric"><b>'+v+'</b><span>'+k+'</span></div>').join('');
+    const {kpis}=await api('/admin/api/kpis');
+    const kv=(k)=>k.value==null?'—':k.unit==='rate'?pct(k.value):k.unit==='per_day'?k.value.toFixed(2):mins(Math.round(k.value));
+    const kl=(k)=>!k.redLine?'':(k.redLine.bad==='below'?'red line below ':'red line above ')+(k.unit==='rate'?pct(k.redLine.value):k.redLine.value);
+    $('#kpis').innerHTML='<table><tr><th>KPI</th><th>Value</th><th>Red line</th><th>Based on</th></tr>'+kpis.map(k=>'<tr><td>'+esc(k.label)+'</td><td class="'+(k.red?'h-failing':'')+'">'+kv(k)+(k.red?' ⚠':'')+'</td><td class="muted">'+kl(k)+'</td><td class="muted">'+k.basedOn+'</td></tr>').join('')+'</table>';
     const {events}=await api('/admin/api/pending');
     $('#pending').innerHTML=events.length?events.map(e=>\`
       <div class="ev" id="ev-\${e.id}">
@@ -122,10 +127,10 @@ async function load(){
     $('#active').innerHTML=act.length?act.map(e=>\`
       <div class="ev"><div class="row"><span class="sev s\${e.severity}">\${e.severity}</span> <b>\${esc(e.copyTitle||e.title)}</b>
         <span class="muted">· \${esc(e.category)} · \${esc((e.areaName||'').slice(0,60))}\${e.endsAt?' · until '+new Date(e.endsAt).toLocaleString():''}</span>
-        <button class="reject" onclick="endEvent('\${e.id}')">End now (all clear)</button></div></div>\`).join(''):'<p class="muted">No active events.</p>';
+        <button onclick="endEvent('\${e.id}','over')">End now (all clear)</button><button class="reject" onclick="endEvent('\${e.id}','false_alert')">Retract (false alert)</button></div></div>\`).join(''):'<p class="muted">No active events.</p>';
   }catch(e){$('#metrics').textContent='Could not load: '+e.message;}
 }
-async function endEvent(id){if(!confirm('End this event and send an all-clear?'))return;const r=await api('/admin/api/events/'+id+'/end',{method:'POST'});alert('All-clear: '+r.alerts+' alerts, '+r.pushes+' pushes');load();}
+async function endEvent(id,reason){if(!confirm(reason==='false_alert'?'Retract this alert as a false alert? Everyone who got it gets an all-clear, and it counts toward the false alert rate.':'End this event and send an all-clear?'))return;const r=await api('/admin/api/events/'+id+'/end',{method:'POST',body:JSON.stringify({reason})});alert('All-clear: '+r.alerts+' alerts, '+r.pushes+' pushes');load();}
 async function approve(id){const t=$('#t-'+id).value,b=$('#b-'+id).value,s=Number($('#s-'+id).value);
   const r=await api('/admin/api/events/'+id+'/approve',{method:'POST',body:JSON.stringify({...(t&&{title:t}),...(b&&{body:b}),severity:s})});
   alert('Sent: '+r.alerts+' alerts, '+r.pushes+' pushes');load();loadDecisions();}

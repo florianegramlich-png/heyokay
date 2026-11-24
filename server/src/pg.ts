@@ -7,7 +7,7 @@ import type {
 import { DEFAULT_PREFS, normalizePrefs, savedPrefs } from './types.js';
 import { hashToken } from './db.js';
 import { LOCATION_MAX_AGE_MS, MAX_PLACE_RADIUS_M } from './geo.js';
-import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type AccountIdentity, type IdentityProvider, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob, type LlmUsageDay, type DecisionQuery, decisionLimit } from './store.js';
+import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type AccountIdentity, type IdentityProvider, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob, type LlmUsageDay, type DecisionQuery, type KpiInputs, decisionLimit } from './store.js';
 import type { PushTicket } from './push.js';
 import type { SourceStatus } from './ingest.js';
 
@@ -179,6 +179,14 @@ export const MIGRATIONS: { version: number; sql: string }[] = [
       CREATE TABLE reviewers (id uuid PRIMARY KEY, email text NOT NULL UNIQUE, name text NOT NULL, password_hash text NOT NULL, created_at timestamptz NOT NULL, disabled boolean NOT NULL DEFAULT false);
       CREATE TABLE reviewer_sessions (token_hash text PRIMARY KEY, reviewer_id uuid NOT NULL REFERENCES reviewers(id) ON DELETE CASCADE, expires_at timestamptz NOT NULL);
       CREATE INDEX reviewer_sessions_reviewer ON reviewer_sessions(reviewer_id);
+    `,
+  },
+  {
+    // Product KPIs (PRD 13): when someone last used the app, and when an alert was first opened.
+    version: 15,
+    sql: `
+      ALTER TABLE users ADD COLUMN last_seen_at timestamptz;
+      ALTER TABLE alerts ADD COLUMN opened_at timestamptz;
     `,
   },
 ];
@@ -656,6 +664,27 @@ export class PgStore implements Store {
   }
 
   // ── AI spend ─────────────────────────────────────────────────────────────
+  async markSeen(userId: string, nowIso: string): Promise<void> {
+    await this.q(`UPDATE users SET last_seen_at = $2 WHERE id = $1 AND (last_seen_at IS NULL OR last_seen_at < $2::timestamptz - interval '1 hour')`, [userId, nowIso]);
+  }
+
+  async markAlertOpened(userId: string, alertId: string, nowIso: string): Promise<void> {
+    await this.q(`UPDATE alerts SET opened_at = $3 WHERE id = $1 AND user_id = $2 AND opened_at IS NULL`, [alertId, userId, nowIso]);
+  }
+
+  async kpiInputs(sinceIso: string): Promise<KpiInputs> {
+    const a = await this.q(`
+      SELECT a.event_id, a.user_id, a.data, a.delivery, a.feedback, a.created_at, a.opened_at, e.starts_at
+      FROM alerts a LEFT JOIN events e ON e.id = a.event_id WHERE a.created_at >= $1`, [sinceIso]);
+    const iso = (v: unknown) => (v == null ? null : new Date(v as string).toISOString());
+    const alerts = a.rows.map((r) => {
+      const d = r.data as Alert;
+      return { eventId: r.event_id, userId: r.user_id, kind: d.kind ?? 'new', delivery: r.delivery, feedback: r.feedback ?? null, official: !!d.official, createdAt: iso(r.created_at)!, openedAt: iso(r.opened_at), eventStartsAt: iso(r.starts_at) };
+    });
+    const u = await this.q(`SELECT created_at, last_seen_at, push_token IS NOT NULL AS has_push FROM users`);
+    return { alerts, users: u.rows.map((r) => ({ createdAt: iso(r.created_at)!, lastSeenAt: iso(r.last_seen_at), hasPush: !!r.has_push })) };
+  }
+
   async createReviewer(r: Reviewer): Promise<void> {
     await this.q(`INSERT INTO reviewers (id, email, name, password_hash, created_at, disabled) VALUES ($1,$2,$3,$4,$5,$6)`,
       [r.id, r.email, r.name, r.passwordHash, r.createdAt, r.disabled]);

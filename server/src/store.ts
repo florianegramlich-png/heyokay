@@ -205,12 +205,25 @@ export interface Store {
   deleteReviewerSession(tokenHash: string): Promise<void>;
   deleteReviewerSessionsFor(reviewerId: string): Promise<void>;
 
+  // ── product KPIs (PRD 13) ──
+  /** The person used the app (foreground calls). Written at most once an hour. */
+  markSeen(userId: string, nowIso: string): Promise<void>;
+  /** First time the person opened this alert's detail (a push tap or a tap in the feed). */
+  markAlertOpened(userId: string, alertId: string, nowIso: string): Promise<void>;
+  /** Raw inputs for computeKpis: first alerts since `sinceIso` and every person's dates. */
+  kpiInputs(sinceIso: string): Promise<KpiInputs>;
+
   // ── decision log (PRD 6.3) ──
   recordDecision(d: Decision): Promise<void>;
   /** Newest first. */
   decisions(q: DecisionQuery): Promise<Decision[]>;
 
   close(): Promise<void>;
+}
+
+export interface KpiInputs {
+  alerts: Array<{ eventId: string; userId: string; kind: string; delivery: string; feedback: string | null; official: boolean; createdAt: string; openedAt: string | null; eventStartsAt: string | null }>;
+  users: Array<{ createdAt: string; lastSeenAt: string | null; hasPush: boolean }>;
 }
 
 export interface DecisionQuery {

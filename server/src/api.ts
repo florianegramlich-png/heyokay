@@ -10,6 +10,7 @@ import { CATEGORIES, DECISION_KINDS, DEFAULT_PREFS, UI_LANGUAGES, contentLanguag
 import { DESK_HTML } from './desk.js';
 import { deskCases } from './eval/desk-export.js';
 import { decisionsCsv } from './decisions.js';
+import { computeKpis } from './kpis.js';
 import { LoginLimiter, MIN_PASSWORD_LENGTH, SESSION_HOURS, clearedCookie, dummyHash, hashPassword, newSessionToken, readCookie, reviewTimes, sessionCookie, tokenEquals, verifyPassword } from './desk-auth.js';
 import { sourceReport } from './sources/registry.js';
 import { MAX_PLACE_RADIUS_M, distanceM } from './geo.js';
@@ -280,6 +281,8 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
   // ── alerts ───────────────────────────────────────────────────────────────
   app.get('/v1/me/alerts', async (req, reply) => {
     const u = await authed(req, reply); if (!u) return;
+    // The feed is loaded in the foreground only (background tasks send locations): the person used the app.
+    await store.markSeen(u.id, clock().toISOString()).catch((e) => logError('kpis', e));
     const limit = Math.min(Number((req.query as any)?.limit ?? 50), 200);
     // `ended`: the event is over (ran out or was lifted) — the app greys these out.
     const now = clock().getTime();
@@ -303,6 +306,7 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
   });
   app.get('/v1/me/history', async (req, reply) => {
     const u = await authed(req, reply); if (!u) return;
+    await store.markSeen(u.id, clock().toISOString()).catch((e) => logError('kpis', e));
     const query = HistoryQuerySchema.parse(req.query ?? {});
     const now = clock().getTime();
     const found = searchHistory(await store.alertsForUser(u.id, HISTORY_SCAN), query);
@@ -318,6 +322,9 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
     const u = await authed(req, reply); if (!u) return;
     const alert = await store.getAlert(u.id, (req.params as any).id);
     if (!alert) return reply.code(404).send({ error: 'not_found' });
+    // Product KPIs (PRD 13): opened, and the person used the app. Never block the answer on it.
+    const nowIso = clock().toISOString();
+    await Promise.all([store.markAlertOpened(u.id, alert.id, nowIso), store.markSeen(u.id, nowIso)]).catch((e) => logError('kpis', e));
     const event = await store.getEvent(alert.eventId);
     return { alert, sources: event?.sources ?? [], summary: event?.summary ?? '', endsAt: event?.endsAt ?? null };
   });
@@ -417,6 +424,18 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
     return { ok: true };
   });
 
+  /** Product KPIs with the PRD's red lines (section 13), over the last `days` (default 7). */
+  app.get('/admin/api/kpis', async (req, reply) => {
+    const actor = await admin(req, reply); if (!actor) return;
+    const { days } = z.object({ days: z.coerce.number().int().min(1).max(90).default(7) }).parse(req.query ?? {});
+    const now = clock();
+    const sinceIso = new Date(now.getTime() - days * 86_400_000).toISOString();
+    // Retractions can come after the alert; look back further than the period.
+    const retracted = (await store.decisions({ kind: 'desk', since: new Date(now.getTime() - (days + 30) * 86_400_000).toISOString(), limit: 10_000 }))
+      .filter((d) => d.outcome === 'ended' && d.detail.reason === 'false_alert' && d.eventId).map((d) => d.eventId!);
+    return { days, kpis: computeKpis(await store.kpiInputs(sinceIso), { sinceIso, now, falseAlertEvents: new Set(retracted) }) };
+  });
+
   /** Review time (target < 3 min) over the last `days` (default 7). */
   app.get('/admin/api/review-time', async (req, reply) => {
     const actor = await admin(req, reply); if (!actor) return;
@@ -477,7 +496,8 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
   /** End an active event now and send the all-clear to everyone who got it. */
   app.post('/admin/api/events/:id/end', async (req, reply) => {
     const actor = await admin(req, reply); if (!actor) return;
-    const out = await pipeline.endEvent((req.params as any).id, actor);
+    const { reason } = z.object({ reason: z.enum(['over', 'false_alert']).default('over') }).parse(req.body ?? {});
+    const out = await pipeline.endEvent((req.params as any).id, actor, reason);
     if (!out) return reply.code(404).send({ error: 'not_found' });
     return out;
   });

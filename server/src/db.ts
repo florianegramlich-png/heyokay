@@ -5,7 +5,7 @@ import type {
   Alert, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
 } from './types.js';
 import { DEFAULT_PREFS, normalizePrefs, savedPrefs } from './types.js';
-import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type AccountIdentity, type IdentityProvider, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob, type LlmUsageDay, type DecisionQuery, decisionLimit } from './store.js';
+import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type AccountIdentity, type IdentityProvider, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob, type LlmUsageDay, type DecisionQuery, type KpiInputs, decisionLimit } from './store.js';
 import type { PushTicket } from './push.js';
 import type { SourceStatus } from './ingest.js';
 import { distanceM, LOCATION_MAX_AGE_MS } from './geo.js';
@@ -100,6 +100,10 @@ export class SqliteStore implements Store {
       INSERT OR IGNORE INTO devices (token_hash, user_id, created_at) SELECT token_hash, id, created_at FROM users;
       PRAGMA foreign_keys = ON;
     `);
+    // Columns added after launch (SQLite has no migrations here): add if missing.
+    for (const sql of [`ALTER TABLE users ADD COLUMN last_seen_at TEXT`, `ALTER TABLE alerts ADD COLUMN opened_at TEXT`]) {
+      try { this.db.exec(sql); } catch (e) { if (!/duplicate column/i.test((e as Error).message)) throw e; }
+    }
   }
 
   // ── users ────────────────────────────────────────────────────────────────
@@ -474,6 +478,28 @@ export class SqliteStore implements Store {
   async llmUsage(fromDay: string): Promise<LlmUsageDay[]> {
     return (this.db.prepare(`SELECT * FROM llm_usage WHERE day >= ? ORDER BY day`).all(fromDay) as any[])
       .map((r) => ({ day: r.day, calls: r.calls, inputTokens: r.input_tokens, outputTokens: r.output_tokens, eur: r.eur, skipped: r.skipped }));
+  }
+
+  // ── product KPIs ─────────────────────────────────────────────────────────
+  async markSeen(userId: string, nowIso: string): Promise<void> {
+    const hourAgo = new Date(Date.parse(nowIso) - 3600_000).toISOString();
+    this.db.prepare(`UPDATE users SET last_seen_at = ? WHERE id = ? AND (last_seen_at IS NULL OR last_seen_at < ?)`).run(nowIso, userId, hourAgo);
+  }
+
+  async markAlertOpened(userId: string, alertId: string, nowIso: string): Promise<void> {
+    this.db.prepare(`UPDATE alerts SET opened_at = ? WHERE id = ? AND user_id = ? AND opened_at IS NULL`).run(nowIso, alertId, userId);
+  }
+
+  async kpiInputs(sinceIso: string): Promise<KpiInputs> {
+    const alerts = (this.db.prepare(`
+      SELECT a.event_id, a.user_id, a.data, a.delivery, a.feedback, a.created_at, a.opened_at, e.starts_at
+      FROM alerts a LEFT JOIN events e ON e.id = a.event_id WHERE a.created_at >= ?`).all(sinceIso) as any[]).map((r) => {
+      const d = JSON.parse(r.data) as Alert;
+      return { eventId: r.event_id, userId: r.user_id, kind: d.kind ?? 'new', delivery: r.delivery, feedback: r.feedback ?? null, official: !!d.official, createdAt: r.created_at, openedAt: r.opened_at ?? null, eventStartsAt: r.starts_at ?? null };
+    });
+    const users = (this.db.prepare(`SELECT created_at, last_seen_at, push_token IS NOT NULL AS has_push FROM users`).all() as any[])
+      .map((r) => ({ createdAt: r.created_at, lastSeenAt: r.last_seen_at ?? null, hasPush: !!r.has_push }));
+    return { alerts, users };
   }
 
   // ── reviewers ────────────────────────────────────────────────────────────

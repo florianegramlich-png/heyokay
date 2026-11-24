@@ -262,10 +262,11 @@ export class Pipeline {
   }
 
   /** Alert Desk: end an event now and send the all-clear. */
-  async endEvent(eventId: string, actor = 'desk') {
+  /** `reason`: 'over' (it ended early) or 'false_alert' (it should never have gone out; counts toward the false alert rate). */
+  async endEvent(eventId: string, actor = 'desk', reason: 'over' | 'false_alert' = 'over') {
     const e = await this.d.store.getEvent(eventId);
     if (!e) return null;
-    await this.log.record({ kind: 'desk', actor, eventId, outcome: 'ended', detail: { status: e.status, severity: e.severity } });
+    await this.log.record({ kind: 'desk', actor, eventId, outcome: 'ended', detail: { reason, status: e.status, severity: e.severity } });
     return this.allClear(e);
   }
 
