@@ -136,6 +136,8 @@ export interface RiskEvent {
   onsetAt?: string;
   /** ISO country (countries.ts) — decides emergency numbers and units. Missing = inferred from language. */
   country?: CountryCode;
+  /** When it last went to the Alert Desk, for the review-time metric. */
+  reviewRequestedAt?: string;
 }
 
 export interface AlertCopy {
@@ -292,4 +294,14 @@ export interface Decision {
   /** Short result: "alert", "dropped", "pending_review", "approved", "template", … */
   outcome: string;
   detail: Record<string, unknown>;
+}
+
+/** Alert Desk reviewer (PRD 6.2 step 5). The password is only ever stored as a scrypt hash. */
+export interface Reviewer {
+  id: string;
+  email: string;
+  name: string;
+  passwordHash: string;
+  createdAt: string;
+  disabled: boolean;
 }

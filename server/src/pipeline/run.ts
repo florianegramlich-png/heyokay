@@ -61,6 +61,12 @@ export class Pipeline {
   }
   private now() { return this.d.now?.() ?? new Date(); }
 
+  /** Seconds the event waited at the desk, when this decision ends a wait. */
+  private reviewSeconds(e: RiskEvent): Record<string, number> {
+    if (e.status !== 'pending_review' || !e.reviewRequestedAt) return {};
+    return { reviewSeconds: Math.max(0, Math.round((this.now().getTime() - Date.parse(e.reviewRequestedAt)) / 1000)) };
+  }
+
   private logCompose(event: RiskEvent, t: ComposeTrace | null, actor = 'pipeline') {
     if (!t) return Promise.resolve();
     return this.log.record({
@@ -119,6 +125,7 @@ export class Pipeline {
         if (escalated && !event.official && event.severity >= this.d.config.reviewSeverity && event.status !== 'pending_review') {
           const from = event.status;
           event.status = 'pending_review';
+          event.reviewRequestedAt = this.now().toISOString();
           r.sentToReview++;
           gate = { outcome: 'pending_review', detail: { reason: `escalated to severity ${event.severity} (review from ${this.d.config.reviewSeverity})`, from } };
         }
@@ -127,7 +134,7 @@ export class Pipeline {
         const needsReview = !item.official &&
           (ext.confidence < this.d.config.reviewConfidence || ext.severity >= this.d.config.reviewSeverity);
         event = newEvent(ext, item, needsReview ? 'pending_review' : 'auto', this.now());
-        if (needsReview) r.sentToReview++;
+        if (needsReview) { r.sentToReview++; event.reviewRequestedAt = this.now().toISOString(); }
         r.eventsCreated++;
         note(event.id, 'touched');
         const reasons = item.official ? ['official source'] : [
@@ -255,10 +262,10 @@ export class Pipeline {
   }
 
   /** Alert Desk: end an event now and send the all-clear. */
-  async endEvent(eventId: string) {
+  async endEvent(eventId: string, actor = 'desk') {
     const e = await this.d.store.getEvent(eventId);
     if (!e) return null;
-    await this.log.record({ kind: 'desk', actor: 'desk', eventId, outcome: 'ended', detail: { status: e.status, severity: e.severity } });
+    await this.log.record({ kind: 'desk', actor, eventId, outcome: 'ended', detail: { status: e.status, severity: e.severity } });
     return this.allClear(e);
   }
 
@@ -468,12 +475,12 @@ export class Pipeline {
   }
 
   // ── Alert Desk (human review) ─────────────────────────────────────────────
-  async approve(eventId: string, edits?: { title?: string; body?: string; severity?: Severity }) {
+  async approve(eventId: string, edits?: { title?: string; body?: string; severity?: Severity }, actor = 'desk') {
     const e = await this.d.store.getEvent(eventId);
     if (!e) return null;
     await this.log.record({
-      kind: 'desk', actor: 'desk', eventId, outcome: 'approved',
-      detail: { from: e.status, severity: edits?.severity ?? e.severity, ...(edits?.severity && edits.severity !== e.severity ? { severityWas: e.severity } : {}), editedTitle: !!edits?.title, editedBody: !!edits?.body },
+      kind: 'desk', actor, eventId, outcome: 'approved',
+      detail: { from: e.status, ...this.reviewSeconds(e), severity: edits?.severity ?? e.severity, ...(edits?.severity && edits.severity !== e.severity ? { severityWas: e.severity } : {}), editedTitle: !!edits?.title, editedBody: !!edits?.body },
     });
     e.status = 'approved';
     if (edits?.severity && edits.severity !== e.severity) {
@@ -484,7 +491,7 @@ export class Pipeline {
       // Write the AI copy first, so the reviewer's edits override it rather than being overwritten.
       let t: ComposeTrace | null = null;
       const copy = await compose(e, this.d.llm, (x) => { t = x; });
-      await this.logCompose(e, t);
+      await this.logCompose(e, t, actor);
       e.copyTitle = copy.title; e.copyBody = copy.body; e.copyAction = copy.action; e.copyIsTemplate = copy.isTemplate;
     }
     if (edits?.title) { e.copyTitle = edits.title.slice(0, 50); e.copyIsTemplate = true; }
@@ -494,10 +501,10 @@ export class Pipeline {
     return this.deliver(e);
   }
 
-  async reject(eventId: string) {
+  async reject(eventId: string, actor = 'desk') {
     const e = await this.d.store.getEvent(eventId);
     if (!e) return false;
-    await this.log.record({ kind: 'desk', actor: 'desk', eventId, outcome: 'rejected', detail: { from: e.status, severity: e.severity, category: e.category } });
+    await this.log.record({ kind: 'desk', actor, eventId, outcome: 'rejected', detail: { from: e.status, ...this.reviewSeconds(e), severity: e.severity, category: e.category } });
     e.status = 'rejected';
     e.updatedAt = this.now().toISOString();
     await this.d.store.saveEvent(e);
@@ -508,7 +515,7 @@ export class Pipeline {
   async manualAlert(input: {
     category: Category; severity: Severity; title: string; body: string; sourceName: string; sourceUrl?: string;
     lat: number; lon: number; radiusM: number; areaName: string; endsAt?: string; language?: 'de' | 'en';
-  }) {
+  }, actor = 'desk') {
     const item: SourceItem = {
       source: 'manual', sourceName: input.sourceName, externalId: `manual:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`,
       official: false, title: input.title, body: input.body, url: input.sourceUrl, publishedAt: this.now().toISOString(),
@@ -526,7 +533,7 @@ export class Pipeline {
     event.copyIsTemplate = true;
     event.copyAction = recommendedAction(event.category, event.severity, event.language, undefined, packFor(event));
     await this.d.store.saveEvent(event);
-    await this.log.record({ kind: 'desk', actor: 'desk', eventId: event.id, sourceRef: item.externalId, outcome: 'manual_alert', detail: { category: event.category, severity: event.severity, title: event.copyTitle, areaName: event.areaName } });
+    await this.log.record({ kind: 'desk', actor, eventId: event.id, sourceRef: item.externalId, outcome: 'manual_alert', detail: { category: event.category, severity: event.severity, title: event.copyTitle, areaName: event.areaName } });
     const out = await this.deliver(event);
     return { eventId: event.id, ...out };
   }

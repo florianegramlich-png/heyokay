@@ -1,7 +1,7 @@
 import pg from 'pg';
 import { randomUUID, randomBytes } from 'node:crypto';
 import type {
-  Decision,
+  Decision, Reviewer,
   Alert, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
 } from './types.js';
 import { DEFAULT_PREFS, normalizePrefs, savedPrefs } from './types.js';
@@ -170,6 +170,15 @@ export const MIGRATIONS: { version: number; sql: string }[] = [
       CREATE TABLE decisions (id uuid PRIMARY KEY, seq bigserial, at timestamptz NOT NULL, kind text NOT NULL, event_id text, data jsonb NOT NULL);
       CREATE INDEX decisions_at ON decisions(at);
       CREATE INDEX decisions_event ON decisions(event_id, at);
+    `,
+  },
+  {
+    // Alert Desk accounts: one login per reviewer instead of the shared token.
+    version: 14,
+    sql: `
+      CREATE TABLE reviewers (id uuid PRIMARY KEY, email text NOT NULL UNIQUE, name text NOT NULL, password_hash text NOT NULL, created_at timestamptz NOT NULL, disabled boolean NOT NULL DEFAULT false);
+      CREATE TABLE reviewer_sessions (token_hash text PRIMARY KEY, reviewer_id uuid NOT NULL REFERENCES reviewers(id) ON DELETE CASCADE, expires_at timestamptz NOT NULL);
+      CREATE INDEX reviewer_sessions_reviewer ON reviewer_sessions(reviewer_id);
     `,
   },
 ];
@@ -647,6 +656,47 @@ export class PgStore implements Store {
   }
 
   // ── AI spend ─────────────────────────────────────────────────────────────
+  async createReviewer(r: Reviewer): Promise<void> {
+    await this.q(`INSERT INTO reviewers (id, email, name, password_hash, created_at, disabled) VALUES ($1,$2,$3,$4,$5,$6)`,
+      [r.id, r.email, r.name, r.passwordHash, r.createdAt, r.disabled]);
+  }
+
+  async reviewerByEmail(email: string): Promise<Reviewer | null> {
+    const { rows } = await this.q(`SELECT * FROM reviewers WHERE email = $1`, [email]);
+    return rows[0] ? pgReviewer(rows[0]) : null;
+  }
+
+  async reviewers(): Promise<Reviewer[]> {
+    const { rows } = await this.q(`SELECT * FROM reviewers ORDER BY created_at, email`);
+    return rows.map(pgReviewer);
+  }
+
+  async updateReviewer(id: string, patch: Partial<Pick<Reviewer, 'name' | 'passwordHash' | 'disabled'>>): Promise<boolean> {
+    const { rowCount } = await this.q(
+      `UPDATE reviewers SET name = COALESCE($2, name), password_hash = COALESCE($3, password_hash), disabled = COALESCE($4, disabled) WHERE id = $1`,
+      [id, patch.name ?? null, patch.passwordHash ?? null, patch.disabled ?? null]);
+    return (rowCount ?? 0) > 0;
+  }
+
+  async createReviewerSession(tokenHash: string, reviewerId: string, expiresAt: string): Promise<void> {
+    await this.q(`INSERT INTO reviewer_sessions (token_hash, reviewer_id, expires_at) VALUES ($1,$2,$3)`, [tokenHash, reviewerId, expiresAt]);
+  }
+
+  async reviewerBySession(tokenHash: string, nowIso: string): Promise<Reviewer | null> {
+    const { rows } = await this.q(
+      `SELECT r.* FROM reviewer_sessions s JOIN reviewers r ON r.id = s.reviewer_id WHERE s.token_hash = $1 AND s.expires_at > $2 AND NOT r.disabled`,
+      [tokenHash, nowIso]);
+    return rows[0] ? pgReviewer(rows[0]) : null;
+  }
+
+  async deleteReviewerSession(tokenHash: string): Promise<void> {
+    await this.q(`DELETE FROM reviewer_sessions WHERE token_hash = $1`, [tokenHash]);
+  }
+
+  async deleteReviewerSessionsFor(reviewerId: string): Promise<void> {
+    await this.q(`DELETE FROM reviewer_sessions WHERE reviewer_id = $1`, [reviewerId]);
+  }
+
   async recordDecision(d: Decision): Promise<void> {
     await this.q(`INSERT INTO decisions (id, at, kind, event_id, data) VALUES ($1,$2,$3,$4,$5::jsonb) ON CONFLICT (id) DO NOTHING`,
       [d.id, d.at, d.kind, d.eventId, JSON.stringify(d)]);
@@ -776,4 +826,8 @@ function rowToUser(r: any): User {
 function toVector(v: number[]): string {
   if (!v.every((x) => Number.isFinite(x))) throw new Error('embedding contains a non-finite value');
   return `[${v.join(',')}]`;
+}
+
+function pgReviewer(r: any): Reviewer {
+  return { id: r.id, email: r.email, name: r.name, passwordHash: r.password_hash, createdAt: new Date(r.created_at).toISOString(), disabled: !!r.disabled };
 }

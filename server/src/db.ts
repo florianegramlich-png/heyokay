@@ -1,7 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { randomUUID, createHash, randomBytes } from 'node:crypto';
 import type {
-  Decision,
+  Decision, Reviewer,
   Alert, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
 } from './types.js';
 import { DEFAULT_PREFS, normalizePrefs, savedPrefs } from './types.js';
@@ -91,6 +91,8 @@ export class SqliteStore implements Store {
         user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, day TEXT NOT NULL, sent_at TEXT NOT NULL,
         PRIMARY KEY (user_id, day)
       );
+      CREATE TABLE IF NOT EXISTS reviewers (id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, name TEXT NOT NULL, password_hash TEXT NOT NULL, created_at TEXT NOT NULL, disabled INTEGER NOT NULL DEFAULT 0);
+      CREATE TABLE IF NOT EXISTS reviewer_sessions (token_hash TEXT PRIMARY KEY, reviewer_id TEXT NOT NULL REFERENCES reviewers(id) ON DELETE CASCADE, expires_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS decisions (id TEXT PRIMARY KEY, at TEXT NOT NULL, kind TEXT NOT NULL, event_id TEXT, data TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS decisions_at ON decisions(at);
       CREATE INDEX IF NOT EXISTS decisions_event ON decisions(event_id, at);
@@ -474,6 +476,46 @@ export class SqliteStore implements Store {
       .map((r) => ({ day: r.day, calls: r.calls, inputTokens: r.input_tokens, outputTokens: r.output_tokens, eur: r.eur, skipped: r.skipped }));
   }
 
+  // ── reviewers ────────────────────────────────────────────────────────────
+  async createReviewer(r: Reviewer): Promise<void> {
+    this.db.prepare(`INSERT INTO reviewers (id, email, name, password_hash, created_at, disabled) VALUES (?,?,?,?,?,?)`)
+      .run(r.id, r.email, r.name, r.passwordHash, r.createdAt, r.disabled ? 1 : 0);
+  }
+
+  async reviewerByEmail(email: string): Promise<Reviewer | null> {
+    const r = this.db.prepare(`SELECT * FROM reviewers WHERE email = ?`).get(email);
+    return r ? reviewerRow(r) : null;
+  }
+
+  async reviewers(): Promise<Reviewer[]> {
+    return (this.db.prepare(`SELECT * FROM reviewers ORDER BY created_at, email`).all() as any[]).map(reviewerRow);
+  }
+
+  async updateReviewer(id: string, patch: Partial<Pick<Reviewer, 'name' | 'passwordHash' | 'disabled'>>): Promise<boolean> {
+    const r: any = this.db.prepare(`SELECT * FROM reviewers WHERE id = ?`).get(id);
+    if (!r) return false;
+    this.db.prepare(`UPDATE reviewers SET name = ?, password_hash = ?, disabled = ? WHERE id = ?`)
+      .run(patch.name ?? r.name, patch.passwordHash ?? r.password_hash, (patch.disabled ?? !!r.disabled) ? 1 : 0, id);
+    return true;
+  }
+
+  async createReviewerSession(tokenHash: string, reviewerId: string, expiresAt: string): Promise<void> {
+    this.db.prepare(`INSERT INTO reviewer_sessions (token_hash, reviewer_id, expires_at) VALUES (?,?,?)`).run(tokenHash, reviewerId, expiresAt);
+  }
+
+  async reviewerBySession(tokenHash: string, nowIso: string): Promise<Reviewer | null> {
+    const r = this.db.prepare(`SELECT r.* FROM reviewer_sessions s JOIN reviewers r ON r.id = s.reviewer_id WHERE s.token_hash = ? AND s.expires_at > ? AND r.disabled = 0`).get(tokenHash, nowIso);
+    return r ? reviewerRow(r) : null;
+  }
+
+  async deleteReviewerSession(tokenHash: string): Promise<void> {
+    this.db.prepare(`DELETE FROM reviewer_sessions WHERE token_hash = ?`).run(tokenHash);
+  }
+
+  async deleteReviewerSessionsFor(reviewerId: string): Promise<void> {
+    this.db.prepare(`DELETE FROM reviewer_sessions WHERE reviewer_id = ?`).run(reviewerId);
+  }
+
   // ── decision log ─────────────────────────────────────────────────────────
   async recordDecision(d: Decision): Promise<void> {
     this.db.prepare(`INSERT INTO decisions (id, at, kind, event_id, data) VALUES (?,?,?,?,?) ON CONFLICT (id) DO NOTHING`)
@@ -543,6 +585,10 @@ export class SqliteStore implements Store {
 function iso(t: string): string {
   const ms = Date.parse(t);
   return Number.isNaN(ms) ? t : new Date(ms).toISOString();
+}
+
+function reviewerRow(r: any): Reviewer {
+  return { id: r.id, email: r.email, name: r.name, passwordHash: r.password_hash, createdAt: r.created_at, disabled: !!r.disabled };
 }
 
 export function hashToken(token: string): string {

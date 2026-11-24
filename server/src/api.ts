@@ -1,13 +1,16 @@
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
+import { randomUUID } from 'node:crypto';
+import { hashToken } from './db.js';
 import { POLLEN_UV_KEYS } from './sources/dwd-health.js';
 import cors from '@fastify/cors';
 import { z } from 'zod';
 import type { Store } from './store.js';
 import type { Pipeline } from './pipeline/run.js';
-import { CATEGORIES, DECISION_KINDS, DEFAULT_PREFS, UI_LANGUAGES, contentLanguage, stampConsent, type User } from './types.js';
+import { CATEGORIES, DECISION_KINDS, DEFAULT_PREFS, UI_LANGUAGES, contentLanguage, stampConsent, type Reviewer, type User } from './types.js';
 import { DESK_HTML } from './desk.js';
 import { deskCases } from './eval/desk-export.js';
 import { decisionsCsv } from './decisions.js';
+import { LoginLimiter, MIN_PASSWORD_LENGTH, SESSION_HOURS, clearedCookie, dummyHash, hashPassword, newSessionToken, readCookie, reviewTimes, sessionCookie, tokenEquals, verifyPassword } from './desk-auth.js';
 import { sourceReport } from './sources/registry.js';
 import { MAX_PLACE_RADIUS_M, distanceM } from './geo.js';
 import { AuthError, checkEmailCode, signIn, signInWithIdentity, signOut, startEmailSignIn, type Mailer } from './auth.js';
@@ -91,11 +94,31 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
     if (!user) reply.code(401).send({ error: 'unauthorized' });
     return user;
   };
-  const admin = (req: FastifyRequest, reply: FastifyReply) => {
+  /**
+   * Alert Desk access (PRD 6.2 step 5): the admin token, or a reviewer's session cookie plus the
+   * `x-desk` header. Returns who acts, for the decision log: 'desk' for the token, the reviewer's
+   * email otherwise.
+   */
+  const deskActor = async (req: FastifyRequest): Promise<{ actor: string; reviewer: Reviewer | null } | null> => {
     const t = (req.headers['x-admin-token'] as string) ?? (req.query as any)?.token;
-    if (t !== adminToken) { reply.code(401).send({ error: 'unauthorized' }); return false; }
-    return true;
+    if (t != null) return tokenEquals(t, adminToken) ? { actor: 'desk', reviewer: null } : null;
+    const cookie = readCookie(req.headers.cookie);
+    if (!cookie || req.headers['x-desk'] !== '1') return null;
+    const reviewer = await store.reviewerBySession(hashToken(cookie), clock().toISOString());
+    return reviewer ? { actor: reviewer.email, reviewer } : null;
   };
+  const admin = async (req: FastifyRequest, reply: FastifyReply): Promise<string | null> => {
+    const who = await deskActor(req);
+    if (!who) { reply.code(401).send({ error: 'unauthorized' }); return null; }
+    return who.actor;
+  };
+  /** Only the admin token (managing reviewers). */
+  const adminTokenOnly = (req: FastifyRequest, reply: FastifyReply) => {
+    if (tokenEquals(req.headers['x-admin-token'] as string | undefined, adminToken)) return true;
+    reply.code(403).send({ error: 'admin_token_required' });
+    return false;
+  };
+  const loginLimiter = new LoginLimiter();
 
   // Always 200 while the process is up (Fly's health check). `sources` shows which feeds last worked when.
   app.get('/health', async () => {
@@ -310,27 +333,103 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
   app.get('/admin', async (_req, reply) => reply.type('text/html').send(DESK_HTML));
 
   app.get('/admin/api/pending', async (req, reply) => {
-    if (!admin(req, reply)) return;
+    const actor = await admin(req, reply); if (!actor) return;
     return { events: await store.eventsByStatus('pending_review') };
   });
 
   app.get('/admin/api/active', async (req, reply) => {
-    if (!admin(req, reply)) return;
+    const actor = await admin(req, reply); if (!actor) return;
     return { events: await store.activeEvents(clock()) };
   });
 
   app.post('/admin/api/events/:id/approve', async (req, reply) => {
-    if (!admin(req, reply)) return;
+    const actor = await admin(req, reply); if (!actor) return;
     const edits = z.object({ title: z.string().max(50).optional(), body: z.string().max(100).optional(), severity: z.number().int().min(1).max(5).optional() })
       .parse(req.body ?? {});
-    const res = await pipeline.approve((req.params as any).id, edits as any);
+    const res = await pipeline.approve((req.params as any).id, edits as any, actor);
     if (!res) return reply.code(404).send({ error: 'not_found' });
     return res;
   });
 
   app.post('/admin/api/events/:id/reject', async (req, reply) => {
-    if (!admin(req, reply)) return;
-    return { ok: await pipeline.reject((req.params as any).id) };
+    const actor = await admin(req, reply); if (!actor) return;
+    return { ok: await pipeline.reject((req.params as any).id, actor) };
+  });
+
+  // ── Alert Desk accounts ──────────────────────────────────────────────────
+  app.post('/admin/api/login', async (req, reply) => {
+    const b = z.object({ email: z.string().email().max(200), password: z.string().min(1).max(200) }).parse(req.body);
+    const email = b.email.trim().toLowerCase();
+    const keys = [`email:${email}`, `ip:${req.ip}`];
+    const now = clock().getTime();
+    if (loginLimiter.blocked(keys, now)) return reply.code(429).send({ error: 'too_many_attempts' });
+    const r = await store.reviewerByEmail(email);
+    const ok = await verifyPassword(b.password, r?.passwordHash ?? await dummyHash());
+    if (!r || !ok || r.disabled) {
+      loginLimiter.fail(keys, now);
+      return reply.code(401).send({ error: 'wrong_email_or_password' });
+    }
+    loginLimiter.clear(keys);
+    const { token, tokenHash } = newSessionToken();
+    await store.createReviewerSession(tokenHash, r.id, new Date(now + SESSION_HOURS * 3600_000).toISOString());
+    reply.header('set-cookie', sessionCookie(token));
+    return { reviewer: { email: r.email, name: r.name } };
+  });
+
+  app.post('/admin/api/logout', async (req, reply) => {
+    const cookie = readCookie(req.headers.cookie);
+    if (cookie) await store.deleteReviewerSession(hashToken(cookie));
+    reply.header('set-cookie', clearedCookie());
+    return { ok: true };
+  });
+
+  /** Who is signed in (the desk shows the name and decides between login form and desk). */
+  app.get('/admin/api/me', async (req, reply) => {
+    const who = await deskActor(req);
+    if (!who) return reply.code(401).send({ error: 'unauthorized' });
+    return { actor: who.actor, reviewer: who.reviewer ? { email: who.reviewer.email, name: who.reviewer.name } : null, admin: !who.reviewer };
+  });
+
+  const publicReviewer = (r: Reviewer) => ({ id: r.id, email: r.email, name: r.name, createdAt: r.createdAt, disabled: r.disabled });
+  app.get('/admin/api/reviewers', async (req, reply) => {
+    if (!adminTokenOnly(req, reply)) return;
+    return { reviewers: (await store.reviewers()).map(publicReviewer) };
+  });
+
+  app.post('/admin/api/reviewers', async (req, reply) => {
+    if (!adminTokenOnly(req, reply)) return;
+    const b = z.object({ email: z.string().email().max(200), name: z.string().trim().min(1).max(100), password: z.string().min(MIN_PASSWORD_LENGTH).max(200) }).parse(req.body);
+    const email = b.email.trim().toLowerCase();
+    if (await store.reviewerByEmail(email)) return reply.code(409).send({ error: 'exists' });
+    const r: Reviewer = { id: randomUUID(), email, name: b.name, passwordHash: await hashPassword(b.password), createdAt: clock().toISOString(), disabled: false };
+    await store.createReviewer(r);
+    return publicReviewer(r);
+  });
+
+  /** Rename, new password, or switch off (signs them out everywhere). */
+  app.put('/admin/api/reviewers/:id', async (req, reply) => {
+    if (!adminTokenOnly(req, reply)) return;
+    const b = z.object({ name: z.string().trim().min(1).max(100).optional(), password: z.string().min(MIN_PASSWORD_LENGTH).max(200).optional(), disabled: z.boolean().optional() }).parse(req.body);
+    const id = (req.params as any).id as string;
+    const ok = await store.updateReviewer(id, { name: b.name, disabled: b.disabled, ...(b.password ? { passwordHash: await hashPassword(b.password) } : {}) });
+    if (!ok) return reply.code(404).send({ error: 'not_found' });
+    if (b.disabled || b.password) await store.deleteReviewerSessionsFor(id);
+    return { ok: true };
+  });
+
+  /** Review time (target < 3 min) over the last `days` (default 7). */
+  app.get('/admin/api/review-time', async (req, reply) => {
+    const actor = await admin(req, reply); if (!actor) return;
+    const { days } = z.object({ days: z.coerce.number().int().min(1).max(90).default(7) }).parse(req.query ?? {});
+    const since = new Date(clock().getTime() - days * 86_400_000).toISOString();
+    const rows = (await store.decisions({ kind: 'desk', since, limit: 10_000 })).filter((d) => typeof d.detail.reviewSeconds === 'number');
+    const byReviewer: Record<string, number[]> = {};
+    for (const d of rows) (byReviewer[d.actor] ??= []).push(d.detail.reviewSeconds as number);
+    return {
+      days,
+      ...reviewTimes(rows.map((d) => d.detail.reviewSeconds as number)),
+      byReviewer: Object.entries(byReviewer).map(([reviewer, s]) => ({ reviewer, ...reviewTimes(s) })),
+    };
   });
 
   /** Decision log (PRD 6.3): every pipeline step and Alert Desk action. JSON or CSV. */
@@ -341,11 +440,11 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
     limit: z.coerce.number().int().min(1).max(10_000).optional(),
   });
   app.get('/admin/api/decisions', async (req, reply) => {
-    if (!admin(req, reply)) return;
+    const actor = await admin(req, reply); if (!actor) return;
     return { decisions: await store.decisions(DecisionQ.parse(req.query ?? {})) };
   });
   app.get('/admin/api/decisions.csv', async (req, reply) => {
-    if (!admin(req, reply)) return;
+    const actor = await admin(req, reply); if (!actor) return;
     const q = DecisionQ.parse(req.query ?? {});
     const rows = await store.decisions({ ...q, limit: q.limit ?? 10_000 });
     reply.header('content-disposition', `attachment; filename="decisions-${clock().toISOString().slice(0, 10)}.csv"`);
@@ -354,7 +453,7 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
 
   /** Reviewed events as labelled cases for the AI eval set (server/eval/cases/, PRD 6.4). */
   app.get('/admin/api/eval-export', async (req, reply) => {
-    if (!admin(req, reply)) return;
+    const actor = await admin(req, reply); if (!actor) return;
     const { since } = z.object({ since: z.string().refine((s) => !Number.isNaN(Date.parse(s)), 'not a date').optional() }).parse(req.query ?? {});
     const events = [...(await store.eventsByStatus('approved')), ...(await store.eventsByStatus('rejected'))];
     const file = deskCases(events, { since, now: clock() });
@@ -364,7 +463,7 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
 
   /** Concierge pilot: send a hand-curated alert. */
   app.post('/admin/api/manual-alert', async (req, reply) => {
-    if (!admin(req, reply)) return;
+    const actor = await admin(req, reply); if (!actor) return;
     const b = z.object({
       category: z.enum(CATEGORIES), severity: z.number().int().min(1).max(5),
       title: z.string().min(3).max(50), body: z.string().min(3).max(100),
@@ -372,29 +471,29 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
       ...Coord, radiusM: z.number().min(100).max(50000), areaName: z.string().min(2), endsAt: z.string().optional(),
       language: z.enum(['de', 'en']).optional(),
     }).parse(req.body);
-    return pipeline.manualAlert(b as any);
+    return pipeline.manualAlert(b as any, actor);
   });
 
   /** End an active event now and send the all-clear to everyone who got it. */
   app.post('/admin/api/events/:id/end', async (req, reply) => {
-    if (!admin(req, reply)) return;
-    const out = await pipeline.endEvent((req.params as any).id);
+    const actor = await admin(req, reply); if (!actor) return;
+    const out = await pipeline.endEvent((req.params as any).id, actor);
     if (!out) return reply.code(404).send({ error: 'not_found' });
     return out;
   });
 
   app.post('/admin/api/ingest', async (req, reply) => {
-    if (!admin(req, reply)) return;
+    const actor = await admin(req, reply); if (!actor) return;
     return runIngest();
   });
 
   app.get('/admin/api/sources', async (req, reply) => {
-    if (!admin(req, reply)) return;
+    const actor = await admin(req, reply); if (!actor) return;
     return { sources: sourceReport(await store.sourceStatuses(), pollIntervalSec) };
   });
 
   app.get('/admin/api/ai-usage', async (req, reply) => {
-    if (!admin(req, reply)) return;
+    const actor = await admin(req, reply); if (!actor) return;
     const from = new Date(clock().getTime() - 29 * 86_400_000).toISOString().slice(0, 10);
     const days = await store.llmUsage(from);
     const today = clock().toISOString().slice(0, 10);
@@ -410,7 +509,7 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
   });
 
   app.get('/admin/api/metrics', async (req, reply) => {
-    if (!admin(req, reply)) return;
+    const actor = await admin(req, reply); if (!actor) return;
     const days = Number((req.query as any)?.days ?? 7);
     return await store.metrics(new Date(clock().getTime() - days * 86_400_000).toISOString());
   });

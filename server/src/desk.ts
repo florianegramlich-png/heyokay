@@ -6,7 +6,7 @@ export const DESK_HTML = `<!doctype html>
   :root{--navy:#0D1B2A;--teal:#0A7EA4;--bg:#F5F3EE;--card:#FFFDF9;--line:#E2DED5;--muted:#5A6470;--orange:#B8561A}
   *{box-sizing:border-box} body{margin:0;font:15px/1.45 Inter,system-ui,sans-serif;background:var(--bg);color:var(--navy)}
   header{background:var(--navy);color:#F5F3EE;padding:16px 24px;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
-  header h1{font-size:18px;margin:0;flex:1} header input{padding:8px;border-radius:8px;border:0;min-width:220px}
+  header h1{font-size:18px;margin:0;flex:1} #who{color:#c9d3dc;font-size:14px} [hidden]{display:none!important} #desk{display:grid;gap:24px} header input{padding:8px;border-radius:8px;border:0;min-width:220px}
   main{max-width:1100px;margin:0 auto;padding:24px;display:grid;gap:24px}
   section{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px}
   h2{margin:0 0 12px;font-size:16px} .metrics{display:flex;gap:24px;flex-wrap:wrap}
@@ -23,12 +23,20 @@ export const DESK_HTML = `<!doctype html>
   table{border-collapse:collapse;width:100%;font-size:13px} td,th{text-align:left;padding:6px 8px;border-top:1px solid var(--line)}
   .h-ok{color:var(--teal)} .h-failing{color:#8B1E1E;font-weight:700} .h-stale{color:var(--orange);font-weight:700} .h-waiting{color:var(--muted)}
 </style></head><body>
-<header><h1>Hey-Okay · Alert Desk</h1><input id="token" type="password" placeholder="Admin token"><button onclick="saveToken()">Connect</button><button onclick="ingest()">Run ingest now</button></header>
+<header><h1>Hey-Okay · Alert Desk</h1><span id="who"></span><button id="ingestBtn" onclick="ingest()" hidden>Run ingest now</button><button id="outBtn" onclick="logout()" hidden>Sign out</button></header>
 <main>
-  <section><h2>Last 7 days</h2><div class="metrics" id="metrics">Connect with your admin token.</div></section>
+  <section id="login"><h2>Sign in</h2>
+    <form onsubmit="login(event)" style="max-width:520px"><div><label>Email</label><input name="email" type="email" autocomplete="username" required></div>
+      <div><label>Password</label><input name="password" type="password" autocomplete="current-password" required></div>
+      <div style="align-self:end"><button>Sign in</button></div></form>
+    <p class="muted" id="loginOut"></p>
+    <details><summary class="muted">Admin token (setup and managing reviewers)</summary><div class="row" style="margin-top:8px"><input id="token" type="password" placeholder="Admin token" style="max-width:320px"><button onclick="saveToken()">Connect</button></div></details>
+  </section>
+  <div id="desk" hidden>
+  <section><h2>Last 7 days</h2><div class="metrics" id="metrics">Loading…</div></section>
   <section><h2>Waiting for review</h2><p class="muted">Severity 4+ from non-official sources, and anything the AI was unsure about. Nothing here reaches users until approved. Every decision also becomes a label for the AI eval set.</p><div id="pending"></div><p class="row"><button onclick="exportLabels()">Download reviewed cases (eval set)</button><span class="muted">For <code>server/eval/cases/</code>. Remove names and personal details before committing.</span></p></section>
   <section><h2>Sources</h2><p class="muted">Every feed the worker polls, by country. Failing = the last poll failed; stale = no successful poll for 3 intervals. A fallback takes over where one is listed.</p><div id="sources"></div></section>
-  <section><h2>Decision log</h2><p class="muted">Every step the pipeline took and every action here: how an item was read (model, prompt version), the review gate, the alert text and the verifier, who got it (as counts), approvals and rejections. No personal data.</p>
+  <section><h2>Decision log</h2><p class="muted">Every step the pipeline took and every action here: how an item was read (model, prompt version), the review gate, the alert text and the verifier, who got it (as counts), approvals and rejections with the reviewer who made them. Nothing about the people who get alerts.</p>
     <div class="row"><input id="dEvent" placeholder="Event id (optional)" style="max-width:320px"><select id="dKind" style="max-width:180px"><option value="">All steps</option><option>extract</option><option>review_gate</option><option>compose</option><option>rank</option><option>desk</option></select>
       <button onclick="loadDecisions()">Show</button><button onclick="decisionsCsv()">Download CSV</button></div><div id="decisions"></div></section>
   <section><h2>Active events</h2><p class="muted">Released events that haven't ended. "End now" sends an all-clear to everyone who got the alert.</p><div id="active"></div></section>
@@ -48,11 +56,37 @@ export const DESK_HTML = `<!doctype html>
       <div style="align-self:end"><button>Send to affected users</button></div>
     </form><p class="muted" id="manualOut"></p>
   </section>
+  <section id="reviewersBox" hidden><h2>Reviewers</h2><p class="muted">One login per person, so every approval names who made it. Only with the admin token. Passwords: at least 12 characters; switching someone off or setting a new password signs them out.</p>
+    <div id="reviewers"></div>
+    <form id="addReviewer" onsubmit="addReviewer(event)"><div><label>Email</label><input name="email" type="email" required></div><div><label>Name</label><input name="name" required></div>
+      <div><label>First password (≥ 12)</label><input name="password" type="password" minlength="12" autocomplete="new-password" required></div><div style="align-self:end"><button>Add reviewer</button></div></form><p class="muted" id="revOut"></p>
+  </section>
+  </div>
 </main>
 <script>
-const $=(s)=>document.querySelector(s); let TOKEN=localStorage.getItem('hok_admin')||''; $('#token').value=TOKEN;
-function saveToken(){TOKEN=$('#token').value;localStorage.setItem('hok_admin',TOKEN);load();loadDecisions();}
-async function api(path,opts={}){const r=await fetch(path,{...opts,headers:{'Content-Type':'application/json','x-admin-token':TOKEN,...(opts.headers||{})}});if(!r.ok)throw new Error(r.status+' '+(await r.text()));return r.json();}
+const $=(s)=>document.querySelector(s); let TOKEN=localStorage.getItem('hok_admin')||''; $('#token').value=TOKEN; let ME=null;
+const hdrs=(extra={})=>({'x-desk':'1',...(TOKEN?{'x-admin-token':TOKEN}:{}),...extra});
+// Content-Type only with a body: the server refuses an empty JSON body (Reject, End now, Run ingest send none).
+async function api(path,opts={}){const r=await fetch(path,{...opts,credentials:'same-origin',headers:hdrs({...(opts.body!=null?{'Content-Type':'application/json'}:{}),...(opts.headers||{})})});if(!r.ok)throw new Error(r.status+' '+(await r.text()));return r.json();}
+function saveToken(){TOKEN=$('#token').value;try{localStorage.setItem('hok_admin',TOKEN);}catch(e){}start();}
+async function start(){
+  try{ME=await api('/admin/api/me');}catch(e){ME=null;}
+  $('#login').hidden=!!ME; $('#desk').hidden=!ME; $('#ingestBtn').hidden=!ME; $('#outBtn').hidden=!ME;
+  $('#who').textContent=ME?(ME.reviewer?ME.reviewer.name:'Admin token'):'';
+  $('#reviewersBox').hidden=!(ME&&ME.admin);
+  if(ME){load();loadDecisions();if(ME.admin)loadReviewers();}
+}
+async function login(ev){ev.preventDefault();const f=Object.fromEntries(new FormData(ev.target));TOKEN='';
+  try{await api('/admin/api/login',{method:'POST',body:JSON.stringify(f)});ev.target.reset();$('#loginOut').textContent='';start();}
+  catch(e){$('#loginOut').textContent=e.message.startsWith('429')?'Too many attempts. Try again in 15 minutes.':'Wrong email or password.';}}
+async function logout(){TOKEN='';try{localStorage.removeItem('hok_admin');}catch(e){}$('#token').value='';try{await api('/admin/api/logout',{method:'POST',body:'{}'});}catch(e){}start();}
+async function loadReviewers(){try{const {reviewers}=await api('/admin/api/reviewers');
+  $('#reviewers').innerHTML=reviewers.length?'<table><tr><th>Name</th><th>Email</th><th>Since</th><th></th></tr>'+reviewers.map(r=>'<tr><td>'+esc(r.name)+'</td><td>'+esc(r.email)+'</td><td>'+esc(new Date(r.createdAt).toLocaleDateString())+'</td><td><button class="'+(r.disabled?'':'reject')+'" data-id="'+esc(r.id)+'" data-off="'+(r.disabled?'0':'1')+'" onclick="toggleReviewer(this)">'+(r.disabled?'Switch on':'Switch off')+'</button></td></tr>').join('')+'</table>':'<p class="muted">No reviewers yet.</p>';}
+  catch(e){$('#reviewers').textContent='Could not load: '+e.message;}}
+async function toggleReviewer(b){await api('/admin/api/reviewers/'+b.dataset.id,{method:'PUT',body:JSON.stringify({disabled:b.dataset.off==='1'})});loadReviewers();}
+async function addReviewer(ev){ev.preventDefault();const f=Object.fromEntries(new FormData(ev.target));
+  try{await api('/admin/api/reviewers',{method:'POST',body:JSON.stringify(f)});ev.target.reset();$('#revOut').textContent='Added. Give them the password in person or by phone, not by email.';loadReviewers();}
+  catch(e){$('#revOut').textContent=e.message.startsWith('409')?'That email already has a login.':'Could not add: '+e.message;}}
 const esc=(s)=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const pct=(x)=>x==null?'—':Math.round(x*100)+'%';
 async function load(){
@@ -63,6 +97,10 @@ async function load(){
     const ai=await api('/admin/api/ai-usage');
     const eur=(x)=>'€'+(x??0).toFixed(2);
     $('#metrics').innerHTML+=[['AI today',eur(ai.today.eur)+(ai.budgetEur?' / '+eur(ai.budgetEur):'')],['AI calls today',ai.today.calls+(ai.today.skipped?' ('+ai.today.skipped+' over budget → template)':'')],['AI last 30 days',eur(ai.last30Eur)],['AI per user (30 d)',ai.perUser30dEur==null?'—':'€'+ai.perUser30dEur.toFixed(4)]]
+      .map(([k,v])=>'<div class="metric"><b>'+v+'</b><span>'+k+'</span></div>').join('');
+    const rt=await api('/admin/api/review-time');
+    const mins=(s)=>s==null?'—':(s<60?s+' s':(s/60).toFixed(1)+' min');
+    $('#metrics').innerHTML+=[['Review time (median)',mins(rt.medianS)],['Reviews within 3 min',pct(rt.withinTarget)+' of '+rt.reviews]]
       .map(([k,v])=>'<div class="metric"><b>'+v+'</b><span>'+k+'</span></div>').join('');
     const {events}=await api('/admin/api/pending');
     $('#pending').innerHTML=events.length?events.map(e=>\`
@@ -90,23 +128,23 @@ async function load(){
 async function endEvent(id){if(!confirm('End this event and send an all-clear?'))return;const r=await api('/admin/api/events/'+id+'/end',{method:'POST'});alert('All-clear: '+r.alerts+' alerts, '+r.pushes+' pushes');load();}
 async function approve(id){const t=$('#t-'+id).value,b=$('#b-'+id).value,s=Number($('#s-'+id).value);
   const r=await api('/admin/api/events/'+id+'/approve',{method:'POST',body:JSON.stringify({...(t&&{title:t}),...(b&&{body:b}),severity:s})});
-  alert('Sent: '+r.alerts+' alerts, '+r.pushes+' pushes');load();}
+  alert('Sent: '+r.alerts+' alerts, '+r.pushes+' pushes');load();loadDecisions();}
 function pickEvent(a){$('#dEvent').value=a.dataset.ev;loadDecisions();}
 function dQuery(){const p=new URLSearchParams();const e=$('#dEvent').value.trim(),k=$('#dKind').value;if(e)p.set('eventId',e);if(k)p.set('kind',k);return p;}
 async function loadDecisions(){const p=dQuery();p.set('limit','100');try{const {decisions}=await api('/admin/api/decisions?'+p);
   $('#decisions').innerHTML=decisions.length?'<table><tr><th>When</th><th>Step</th><th>Outcome</th><th>Event</th><th>Model / prompt</th><th>Detail</th></tr>'+decisions.map(d=>
     '<tr><td>'+esc(new Date(d.at).toLocaleString())+'</td><td>'+esc(d.kind)+(d.actor!=='pipeline'?' <span class="muted">('+esc(d.actor)+')</span>':'')+'</td><td>'+esc(d.outcome)+'</td><td>'+(d.eventId?'<a href="#" data-ev="'+esc(d.eventId)+'" onclick="pickEvent(this);return false">'+esc(d.eventId.slice(0,8))+'</a>':'—')+'</td><td class="muted">'+esc(d.model||'—')+'<br>'+esc(d.promptVersion||'')+'</td><td><details><summary class="muted">'+esc(String(d.detail.reason||d.detail.title||'').slice(0,80)||'show')+'</summary><pre>'+esc(JSON.stringify(d.detail,null,1))+'</pre></details></td></tr>').join('')+'</table>'
     :'<p class="muted">No decisions yet.</p>';}catch(e){$('#decisions').textContent='Could not load: '+e.message;}}
-async function decisionsCsv(){try{const r=await fetch('/admin/api/decisions.csv?'+dQuery(),{headers:{'x-admin-token':TOKEN}});if(!r.ok)throw new Error(r.status);
+async function decisionsCsv(){try{const r=await fetch('/admin/api/decisions.csv?'+dQuery(),{credentials:'same-origin',headers:hdrs()});if(!r.ok)throw new Error(r.status);
   const a=document.createElement('a');a.href=URL.createObjectURL(await r.blob());a.download='decisions-'+new Date().toISOString().slice(0,10)+'.csv';a.click();URL.revokeObjectURL(a.href);}catch(e){alert('Download failed: '+e.message);}}
 async function exportLabels(){try{const f=await api('/admin/api/eval-export');if(!f.cases.length){alert('No reviewed events yet.');return;}
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(f,null,1)],{type:'application/json'}));a.download='desk-'+new Date().toISOString().slice(0,10)+'.json';a.click();URL.revokeObjectURL(a.href);}
   catch(e){alert('Export failed: '+e.message);}}
-async function reject(id){await api('/admin/api/events/'+id+'/reject',{method:'POST'});load();}
+async function reject(id){await api('/admin/api/events/'+id+'/reject',{method:'POST'});load();loadDecisions();}
 async function ingest(){const r=await api('/admin/api/ingest',{method:'POST'});alert(JSON.stringify(r,null,1));load();}
 async function sendManual(ev){ev.preventDefault();const f=Object.fromEntries(new FormData(ev.target));
   for(const k of ['severity','lat','lon','radiusM'])f[k]=Number(f[k]); if(!f.sourceUrl)delete f.sourceUrl;
   try{const r=await api('/admin/api/manual-alert',{method:'POST',body:JSON.stringify(f)});$('#manualOut').textContent='Sent: '+r.alerts+' alerts, '+r.pushes+' pushes.';load();}
   catch(e){$('#manualOut').textContent='Failed: '+e.message;}}
-if(TOKEN){load();loadDecisions();} setInterval(()=>TOKEN&&load(),30000);
+start(); setInterval(()=>ME&&load(),30000);
 </script></body></html>`;

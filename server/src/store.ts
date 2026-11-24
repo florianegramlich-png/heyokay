@@ -1,7 +1,7 @@
 import type { SourceStatus } from './ingest.js';
 import type { PushTicket } from './push.js';
 import type {
-  Alert, Decision, DecisionKind, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
+  Alert, Decision, DecisionKind, Reviewer, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
 } from './types.js';
 
 /** How far back an event with a known, future end time still counts as active. */
@@ -192,6 +192,18 @@ export interface Store {
   claimDigest(userId: string, day: string, atIso: string): Promise<boolean>;
   /** Gives the lease up early (clean shutdown), so another worker can take over at once. */
   releaseLease(name: string, holder: string): Promise<void>;
+
+  // ── Alert Desk reviewers (PRD 6.2 step 5) ──
+  createReviewer(r: Reviewer): Promise<void>;
+  reviewerByEmail(email: string): Promise<Reviewer | null>;
+  reviewers(): Promise<Reviewer[]>;
+  updateReviewer(id: string, patch: Partial<Pick<Reviewer, 'name' | 'passwordHash' | 'disabled'>>): Promise<boolean>;
+  /** Sessions are stored as a hash of the cookie value. */
+  createReviewerSession(tokenHash: string, reviewerId: string, expiresAt: string): Promise<void>;
+  /** The reviewer behind a session that hasn't expired, unless they were disabled. */
+  reviewerBySession(tokenHash: string, nowIso: string): Promise<Reviewer | null>;
+  deleteReviewerSession(tokenHash: string): Promise<void>;
+  deleteReviewerSessionsFor(reviewerId: string): Promise<void>;
 
   // ── decision log (PRD 6.3) ──
   recordDecision(d: Decision): Promise<void>;
