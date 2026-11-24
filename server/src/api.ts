@@ -10,6 +10,7 @@ import { CATEGORIES, DECISION_KINDS, DEFAULT_PREFS, UI_LANGUAGES, contentLanguag
 import { DESK_HTML } from './desk.js';
 import { deskCases } from './eval/desk-export.js';
 import { decisionsCsv } from './decisions.js';
+import { BODY_LIMIT_BYTES, DEFAULT_HARDENING, clientIp, harden, type HardeningOptions } from './hardening.js';
 import { computeKpis } from './kpis.js';
 import { AppEventsBody, countEvents, funnelReport } from './app-events.js';
 import { crimeBiasReport, quarterOf, quarterRange } from './bias-report.js';
@@ -62,6 +63,8 @@ export interface ApiDeps {
   now?: () => Date;
   /** Where unexpected errors are logged (default: JSON lines on stderr). */
   errorSink?: ErrorSink;
+  /** Rate limits and the client-address header (hardening.ts). */
+  hardening?: Partial<HardeningOptions>;
 }
 
 const REGION_MAX_RADIUS_M = 30_000;
@@ -69,8 +72,11 @@ const REGION_NEAR_M = 50_000;
 /** iOS watches at most 20 regions: one home area, up to 15 events, the rest for saved places. */
 const REGION_MAX = 15;
 
-export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus, roleStatus, pollIntervalSec = 120, aiBudgetEur = 0, mailer = null, identity = {}, statusPages = US_STATUS_PAGES, errorSink = defaultSink, now: clock = () => new Date() }: ApiDeps) {
-  const app = Fastify({ logger: false });
+export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus, roleStatus, pollIntervalSec = 120, aiBudgetEur = 0, mailer = null, identity = {}, statusPages = US_STATUS_PAGES, errorSink = defaultSink, now: clock = () => new Date(), hardening = {} }: ApiDeps) {
+  const app = Fastify({ logger: false, bodyLimit: BODY_LIMIT_BYTES });
+  const limits = { ...DEFAULT_HARDENING, ...hardening };
+  harden(app, limits, clock);
+  const ipOf = (req: FastifyRequest) => clientIp(req, limits.clientIpHeader);
   // Request metrics by route pattern (never the URL itself: no ids or tokens in labels).
   app.addHook('onResponse', async (req, reply) => {
     const route = req.routeOptions.url ?? 'unmatched';
@@ -143,7 +149,7 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
    */
   app.post('/v1/events', async (req, reply) => {
     const now = clock();
-    const key = [`events:${req.ip}`];
+    const key = [`events:${ipOf(req)}`];
     if (eventLimiter.blocked(key, now.getTime())) return reply.code(429).send({ error: 'too_many_requests' });
     eventLimiter.fail(key, now.getTime());
     const body = AppEventsBody.parse(req.body);
@@ -386,7 +392,7 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
   app.post('/admin/api/login', async (req, reply) => {
     const b = z.object({ email: z.string().email().max(200), password: z.string().min(1).max(200) }).parse(req.body);
     const email = b.email.trim().toLowerCase();
-    const keys = [`email:${email}`, `ip:${req.ip}`];
+    const keys = [`email:${email}`, `ip:${ipOf(req)}`];
     const now = clock().getTime();
     if (loginLimiter.blocked(keys, now)) return reply.code(429).send({ error: 'too_many_attempts' });
     const r = await store.reviewerByEmail(email);

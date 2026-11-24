@@ -287,7 +287,8 @@ const identity = {
 };
 let app;
 if (runsApi(config.role)) {
-  app = buildApi({ store, pipeline, adminToken: config.adminToken, runIngest, ingestStatus: worker ? () => scheduler.snapshot() : undefined, roleStatus, mailer, identity, statusPages: config.statusPages, pollIntervalSec: config.pollIntervalSec, aiBudgetEur: config.llmDailyBudgetEur });
+  app = buildApi({ store, pipeline, adminToken: config.adminToken, runIngest, ingestStatus: worker ? () => scheduler.snapshot() : undefined, roleStatus, mailer, identity, statusPages: config.statusPages, pollIntervalSec: config.pollIntervalSec, aiBudgetEur: config.llmDailyBudgetEur,
+    hardening: { ipPerMin: config.rateLimitIpPerMin, tokenPerMin: config.rateLimitTokenPerMin, clientIpHeader: config.clientIpHeader } });
 } else {
   // Worker only: no public routes, just the health check the platform polls.
   app = Fastify({ logger: false });

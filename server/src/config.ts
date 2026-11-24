@@ -104,6 +104,11 @@ export interface Config {
   wfigs: string | null;
   /** AI cost guard: daily cap in EUR (0 = off) and prices per million tokens. */
   llmDailyBudgetEur: number;
+  /** API rate limits per minute (0 = off): per client address, per bearer token. */
+  rateLimitIpPerMin: number;
+  rateLimitTokenPerMin: number;
+  /** Header our edge proxy sets with the client's address (Fly: fly-client-ip). Only trusted when set. */
+  clientIpHeader: string | null;
   llmPriceInPerMTok: number;
   llmPriceOutPerMTok: number;
   /** FEMA IPAWS public feed (US). "off" or a URL override via IPAWS_URL. */
@@ -185,6 +190,10 @@ export function loadConfig(env = process.env): Config {
     autobahn: /^off$/i.test(env.AUTOBAHN_URL ?? '') ? null : (env.AUTOBAHN_URL || AUTOBAHN_URL),
     berlinVersammlungen: /^off$/i.test(env.BERLIN_VERSAMMLUNGEN_URL ?? '') ? null : (env.BERLIN_VERSAMMLUNGEN_URL || BERLIN_VERSAMMLUNGEN_URL),
     llmDailyBudgetEur: Number(env.LLM_DAILY_BUDGET_EUR ?? 5),
+    rateLimitIpPerMin: Number(env.RATE_LIMIT_IP_PER_MIN ?? 300),
+    rateLimitTokenPerMin: Number(env.RATE_LIMIT_TOKEN_PER_MIN ?? 120),
+    // On Fly the edge sets Fly-Client-IP; elsewhere only when configured (CLIENT_IP_HEADER=off disables).
+    clientIpHeader: env.CLIENT_IP_HEADER === 'off' ? null : (env.CLIENT_IP_HEADER || (env.FLY_APP_NAME ? 'fly-client-ip' : null)),
     llmPriceInPerMTok: Number(env.LLM_PRICE_IN_EUR_PER_MTOK ?? 1),
     llmPriceOutPerMTok: Number(env.LLM_PRICE_OUT_EUR_PER_MTOK ?? 5),
     ipaws: /^off$/i.test(env.IPAWS_URL ?? '') ? null : (env.IPAWS_URL || IPAWS_URL),
