@@ -36,6 +36,8 @@ export const DESK_HTML = `<!doctype html>
   <section><h2>Last 7 days</h2><div class="metrics" id="metrics">Loading…</div></section>
   <section><h2>KPIs (last 7 days)</h2><p class="muted">The launch KPIs and their red lines (PRD 13), from the server's own data: totals only, no analytics service.</p><div id="kpis"></div></section>
   <section><h2>Onboarding funnel (last 7 days)</h2><p class="muted">Anonymous counts from the phone app and the web: how many times each onboarding screen was shown, how people answered the permission questions, and how often notifications were switched off in the phone's settings. No ids: these are screens, not people.</p><div id="funnel"></div></section>
+  <section><h2>Crime bias review (quarterly)</h2><p class="muted">Crime alerts per Berlin district against the people who live there (PRD 6.3). A district far above or below Berlin's rate points at our sources or at the review, not at the district. For the team only: no area score is ever shown in the apps.</p>
+    <div class="row"><input id="biasQ" placeholder="2026-Q4" style="max-width:140px"><button onclick="loadBias()">Show</button></div><div id="bias"></div></section>
   <section><h2>Waiting for review</h2><p class="muted">Severity 4+ from non-official sources, and anything the AI was unsure about. Nothing here reaches users until approved. Every decision also becomes a label for the AI eval set.</p><div id="pending"></div><p class="row"><button onclick="exportLabels()">Download reviewed cases (eval set)</button><span class="muted">For <code>server/eval/cases/</code>. Remove names and personal details before committing.</span></p></section>
   <section><h2>Sources</h2><p class="muted">Every feed the worker polls, by country. Failing = the last poll failed; stale = no successful poll for 3 intervals. A fallback takes over where one is listed.</p><div id="sources"></div></section>
   <section><h2>Decision log</h2><p class="muted">Every step the pipeline took and every action here: how an item was read (model, prompt version), the review gate, the alert text and the verifier, who got it (as counts), approvals and rejections with the reviewer who made them. Nothing about the people who get alerts.</p>
@@ -70,6 +72,16 @@ const $=(s)=>document.querySelector(s); let TOKEN=localStorage.getItem('hok_admi
 const hdrs=(extra={})=>({'x-desk':'1',...(TOKEN?{'x-admin-token':TOKEN}:{}),...extra});
 // Content-Type only with a body: the server refuses an empty JSON body (Reject, End now, Run ingest send none).
 async function api(path,opts={}){const r=await fetch(path,{...opts,credentials:'same-origin',headers:hdrs({...(opts.body!=null?{'Content-Type':'application/json'}:{}),...(opts.headers||{})})});if(!r.ok)throw new Error(r.status+' '+(await r.text()));return r.json();}
+async function loadBias(){
+  const q=$('#biasQ').value.trim();
+  const r=await api('/admin/api/crime-bias'+(q?'?quarter='+encodeURIComponent(q):''));
+  $('#biasQ').value=r.quarter;
+  const p=(x)=>x==null?'—':Math.round(x*100)+'%';
+  $('#bias').innerHTML='<p class="muted">'+esc(r.from.slice(0,10))+' to '+esc(r.to.slice(0,10))+' · Berlin: '+r.berlin.released+' alerts, '+r.berlin.per100k+' per 100 000 residents, '+p(r.berlin.rejectedShare)+' rejected at the desk · population as of '+esc(r.populationAsOf)+' · outside Berlin (not reviewed yet): '+r.outsideBerlin+'</p>'
+    +'<table><tr><th>District</th><th>Residents</th><th>Alerts</th><th>Per 100 000</th><th>vs Berlin</th><th>Rejected</th><th>Publishers</th></tr>'
+    +r.districts.map(d=>'<tr><td>'+esc(d.name)+'</td><td>'+d.population.toLocaleString('de-DE')+'</td><td>'+d.released+(d.pendingReview?' <span class="muted">(+'+d.pendingReview+' waiting)</span>':'')+'</td><td>'+d.per100k+'</td><td class="'+(d.flag?'h-failing':'')+'">'+(d.ratio==null?'—':d.ratio.toFixed(2)+'×')+(d.flag?' ⚠ '+d.flag:'')+'</td><td>'+p(d.rejectedShare)+'</td><td class="muted">'+d.sources.map(s=>esc(s.name)+' '+s.count).join(', ')+'</td></tr>').join('')+'</table>'
+    +'<p class="muted">'+esc(r.flagRule)+'</p>';
+}
 function saveToken(){TOKEN=$('#token').value;try{localStorage.setItem('hok_admin',TOKEN);}catch(e){}start();}
 async function start(){
   try{ME=await api('/admin/api/me');}catch(e){ME=null;}
@@ -114,6 +126,7 @@ async function load(){
       +fr.funnels[0].steps.map(st=>'<tr><td>'+esc(st.label)+'</td>'+fr.funnels.map(f=>{const x=f.steps.find(y=>y.step===st.step);return '<td>'+(x?x.count+fp(x.ofPrevious):'<span class="muted">—</span>')+'</td>';}).join('')+'</tr>').join('')+'</table>'
       +'<table><tr><th>Permission</th><th>Allowed</th><th>Refused</th><th>Later</th><th>Allowed rate</th></tr>'+fr.permissions.map(p=>'<tr><td>'+esc(p.label)+'</td><td>'+p.granted+'</td><td>'+p.denied+'</td><td>'+p.later+'</td><td>'+(p.grantedRate==null?'—':pct(p.grantedRate))+'</td></tr>').join('')+'</table>'
       +'<p class="muted">Notifications switched off in the phone settings: '+fr.pushTurnedOff+' · on again: '+fr.pushTurnedOn+'</p>';
+    await loadBias();
     const {events}=await api('/admin/api/pending');
     $('#pending').innerHTML=events.length?events.map(e=>\`
       <div class="ev" id="ev-\${e.id}">

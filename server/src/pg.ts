@@ -2,7 +2,7 @@ import pg from 'pg';
 import { randomUUID, randomBytes } from 'node:crypto';
 import type {
   Decision, Reviewer,
-  Alert, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
+  Alert, Category, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
 } from './types.js';
 import { DEFAULT_PREFS, normalizePrefs, savedPrefs } from './types.js';
 import { hashToken } from './db.js';
@@ -440,6 +440,11 @@ export class PgStore implements Store {
 
   async eventsByStatus(status: EventStatus): Promise<RiskEvent[]> {
     const { rows } = await this.q(`SELECT data FROM events WHERE status = $1 ORDER BY updated_at DESC`, [status]);
+    return rows.map((r) => r.data);
+  }
+
+  async eventsStartedBetween(category: Category, fromIso: string, toIso: string): Promise<RiskEvent[]> {
+    const { rows } = await this.q(`SELECT data FROM events WHERE category = $1 AND starts_at >= $2 AND starts_at < $3 ORDER BY starts_at, id`, [category, fromIso, toIso]);
     return rows.map((r) => r.data);
   }
 

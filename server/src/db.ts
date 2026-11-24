@@ -2,7 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { randomUUID, createHash, randomBytes } from 'node:crypto';
 import type {
   Decision, Reviewer,
-  Alert, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
+  Alert, Category, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
 } from './types.js';
 import { DEFAULT_PREFS, normalizePrefs, savedPrefs } from './types.js';
 import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type AccountIdentity, type IdentityProvider, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob, type LlmUsageDay, type DecisionQuery, type KpiInputs, decisionLimit } from './store.js';
@@ -257,6 +257,11 @@ export class SqliteStore implements Store {
   async eventsByStatus(status: EventStatus): Promise<RiskEvent[]> {
     return this.db.prepare(`SELECT data FROM events WHERE status = ? ORDER BY updated_at DESC`)
       .all(status).map((r: any) => JSON.parse(r.data));
+  }
+
+  async eventsStartedBetween(category: Category, fromIso: string, toIso: string): Promise<RiskEvent[]> {
+    return this.db.prepare(`SELECT data FROM events WHERE category = ? AND starts_at >= ? AND starts_at < ? ORDER BY starts_at, id`)
+      .all(category, new Date(fromIso).toISOString(), new Date(toIso).toISOString()).map((r: any) => JSON.parse(r.data));
   }
 
   async saveEventEmbedding(eventId: string, model: string, vector: number[]): Promise<void> {

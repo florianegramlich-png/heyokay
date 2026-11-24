@@ -2,7 +2,7 @@ import type { SourceStatus } from './ingest.js';
 import type { AppEvent, AppEventCount, Platform } from './app-events.js';
 import type { PushTicket } from './push.js';
 import type {
-  Alert, Decision, DecisionKind, Reviewer, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
+  Alert, Category, Decision, DecisionKind, Reviewer, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
 } from './types.js';
 
 /** How far back an event with a known, future end time still counts as active. */
@@ -105,6 +105,8 @@ export interface Store {
    */
   activeEvents(now: Date, lookbackHours?: number): Promise<RiskEvent[]>;
   eventsByStatus(status: EventStatus): Promise<RiskEvent[]>;
+  /** Events of one topic that began in [fromIso, toIso), any status, oldest first (bias review). */
+  eventsStartedBetween(category: Category, fromIso: string, toIso: string): Promise<RiskEvent[]>;
   /** Store (or replace) the dedup embedding of an event. Postgres: pgvector. */
   saveEventEmbedding(eventId: string, model: string, vector: number[]): Promise<void>;
   /**

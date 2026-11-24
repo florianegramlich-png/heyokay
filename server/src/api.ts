@@ -12,6 +12,7 @@ import { deskCases } from './eval/desk-export.js';
 import { decisionsCsv } from './decisions.js';
 import { computeKpis } from './kpis.js';
 import { AppEventsBody, countEvents, funnelReport } from './app-events.js';
+import { crimeBiasReport, quarterOf, quarterRange } from './bias-report.js';
 import { LoginLimiter, MIN_PASSWORD_LENGTH, SESSION_HOURS, clearedCookie, dummyHash, hashPassword, newSessionToken, readCookie, reviewTimes, sessionCookie, tokenEquals, verifyPassword } from './desk-auth.js';
 import { sourceReport } from './sources/registry.js';
 import { MAX_PLACE_RADIUS_M, distanceM } from './geo.js';
@@ -460,6 +461,18 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
     const { days } = z.object({ days: z.coerce.number().int().min(1).max(90).default(7) }).parse(req.query ?? {});
     const since = new Date(clock().getTime() - (days - 1) * 86_400_000).toISOString().slice(0, 10);
     return { days, since, ...funnelReport(await store.appEventCounts(since)) };
+  });
+
+  /**
+   * Quarterly crime bias review (PRD 6.3): crime alerts per Berlin district against its population.
+   * Desk only; no area score ever reaches the apps. `quarter` like 2026-Q4, default the current one.
+   */
+  app.get('/admin/api/crime-bias', async (req, reply) => {
+    const actor = await admin(req, reply); if (!actor) return;
+    const { quarter } = z.object({ quarter: z.string().regex(/^\d{4}-Q[1-4]$/).optional() }).parse(req.query ?? {});
+    const q = quarter ?? quarterOf(clock());
+    const { from, to } = quarterRange(q);
+    return crimeBiasReport(await store.eventsStartedBetween('crime', from, to), q);
   });
 
   /** Review time (target < 3 min) over the last `days` (default 7). */
