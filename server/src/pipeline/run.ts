@@ -4,10 +4,11 @@ import type { Geocoder } from '../geocode.js';
 import type { StructuredLLM } from '../llm.js';
 import { TRANSIENT_PUSH_ERRORS, type PushMessage, type PushSender, type PushTicket } from '../push.js';
 import type { Alert, AlertKind, Category, RiskEvent, Severity, SourceItem, User } from '../types.js';
-import { extract } from './extract.js';
+import { extract, type ExtractTrace } from './extract.js';
+import { DecisionLog } from '../decisions.js';
 import { DEFAULT_EMBEDDING_MIN_SIMILARITY, findCluster, mergeInto, newEvent, type EmbeddingMatch } from './cluster.js';
 import { embeddingText, type Embedder } from '../embeddings.js';
-import { compose } from './compose.js';
+import { compose, type ComposeTrace } from './compose.js';
 import { decide, inQuietHours, match, isAhead } from './rank.js';
 import { LIFECYCLE, recommendedAction } from './guidance.js';
 import { packFor } from '../countries.js';
@@ -54,8 +55,20 @@ const RANK: Record<Outcome, number> = { all_clear: 3, escalated: 2, changed: 1, 
  * PRD Section 6.2.
  */
 export class Pipeline {
-  constructor(private d: PipelineDeps) {}
+  private log: DecisionLog;
+  constructor(private d: PipelineDeps) {
+    this.log = new DecisionLog(d.store, () => this.now());
+  }
   private now() { return this.d.now?.() ?? new Date(); }
+
+  private logCompose(event: RiskEvent, t: ComposeTrace | null, actor = 'pipeline') {
+    if (!t) return Promise.resolve();
+    return this.log.record({
+      kind: 'compose', actor, eventId: event.id, model: t.model, promptVersion: t.promptVersion,
+      outcome: t.template ? 'template' : 'ai_text',
+      detail: { attempts: t.attempts.length, rejected: t.attempts.filter((a) => a.problems.length).map((a) => a.problems), revision: event.revision },
+    });
+  }
 
   async ingest(items: SourceItem[], defaultArea?: { name: string; lat: number; lon: number; radiusM: number }): Promise<IngestReport> {
     const r: IngestReport = { received: items.length, new: 0, ignored: 0, eventsCreated: 0, eventsUpdated: 0, sentToReview: 0, alertsCreated: 0, pushes: 0, updates: 0, allClears: 0 };
@@ -66,8 +79,18 @@ export class Pipeline {
     for (const item of items) {
       if (!await this.d.store.recordSourceItem(item)) continue; // seen before
       r.new++;
-      const ext = await extract(item, { llm: this.d.llm, geocoder: this.d.geocoder, now: this.now(), defaultArea });
-      if (!ext || ext.lat == null || ext.lon == null) { r.ignored++; continue; }
+      let trace: ExtractTrace | null = null;
+      const ext = await extract(item, { llm: this.d.llm, geocoder: this.d.geocoder, now: this.now(), defaultArea, onTrace: (t) => { trace = t; } });
+      const sourceRef = `${item.source}:${item.externalId}`;
+      const tr = trace as ExtractTrace | null;
+      if (!ext || ext.lat == null || ext.lon == null) {
+        r.ignored++;
+        await this.log.record({
+          kind: 'extract', sourceRef, model: tr?.model ?? null, promptVersion: tr?.promptVersion ?? null, outcome: 'dropped',
+          detail: { method: tr?.method ?? null, reason: tr?.dropped ?? 'no location', title: item.title.slice(0, 200), source: item.sourceName, ...(tr?.modelOutput ? { modelOutput: tr.modelOutput } : {}) },
+        });
+        continue;
+      }
 
       const active = [...(await this.d.store.activeEvents(this.now())), ...touched.values()].filter((e, i, a) => a.findIndex((x) => x.id === e.id) === i);
       // An update names the message it replaces; find that event even if it started days ago.
@@ -85,6 +108,8 @@ export class Pipeline {
       } : undefined;
       const existing = byReference ?? findCluster(ext, item, active, emb);
       let event: RiskEvent;
+      // Logged after the extraction itself, so the log reads in the order things happened.
+      let gate: { outcome: string; detail: Record<string, unknown> } | null = null;
       if (existing) {
         event = touched.get(existing.id) ?? existing;
         const wasActive = !event.endsAt || Date.parse(event.endsAt) > this.now().getTime();
@@ -92,8 +117,10 @@ export class Pipeline {
         const endedNow = wasActive && !!event.endsAt && Date.parse(event.endsAt) <= this.now().getTime();
         note(event.id, endedNow ? 'all_clear' : escalated ? 'escalated' : changed ? 'changed' : 'touched');
         if (escalated && !event.official && event.severity >= this.d.config.reviewSeverity && event.status !== 'pending_review') {
+          const from = event.status;
           event.status = 'pending_review';
           r.sentToReview++;
+          gate = { outcome: 'pending_review', detail: { reason: `escalated to severity ${event.severity} (review from ${this.d.config.reviewSeverity})`, from } };
         }
         r.eventsUpdated++;
       } else {
@@ -103,7 +130,21 @@ export class Pipeline {
         if (needsReview) r.sentToReview++;
         r.eventsCreated++;
         note(event.id, 'touched');
+        const reasons = item.official ? ['official source'] : [
+          ...(ext.confidence < this.d.config.reviewConfidence ? [`confidence ${ext.confidence} below ${this.d.config.reviewConfidence}`] : []),
+          ...(ext.severity >= this.d.config.reviewSeverity ? [`severity ${ext.severity} (review from ${this.d.config.reviewSeverity})`] : []),
+        ];
+        gate = { outcome: event.status, detail: { reason: reasons.length ? reasons.join('; ') : 'confident, below review severity' } };
       }
+      await this.log.record({
+        kind: 'extract', eventId: event.id, sourceRef, model: tr?.model ?? null, promptVersion: tr?.promptVersion ?? null,
+        outcome: existing ? 'merged' : 'new_event',
+        detail: {
+          method: tr?.method ?? null, category: ext.category, severity: ext.severity, confidence: ext.confidence, areaName: ext.areaName,
+          title: item.title.slice(0, 200), source: item.sourceName, ...(tr?.modelOutput ? { modelOutput: tr.modelOutput } : {}),
+        },
+      });
+      if (gate) await this.log.record({ kind: 'review_gate', eventId: event.id, sourceRef, ...gate });
       await this.d.store.saveEvent(event);
       await this.d.store.linkSourceItem(item, event.id);
       // A new event keeps its first report's vector; an older event without one (provider was down) gets this one.
@@ -130,7 +171,9 @@ export class Pipeline {
 
   private async ensureCopy(event: RiskEvent) {
     if (event.copyTitle) return;
-    const copy = await compose(event, this.d.llm);
+    let t: ComposeTrace | null = null;
+    const copy = await compose(event, this.d.llm, (x) => { t = x; });
+    await this.logCompose(event, t);
     event.copyTitle = copy.title;
     event.copyBody = copy.body;
     event.copyAction = copy.action;
@@ -207,6 +250,7 @@ export class Pipeline {
       if (push) outbox.push({ token: user.pushToken!, alert: a });
     }
     const res = { sent: await this.sendPush(outbox) };
+    await this.log.record({ kind: 'rank', eventId: event.id, outcome: 'all_clear', detail: { alerts, pushes: res.sent, revision: event.revision } });
     return { alerts, pushes: res.sent };
   }
 
@@ -214,6 +258,7 @@ export class Pipeline {
   async endEvent(eventId: string) {
     const e = await this.d.store.getEvent(eventId);
     if (!e) return null;
+    await this.log.record({ kind: 'desk', actor: 'desk', eventId, outcome: 'ended', detail: { status: e.status, severity: e.severity } });
     return this.allClear(e);
   }
 
@@ -255,6 +300,7 @@ export class Pipeline {
 
     const outbox: Array<{ token: string; alert: Alert }> = [];
     let alerts = 0;
+    const tally = new Map<string, number>();
     // Only users the store finds near the event (PostGIS index in production); `match` decides.
     const candidates = onlyUsers
       ? await Promise.all(onlyUsers.map(async (user) => ({ user, places: await this.d.store.places(user.id) })))
@@ -279,9 +325,16 @@ export class Pipeline {
       });
       if (!alert) continue; // already alerted for this revision
       alerts++;
+      tally.set(`${delivery}\u0000${reason}`, (tally.get(`${delivery}\u0000${reason}`) ?? 0) + 1);
       if (delivery === 'push' && user.pushToken) outbox.push({ token: user.pushToken, alert });
     }
     const res = { sent: await this.sendPush(outbox) };
+    // Ranking per event as counts (never who): only when someone got something.
+    if (alerts) {
+      const byDelivery: Record<string, number> = {};
+      const reasons = [...tally].map(([k, count]) => { const [delivery, reason] = k.split('\u0000'); byDelivery[delivery] = (byDelivery[delivery] ?? 0) + count; return { delivery, reason, count }; });
+      await this.log.record({ kind: 'rank', eventId: event.id, outcome: 'delivered', detail: { alerts, pushes: res.sent, byDelivery, reasons, revision: event.revision, ...(onlyUsers ? { scope: backfill ? 'first sync' : 'one person moved or added a place' } : {}) } });
+    }
     return { alerts, pushes: res.sent };
   }
 
@@ -418,6 +471,10 @@ export class Pipeline {
   async approve(eventId: string, edits?: { title?: string; body?: string; severity?: Severity }) {
     const e = await this.d.store.getEvent(eventId);
     if (!e) return null;
+    await this.log.record({
+      kind: 'desk', actor: 'desk', eventId, outcome: 'approved',
+      detail: { from: e.status, severity: edits?.severity ?? e.severity, ...(edits?.severity && edits.severity !== e.severity ? { severityWas: e.severity } : {}), editedTitle: !!edits?.title, editedBody: !!edits?.body },
+    });
     e.status = 'approved';
     if (edits?.severity && edits.severity !== e.severity) {
       e.severity = edits.severity;
@@ -425,7 +482,9 @@ export class Pipeline {
     }
     if ((edits?.title || edits?.body) && !e.copyTitle) {
       // Write the AI copy first, so the reviewer's edits override it rather than being overwritten.
-      const copy = await compose(e, this.d.llm);
+      let t: ComposeTrace | null = null;
+      const copy = await compose(e, this.d.llm, (x) => { t = x; });
+      await this.logCompose(e, t);
       e.copyTitle = copy.title; e.copyBody = copy.body; e.copyAction = copy.action; e.copyIsTemplate = copy.isTemplate;
     }
     if (edits?.title) { e.copyTitle = edits.title.slice(0, 50); e.copyIsTemplate = true; }
@@ -438,6 +497,7 @@ export class Pipeline {
   async reject(eventId: string) {
     const e = await this.d.store.getEvent(eventId);
     if (!e) return false;
+    await this.log.record({ kind: 'desk', actor: 'desk', eventId, outcome: 'rejected', detail: { from: e.status, severity: e.severity, category: e.category } });
     e.status = 'rejected';
     e.updatedAt = this.now().toISOString();
     await this.d.store.saveEvent(e);
@@ -466,6 +526,7 @@ export class Pipeline {
     event.copyIsTemplate = true;
     event.copyAction = recommendedAction(event.category, event.severity, event.language, undefined, packFor(event));
     await this.d.store.saveEvent(event);
+    await this.log.record({ kind: 'desk', actor: 'desk', eventId: event.id, sourceRef: item.externalId, outcome: 'manual_alert', detail: { category: event.category, severity: event.severity, title: event.copyTitle, areaName: event.areaName } });
     const out = await this.deliver(event);
     return { eventId: event.id, ...out };
   }

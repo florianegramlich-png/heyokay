@@ -1,12 +1,13 @@
 import pg from 'pg';
 import { randomUUID, randomBytes } from 'node:crypto';
 import type {
+  Decision,
   Alert, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
 } from './types.js';
 import { DEFAULT_PREFS, normalizePrefs, savedPrefs } from './types.js';
 import { hashToken } from './db.js';
 import { LOCATION_MAX_AGE_MS, MAX_PLACE_RADIUS_M } from './geo.js';
-import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type AccountIdentity, type IdentityProvider, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob, type LlmUsageDay } from './store.js';
+import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type AccountIdentity, type IdentityProvider, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob, type LlmUsageDay, type DecisionQuery, decisionLimit } from './store.js';
 import type { PushTicket } from './push.js';
 import type { SourceStatus } from './ingest.js';
 
@@ -160,6 +161,15 @@ export const MIGRATIONS: { version: number; sql: string }[] = [
         PRIMARY KEY (provider, subject)
       );
       CREATE INDEX account_identities_account ON account_identities(account_id);
+    `,
+  },
+  {
+    // Decision log (PRD 6.3): every pipeline and Alert Desk decision, no user data.
+    version: 13,
+    sql: `
+      CREATE TABLE decisions (id uuid PRIMARY KEY, seq bigserial, at timestamptz NOT NULL, kind text NOT NULL, event_id text, data jsonb NOT NULL);
+      CREATE INDEX decisions_at ON decisions(at);
+      CREATE INDEX decisions_event ON decisions(event_id, at);
     `,
   },
 ];
@@ -637,6 +647,21 @@ export class PgStore implements Store {
   }
 
   // ── AI spend ─────────────────────────────────────────────────────────────
+  async recordDecision(d: Decision): Promise<void> {
+    await this.q(`INSERT INTO decisions (id, at, kind, event_id, data) VALUES ($1,$2,$3,$4,$5::jsonb) ON CONFLICT (id) DO NOTHING`,
+      [d.id, d.at, d.kind, d.eventId, JSON.stringify(d)]);
+  }
+
+  async decisions(q: DecisionQuery): Promise<Decision[]> {
+    const where: string[] = [];
+    const args: unknown[] = [];
+    if (q.eventId) { args.push(q.eventId); where.push(`event_id = $${args.length}`); }
+    if (q.kind) { args.push(q.kind); where.push(`kind = $${args.length}`); }
+    if (q.since) { args.push(new Date(q.since).toISOString()); where.push(`at >= $${args.length}::timestamptz`); }
+    const { rows } = await this.q(`SELECT data FROM decisions ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY at DESC, seq DESC LIMIT ${decisionLimit(q)}`, args);
+    return rows.map((r) => r.data);
+  }
+
   async addLlmUsage(day: string, u: { calls: number; inputTokens: number; outputTokens: number; eur: number; skipped: number }): Promise<void> {
     await this.q(`
       INSERT INTO llm_usage (day, calls, input_tokens, output_tokens, eur, skipped) VALUES ($1::date,$2,$3,$4,$5,$6)

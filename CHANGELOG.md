@@ -2,6 +2,8 @@
 
 ## Open questions
 
+- **How long to keep the decision log?** (2026-11-23) The new decision log (one row per pipeline step and Alert Desk action, no personal data) grows by a few rows per source item. Options: (1) 6 months, the minimum the EU AI Act sets for logs of high-risk systems, in case Hey-Okay is classified that way (the DPIA / AI Act classification is still under "Needs a human"); (2) 12 months, so a whole year of reviews can be audited; (3) as long as the events it describes (30 days), which is too short to audit anything. I'd go with (2) until the AI Act classification says otherwise. The roadmap item "Data retention" will use your answer; until then nothing is deleted.
+
 - **Police in München, Augsburg, Leipzig, Dresden: ask for a feed?** (2026-11-22) Bavaria's and Saxony's police publish their press releases only as web pages, with no RSS or API (polizei.bayern.de loads them by JavaScript, `/rss/` answers 403; polizei.sachsen.de has an HTML list). Options: (1) ask both press offices (Polizeipräsidium München, Polizei Sachsen) whether an app may read their press releases and whether there's a feed; (2) read the HTML pages anyway (works, but fragile and without permission); (3) leave them out; the NINA police channel still brings their official warnings. I'd go with (1), and (3) until there's an answer. Roadmap "More crime coverage, part 2b" waits for this.
 
 - **Cyber warnings for ordinary people: which ones?** (2026-11-20) BSI's public advisory feed (CERT-Bund WID) lists dozens of technical notices a day ("Schwachstelle in …"). Pushing those would be noisy and alarming. Options: (1) only "critical" notices for a short list of products most people have (iPhone/iOS, Android, Windows, Chrome, Firefox, Safari, WhatsApp), feed only, with "please update" as the advice; (2) only the BSI's own consumer warnings (Verbraucherschutz / Bürger-CERT), if they have a feed; (3) wait and do outages only. I'd go with (1), feed only, never a push. Roadmap "technology, part 5" waits for this; part 4 (CISA) is blocked because CISA's feeds can't be reached from the agent's sandbox.
@@ -32,6 +34,20 @@
   - Prices: one provider's contract price can be set as `LLM_PRICE_<NAME>_IN/OUT_EUR_PER_MTOK` (e.g. `LLM_PRICE_MISTRAL_IN_EUR_PER_MTOK`); otherwise the shared `LLM_PRICE_IN/OUT_EUR_PER_MTOK`. Only the eval tool reads them; the server's budget guard is unchanged.
   - Not done here: the actual comparison. It needs the Anthropic and Mistral keys and an EU-hosted open-weight endpoint, which the sandbox doesn't have; it's under "Needs a human" with the exact command. Without keys the tool says so and shows only the baseline.
   - Tests: `server/test/eval.test.ts` (3 new: order with a near-tie on quality and cost, providers worse than the rules or without answers left out, accuracy and severity deciding outside the tie, the printed table). Server 383/383 on SQLite + Postgres, app 4/4, web 23/23, typechecks clean.
+- **Decision log + audit** (roadmap "Decision log + audit") [PRD 6.3, EU AI Act].
+  - What it records, one row each, in a new `decisions` table (SQLite; Postgres migration 13):
+    - **extract**: how an item was read (official feed, keyword rules or the model), which model answered (`anthropic:…`, `mistral:…`), the prompt version, the model's answer, and the result (new event, merged into one, or dropped with the reason: older than 12 h, past incident or appeal, not a current safety event, no place found);
+    - **review gate**: released or sent to the desk, and why ("confidence 0.4 below 0.6", "severity 4 (review from 4)", "official source", "escalated to severity 4");
+    - **compose**: AI text or template, how many attempts, and what the verifier rejected each time;
+    - **rank**: per event, how many people got a push, a feed entry or nothing, and for which reason; all-clears. As counts only: never who, never where;
+    - **desk**: approve (from which status, the severity before and after, whether title or body were edited), reject, end now, concierge alert. The actor is "desk" for now; individual reviewers come with "Alert Desk accounts".
+  - Prompt versions are a short hash of the prompt and schema (`extract@…`, `compose@…`), so any change to a prompt shows up in the log without anyone remembering to bump a number.
+  - Alert Desk: a new "Decision log" section with the latest 100 rows, a filter by event id and step, a click on an event id shows that event's whole path, and "Download CSV". Also `GET /admin/api/decisions?eventId=&kind=&since=&limit=` and `GET /admin/api/decisions.csv` (admin token). The CSV quotes every cell and puts a `'` before cells that start with `=`, `+`, `-` or `@`, so a spreadsheet won't run them as formulas.
+  - Writing the log never stops an alert: a failed write goes to the error log. The `sqlite-to-pg` copy tool now copies the table too.
+  - To make it work, the AI clients now report which model gave the last answer (`lastModel`), through failover and the budget guard; `extract()` and `compose()` take an optional trace callback. Behaviour is otherwise unchanged.
+  - Not yet: how long to keep it (Open questions; nothing is deleted until the "Data retention" item).
+  - Tests: `server/test/decisions.test.ts` (9 new: store queries and order on both backends; an item's full path through rules, review, approval with a severity change, template, delivery counts, end; drop reason; model name, prompt versions and verifier rejections; admin-only JSON and CSV, filters, bad input refused; no user id, push token or location anywhere in the log; CSV escaping). Server 392/392 on SQLite + Postgres, app 4/4, web 23/23, typechecks clean.
+  - Phone app and web: nothing changes for people; this is for the team and for audits.
 - **Still blocked today** (checked again): the FSIS (US meat recalls) and CISA feeds still answer 403 from the sandbox, so those roadmap items stay skipped.
 
 ## 2026-11-22

@@ -4,9 +4,10 @@ import cors from '@fastify/cors';
 import { z } from 'zod';
 import type { Store } from './store.js';
 import type { Pipeline } from './pipeline/run.js';
-import { CATEGORIES, DEFAULT_PREFS, UI_LANGUAGES, contentLanguage, stampConsent, type User } from './types.js';
+import { CATEGORIES, DECISION_KINDS, DEFAULT_PREFS, UI_LANGUAGES, contentLanguage, stampConsent, type User } from './types.js';
 import { DESK_HTML } from './desk.js';
 import { deskCases } from './eval/desk-export.js';
+import { decisionsCsv } from './decisions.js';
 import { sourceReport } from './sources/registry.js';
 import { MAX_PLACE_RADIUS_M, distanceM } from './geo.js';
 import { AuthError, checkEmailCode, signIn, signInWithIdentity, signOut, startEmailSignIn, type Mailer } from './auth.js';
@@ -330,6 +331,25 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
   app.post('/admin/api/events/:id/reject', async (req, reply) => {
     if (!admin(req, reply)) return;
     return { ok: await pipeline.reject((req.params as any).id) };
+  });
+
+  /** Decision log (PRD 6.3): every pipeline step and Alert Desk action. JSON or CSV. */
+  const DecisionQ = z.object({
+    eventId: z.string().max(100).optional(),
+    kind: z.enum(DECISION_KINDS).optional(),
+    since: z.string().refine((s) => !Number.isNaN(Date.parse(s)), 'not a date').optional(),
+    limit: z.coerce.number().int().min(1).max(10_000).optional(),
+  });
+  app.get('/admin/api/decisions', async (req, reply) => {
+    if (!admin(req, reply)) return;
+    return { decisions: await store.decisions(DecisionQ.parse(req.query ?? {})) };
+  });
+  app.get('/admin/api/decisions.csv', async (req, reply) => {
+    if (!admin(req, reply)) return;
+    const q = DecisionQ.parse(req.query ?? {});
+    const rows = await store.decisions({ ...q, limit: q.limit ?? 10_000 });
+    reply.header('content-disposition', `attachment; filename="decisions-${clock().toISOString().slice(0, 10)}.csv"`);
+    return reply.type('text/csv; charset=utf-8').send(decisionsCsv(rows));
   });
 
   /** Reviewed events as labelled cases for the AI eval set (server/eval/cases/, PRD 6.4). */

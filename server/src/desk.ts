@@ -28,6 +28,9 @@ export const DESK_HTML = `<!doctype html>
   <section><h2>Last 7 days</h2><div class="metrics" id="metrics">Connect with your admin token.</div></section>
   <section><h2>Waiting for review</h2><p class="muted">Severity 4+ from non-official sources, and anything the AI was unsure about. Nothing here reaches users until approved. Every decision also becomes a label for the AI eval set.</p><div id="pending"></div><p class="row"><button onclick="exportLabels()">Download reviewed cases (eval set)</button><span class="muted">For <code>server/eval/cases/</code>. Remove names and personal details before committing.</span></p></section>
   <section><h2>Sources</h2><p class="muted">Every feed the worker polls, by country. Failing = the last poll failed; stale = no successful poll for 3 intervals. A fallback takes over where one is listed.</p><div id="sources"></div></section>
+  <section><h2>Decision log</h2><p class="muted">Every step the pipeline took and every action here: how an item was read (model, prompt version), the review gate, the alert text and the verifier, who got it (as counts), approvals and rejections. No personal data.</p>
+    <div class="row"><input id="dEvent" placeholder="Event id (optional)" style="max-width:320px"><select id="dKind" style="max-width:180px"><option value="">All steps</option><option>extract</option><option>review_gate</option><option>compose</option><option>rank</option><option>desk</option></select>
+      <button onclick="loadDecisions()">Show</button><button onclick="decisionsCsv()">Download CSV</button></div><div id="decisions"></div></section>
   <section><h2>Active events</h2><p class="muted">Released events that haven't ended. "End now" sends an all-clear to everyone who got the alert.</p><div id="active"></div></section>
   <section><h2>Send a curated alert (concierge pilot)</h2>
     <form id="manual" onsubmit="sendManual(event)">
@@ -48,7 +51,7 @@ export const DESK_HTML = `<!doctype html>
 </main>
 <script>
 const $=(s)=>document.querySelector(s); let TOKEN=localStorage.getItem('hok_admin')||''; $('#token').value=TOKEN;
-function saveToken(){TOKEN=$('#token').value;localStorage.setItem('hok_admin',TOKEN);load();}
+function saveToken(){TOKEN=$('#token').value;localStorage.setItem('hok_admin',TOKEN);load();loadDecisions();}
 async function api(path,opts={}){const r=await fetch(path,{...opts,headers:{'Content-Type':'application/json','x-admin-token':TOKEN,...(opts.headers||{})}});if(!r.ok)throw new Error(r.status+' '+(await r.text()));return r.json();}
 const esc=(s)=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const pct=(x)=>x==null?'—':Math.round(x*100)+'%';
@@ -88,6 +91,14 @@ async function endEvent(id){if(!confirm('End this event and send an all-clear?')
 async function approve(id){const t=$('#t-'+id).value,b=$('#b-'+id).value,s=Number($('#s-'+id).value);
   const r=await api('/admin/api/events/'+id+'/approve',{method:'POST',body:JSON.stringify({...(t&&{title:t}),...(b&&{body:b}),severity:s})});
   alert('Sent: '+r.alerts+' alerts, '+r.pushes+' pushes');load();}
+function pickEvent(a){$('#dEvent').value=a.dataset.ev;loadDecisions();}
+function dQuery(){const p=new URLSearchParams();const e=$('#dEvent').value.trim(),k=$('#dKind').value;if(e)p.set('eventId',e);if(k)p.set('kind',k);return p;}
+async function loadDecisions(){const p=dQuery();p.set('limit','100');try{const {decisions}=await api('/admin/api/decisions?'+p);
+  $('#decisions').innerHTML=decisions.length?'<table><tr><th>When</th><th>Step</th><th>Outcome</th><th>Event</th><th>Model / prompt</th><th>Detail</th></tr>'+decisions.map(d=>
+    '<tr><td>'+esc(new Date(d.at).toLocaleString())+'</td><td>'+esc(d.kind)+(d.actor!=='pipeline'?' <span class="muted">('+esc(d.actor)+')</span>':'')+'</td><td>'+esc(d.outcome)+'</td><td>'+(d.eventId?'<a href="#" data-ev="'+esc(d.eventId)+'" onclick="pickEvent(this);return false">'+esc(d.eventId.slice(0,8))+'</a>':'—')+'</td><td class="muted">'+esc(d.model||'—')+'<br>'+esc(d.promptVersion||'')+'</td><td><details><summary class="muted">'+esc(String(d.detail.reason||d.detail.title||'').slice(0,80)||'show')+'</summary><pre>'+esc(JSON.stringify(d.detail,null,1))+'</pre></details></td></tr>').join('')+'</table>'
+    :'<p class="muted">No decisions yet.</p>';}catch(e){$('#decisions').textContent='Could not load: '+e.message;}}
+async function decisionsCsv(){try{const r=await fetch('/admin/api/decisions.csv?'+dQuery(),{headers:{'x-admin-token':TOKEN}});if(!r.ok)throw new Error(r.status);
+  const a=document.createElement('a');a.href=URL.createObjectURL(await r.blob());a.download='decisions-'+new Date().toISOString().slice(0,10)+'.csv';a.click();URL.revokeObjectURL(a.href);}catch(e){alert('Download failed: '+e.message);}}
 async function exportLabels(){try{const f=await api('/admin/api/eval-export');if(!f.cases.length){alert('No reviewed events yet.');return;}
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(f,null,1)],{type:'application/json'}));a.download='desk-'+new Date().toISOString().slice(0,10)+'.json';a.click();URL.revokeObjectURL(a.href);}
   catch(e){alert('Export failed: '+e.message);}}
@@ -97,5 +108,5 @@ async function sendManual(ev){ev.preventDefault();const f=Object.fromEntries(new
   for(const k of ['severity','lat','lon','radiusM'])f[k]=Number(f[k]); if(!f.sourceUrl)delete f.sourceUrl;
   try{const r=await api('/admin/api/manual-alert',{method:'POST',body:JSON.stringify(f)});$('#manualOut').textContent='Sent: '+r.alerts+' alerts, '+r.pushes+' pushes.';load();}
   catch(e){$('#manualOut').textContent='Failed: '+e.message;}}
-if(TOKEN)load(); setInterval(()=>TOKEN&&load(),30000);
+if(TOKEN){load();loadDecisions();} setInterval(()=>TOKEN&&load(),30000);
 </script></body></html>`;

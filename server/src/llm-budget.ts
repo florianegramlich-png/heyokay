@@ -44,6 +44,11 @@ export class BudgetedLLM implements StructuredLLM {
     return this.inner.enabled;
   }
 
+  private skippedLast = false;
+  get lastModel() {
+    return this.skippedLast ? null : (this.inner.lastModel ?? null);
+  }
+
   /** Today's spend as known to this machine (refreshed from the database at day change). */
   async spent(): Promise<number> {
     await this.sync();
@@ -63,7 +68,9 @@ export class BudgetedLLM implements StructuredLLM {
   async generate<T extends z.ZodType>(system: string, user: string, schema: T): Promise<z.infer<T> | null> {
     if (!this.inner.enabled) return null;
     await this.sync();
+    this.skippedLast = false;
     if (this.cfg.dailyBudgetEur > 0 && this.spentToday >= this.cfg.dailyBudgetEur) {
+      this.skippedLast = true;
       M.llmCalls.inc({ result: 'over_budget' });
       await this.store.addLlmUsage(this.day, { calls: 0, inputTokens: 0, outputTokens: 0, eur: 0, skipped: 1 }).catch(() => {});
       return null; // template fallback

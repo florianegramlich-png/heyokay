@@ -1,10 +1,11 @@
 import { DatabaseSync } from 'node:sqlite';
 import { randomUUID, createHash, randomBytes } from 'node:crypto';
 import type {
+  Decision,
   Alert, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
 } from './types.js';
 import { DEFAULT_PREFS, normalizePrefs, savedPrefs } from './types.js';
-import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type AccountIdentity, type IdentityProvider, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob, type LlmUsageDay } from './store.js';
+import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type AccountIdentity, type IdentityProvider, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob, type LlmUsageDay, type DecisionQuery, decisionLimit } from './store.js';
 import type { PushTicket } from './push.js';
 import type { SourceStatus } from './ingest.js';
 import { distanceM, LOCATION_MAX_AGE_MS } from './geo.js';
@@ -90,6 +91,9 @@ export class SqliteStore implements Store {
         user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, day TEXT NOT NULL, sent_at TEXT NOT NULL,
         PRIMARY KEY (user_id, day)
       );
+      CREATE TABLE IF NOT EXISTS decisions (id TEXT PRIMARY KEY, at TEXT NOT NULL, kind TEXT NOT NULL, event_id TEXT, data TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS decisions_at ON decisions(at);
+      CREATE INDEX IF NOT EXISTS decisions_event ON decisions(event_id, at);
       -- Users from before devices existed sign in with their original token.
       INSERT OR IGNORE INTO devices (token_hash, user_id, created_at) SELECT token_hash, id, created_at FROM users;
       PRAGMA foreign_keys = ON;
@@ -468,6 +472,22 @@ export class SqliteStore implements Store {
   async llmUsage(fromDay: string): Promise<LlmUsageDay[]> {
     return (this.db.prepare(`SELECT * FROM llm_usage WHERE day >= ? ORDER BY day`).all(fromDay) as any[])
       .map((r) => ({ day: r.day, calls: r.calls, inputTokens: r.input_tokens, outputTokens: r.output_tokens, eur: r.eur, skipped: r.skipped }));
+  }
+
+  // ── decision log ─────────────────────────────────────────────────────────
+  async recordDecision(d: Decision): Promise<void> {
+    this.db.prepare(`INSERT INTO decisions (id, at, kind, event_id, data) VALUES (?,?,?,?,?) ON CONFLICT (id) DO NOTHING`)
+      .run(d.id, d.at, d.kind, d.eventId, JSON.stringify(d));
+  }
+
+  async decisions(q: DecisionQuery): Promise<Decision[]> {
+    const where: string[] = [];
+    const args: string[] = [];
+    if (q.eventId) { where.push('event_id = ?'); args.push(q.eventId); }
+    if (q.kind) { where.push('kind = ?'); args.push(q.kind); }
+    if (q.since) { where.push('at >= ?'); args.push(new Date(q.since).toISOString()); }
+    return (this.db.prepare(`SELECT data FROM decisions ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY at DESC, rowid DESC LIMIT ${decisionLimit(q)}`)
+      .all(...args) as any[]).map((r) => JSON.parse(r.data));
   }
 
   // ── leases ───────────────────────────────────────────────────────────────

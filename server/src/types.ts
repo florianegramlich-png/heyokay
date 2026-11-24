@@ -268,3 +268,28 @@ export interface Alert {
   feedback: Feedback | null;
   createdAt: string;
 }
+
+/**
+ * Decision log (PRD 6.3, EU AI Act record-keeping): one row per pipeline or Alert Desk decision.
+ * Never holds user ids or locations: ranking is logged per event as counts.
+ */
+export const DECISION_KINDS = ['extract', 'review_gate', 'compose', 'rank', 'desk'] as const;
+export type DecisionKind = (typeof DECISION_KINDS)[number];
+
+export interface Decision {
+  id: string;
+  at: string;
+  kind: DecisionKind;
+  /** 'pipeline' for automatic steps, 'desk' for Alert Desk actions (individual reviewers later). */
+  actor: string;
+  eventId: string | null;
+  /** The source item it concerns, "source:externalId". */
+  sourceRef: string | null;
+  /** Model that answered ("anthropic:claude-…"), null for rules, templates and people. */
+  model: string | null;
+  /** Hash of the prompt in use, so a change of prompt is visible in the log. */
+  promptVersion: string | null;
+  /** Short result: "alert", "dropped", "pending_review", "approved", "template", … */
+  outcome: string;
+  detail: Record<string, unknown>;
+}

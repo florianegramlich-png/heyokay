@@ -1,7 +1,7 @@
 import type { SourceStatus } from './ingest.js';
 import type { PushTicket } from './push.js';
 import type {
-  Alert, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
+  Alert, Decision, DecisionKind, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
 } from './types.js';
 
 /** How far back an event with a known, future end time still counts as active. */
@@ -193,8 +193,23 @@ export interface Store {
   /** Gives the lease up early (clean shutdown), so another worker can take over at once. */
   releaseLease(name: string, holder: string): Promise<void>;
 
+  // ── decision log (PRD 6.3) ──
+  recordDecision(d: Decision): Promise<void>;
+  /** Newest first. */
+  decisions(q: DecisionQuery): Promise<Decision[]>;
+
   close(): Promise<void>;
 }
+
+export interface DecisionQuery {
+  eventId?: string;
+  kind?: DecisionKind;
+  /** ISO time, inclusive. */
+  since?: string;
+  /** Default 200, at most 10 000. */
+  limit?: number;
+}
+export const decisionLimit = (q: DecisionQuery) => Math.min(Math.max(1, q.limit ?? 200), 10_000);
 
 /** Shared by both implementations so the numbers can't drift apart. */
 /** Centre of the grid cell containing a point (also used to build the cell list in both stores). */

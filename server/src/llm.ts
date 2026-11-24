@@ -11,6 +11,8 @@ export interface LlmUsage { inputTokens: number; outputTokens: number }
 
 export interface StructuredLLM {
   readonly enabled: boolean;
+  /** Which model gave the last answer ("provider:model"), null when the last call got none. For the decision log. */
+  readonly lastModel?: string | null;
   generate<T extends z.ZodType>(system: string, user: string, schema: T): Promise<z.infer<T> | null>;
 }
 
@@ -19,6 +21,7 @@ export class AnthropicLLM implements StructuredLLM {
   private client: Anthropic | null;
   /** Called after every successful call with the tokens used (cost tracking, llm-budget.ts). */
   onUsage?: (u: LlmUsage) => void;
+  lastModel: string | null = null;
   constructor(apiKey: string | null, private model: string) {
     this.client = apiKey ? new Anthropic({ apiKey }) : null;
   }
@@ -28,6 +31,7 @@ export class AnthropicLLM implements StructuredLLM {
   }
 
   async generate<T extends z.ZodType>(system: string, user: string, schema: T): Promise<z.infer<T> | null> {
+    this.lastModel = null;
     if (!this.client) return null;
     try {
       const msg = await this.client.messages.parse({
@@ -38,7 +42,9 @@ export class AnthropicLLM implements StructuredLLM {
         output_config: { format: zodOutputFormat(schema) },
       });
       this.onUsage?.({ inputTokens: msg.usage?.input_tokens ?? 0, outputTokens: msg.usage?.output_tokens ?? 0 });
-      return (msg.parsed_output ?? null) as z.infer<T> | null;
+      const out = (msg.parsed_output ?? null) as z.infer<T> | null;
+      if (out != null) this.lastModel = `anthropic:${this.model}`;
+      return out;
     } catch (err) {
       console.warn('[llm] call failed, falling back:', (err as Error).message);
       return null;
