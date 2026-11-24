@@ -464,7 +464,7 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
   });
 
   /**
-   * Quarterly crime bias review (PRD 6.3): crime alerts per Berlin district against its population.
+   * Quarterly crime bias review (PRD 6.3): crime alerts per district (Berlin, Hamburg) against its population.
    * Desk only; no area score ever reaches the apps. `quarter` like 2026-Q4, default the current one.
    */
   app.get('/admin/api/crime-bias', async (req, reply) => {
