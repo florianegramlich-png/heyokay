@@ -10,6 +10,7 @@ import type { PushTicket } from './push.js';
 import type { AppEvent, AppEventCount, Platform } from './app-events.js';
 import type { SourceStatus } from './ingest.js';
 import { distanceM, LOCATION_MAX_AGE_MS } from './geo.js';
+import { RETENTION, daysBefore, type RetentionReport } from './retention.js';
 import { cosine } from './embeddings.js';
 
 export type { Store } from './store.js';
@@ -485,6 +486,36 @@ export class SqliteStore implements Store {
   async llmUsage(fromDay: string): Promise<LlmUsageDay[]> {
     return (this.db.prepare(`SELECT * FROM llm_usage WHERE day >= ? ORDER BY day`).all(fromDay) as any[])
       .map((r) => ({ day: r.day, calls: r.calls, inputTokens: r.input_tokens, outputTokens: r.output_tokens, eur: r.eur, skipped: r.skipped }));
+  }
+
+  // ── data retention ───────────────────────────────────────────────────────
+  async purgeExpired(nowIso: string): Promise<RetentionReport> {
+    const R = RETENTION;
+    const before = (d: number) => daysBefore(nowIso, d);
+    const run = (sql: string, ...args: (string | number)[]) => Number(this.db.prepare(sql).run(...args).changes);
+    this.db.exec('BEGIN');
+    try {
+      const out: RetentionReport = {
+        alerts: run(`DELETE FROM alerts WHERE created_at < ?`, before(R.alertsDays)),
+        pushTickets: run(`DELETE FROM push_tickets WHERE created_at < ?`, before(R.pushTicketsDays)),
+        locationsCleared: run(`UPDATE users SET lat = NULL, lon = NULL, location_updated_at = NULL WHERE location_updated_at IS NOT NULL AND location_updated_at < ?`, before(R.locationDays)),
+        // Not while its event is running: updates and cancellations find the event through it.
+        sourceItems: run(`DELETE FROM source_items WHERE first_seen_at < ? AND (event_id IS NULL OR NOT EXISTS (
+            SELECT 1 FROM events e WHERE e.id = source_items.event_id AND e.status != 'rejected' AND (e.ends_at IS NULL OR e.ends_at > ?)))`, before(R.sourceItemsDays), nowIso),
+        events: run(`DELETE FROM events WHERE COALESCE(ends_at, starts_at) < ?`, before(R.eventsDays)),
+        pushJobs: run(`DELETE FROM push_jobs WHERE created_at < ?`, before(R.pushJobsDays)),
+        digests: run(`DELETE FROM digests WHERE day < ?`, before(R.digestsDays).slice(0, 10)),
+        emailCodes: run(`DELETE FROM email_codes WHERE expires_at < ?`, before(R.emailCodesDays)),
+        reviewerSessions: run(`DELETE FROM reviewer_sessions WHERE expires_at <= ?`, nowIso),
+      };
+      // Source items of deleted events go too (their event is gone).
+      out.sourceItems += run(`DELETE FROM source_items WHERE event_id IS NOT NULL AND first_seen_at < ? AND NOT EXISTS (SELECT 1 FROM events e WHERE e.id = source_items.event_id)`, before(R.sourceItemsDays));
+      this.db.exec('COMMIT');
+      return out;
+    } catch (e) {
+      this.db.exec('ROLLBACK');
+      throw e;
+    }
   }
 
   // ── product KPIs ─────────────────────────────────────────────────────────

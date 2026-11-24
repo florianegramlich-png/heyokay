@@ -46,6 +46,18 @@
   - No new dependency.
   - Tests: `server/test/hardening.test.ts` (7 new: rate counter windows; headers and desk CSP, no-store, CORS preflight still 204; 64 KB limit; per-address limit with Retry-After, health exempt, next minute; per-token limit; client address only from the configured header, and the config default on Fly; the fuzz run). Server 430/430 on SQLite + Postgres, app 8/8, web 25/25, typechecks clean.
   - For Flori: nothing to set; on Fly it switches itself on. If the web app or a partner ever needs more than 300 requests a minute from one address, raise `RATE_LIMIT_IP_PER_MIN`.
+- **Data retention, part 1** (roadmap "Data retention", split: the decision log waits for the Open question) [PRD 11, GDPR].
+  - What it does: a new worker task, `retention`, runs once an hour and deletes what is past its time (`Store.purgeExpired`, the periods in `server/src/retention.ts`):
+    - alerts (what each person was sent) and push tickets: after 30 days;
+    - a person's last location: cleared when it hasn't been updated for 30 days (the person, their settings and places stay; a phone that comes back sends a new position);
+    - raw source items: after 7 days, but not while the event they belong to is still running, because updates and cancellations find their event through them;
+    - events: 120 days after they ended (or began, if they have no end), rejected ones too;
+    - expired Alert Desk sessions, sign-in codes a day after they expired, stuck delivery jobs after a day, daily-summary markers after 30 days.
+  - My reading of "expiring ended events": deleting them after 30 days would empty the quarterly crime bias review before anyone looks at it, so events stay one quarter plus a month (120 days). They hold only public source text, no personal data. Say if you want a shorter period and the bias review run monthly instead.
+  - Kept: daily totals (AI spend, anonymous app-event counts, they name nobody) and the decision log (until you pick a period; roadmap "Data retention, part 2").
+  - Both databases, in one transaction; running it twice changes nothing. Old rows from before this change go on the first run after deploy.
+  - Tests: `server/test/retention.test.ts` (2 new per backend: what goes and what stays, incl. raw items of a running event and the person whose location is cleared, a second run deleting nothing; sessions and codes only after they expired). Server 434/434 on SQLite + Postgres, app 8/8, web 25/25, typechecks clean.
+  - README's privacy line now says how long locations and alerts are kept; the privacy policy should say the same (under "Needs a human": App Store privacy labels and policy).
 
 ## 2026-11-23
 

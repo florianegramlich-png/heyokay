@@ -7,6 +7,7 @@ import type {
 import { DEFAULT_PREFS, normalizePrefs, savedPrefs } from './types.js';
 import { hashToken } from './db.js';
 import { LOCATION_MAX_AGE_MS, MAX_PLACE_RADIUS_M } from './geo.js';
+import { RETENTION, daysBefore, type RetentionReport } from './retention.js';
 import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type AccountIdentity, type IdentityProvider, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob, type LlmUsageDay, type DecisionQuery, type KpiInputs, decisionLimit } from './store.js';
 import type { PushTicket } from './push.js';
 import type { AppEvent, AppEventCount, Platform } from './app-events.js';
@@ -677,6 +678,36 @@ export class PgStore implements Store {
   }
 
   // ── AI spend ─────────────────────────────────────────────────────────────
+  async purgeExpired(nowIso: string): Promise<RetentionReport> {
+    const R = RETENTION;
+    const before = (d: number) => daysBefore(nowIso, d);
+    const client = await this.pool.connect();
+    const run = async (sql: string, args: unknown[]) => (await client.query(sql, args)).rowCount ?? 0;
+    try {
+      await client.query('BEGIN');
+      const out: RetentionReport = {
+        alerts: await run(`DELETE FROM alerts WHERE created_at < $1`, [before(R.alertsDays)]),
+        pushTickets: await run(`DELETE FROM push_tickets WHERE created_at < $1`, [before(R.pushTicketsDays)]),
+        locationsCleared: await run(`UPDATE users SET lat = NULL, lon = NULL, location_updated_at = NULL WHERE location_updated_at < $1`, [before(R.locationDays)]),
+        sourceItems: await run(`DELETE FROM source_items s WHERE first_seen_at < $1 AND (event_id IS NULL OR NOT EXISTS (
+            SELECT 1 FROM events e WHERE e.id = s.event_id AND e.status != 'rejected' AND (e.ends_at IS NULL OR e.ends_at > $2)))`, [before(R.sourceItemsDays), nowIso]),
+        events: await run(`DELETE FROM events WHERE COALESCE(ends_at, starts_at) < $1`, [before(R.eventsDays)]),
+        pushJobs: await run(`DELETE FROM push_jobs WHERE created_at < $1`, [before(R.pushJobsDays)]),
+        digests: await run(`DELETE FROM digests WHERE day < $1::date`, [before(R.digestsDays).slice(0, 10)]),
+        emailCodes: await run(`DELETE FROM email_codes WHERE expires_at < $1`, [before(R.emailCodesDays)]),
+        reviewerSessions: await run(`DELETE FROM reviewer_sessions WHERE expires_at <= $1`, [nowIso]),
+      };
+      out.sourceItems += await run(`DELETE FROM source_items s WHERE event_id IS NOT NULL AND first_seen_at < $1 AND NOT EXISTS (SELECT 1 FROM events e WHERE e.id = s.event_id)`, [before(R.sourceItemsDays)]);
+      await client.query('COMMIT');
+      return out;
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  }
+
   async markSeen(userId: string, nowIso: string): Promise<void> {
     await this.q(`UPDATE users SET last_seen_at = $2 WHERE id = $1 AND (last_seen_at IS NULL OR last_seen_at < $2::timestamptz - interval '1 hour')`, [userId, nowIso]);
   }

@@ -95,6 +95,8 @@ let assembliesLast = 0;
 // Autobahn: ~230 small requests per round, so not more often than every 15 minutes.
 const AUTOBAHN_EVERY_MS = 15 * 60_000;
 let autobahnLast = 0;
+const RETENTION_EVERY_MS = 60 * 60_000;
+let retentionLast = 0;
 const FIRES_EVERY_MS = 5 * 60_000;
 let firesLast = 0;
 
@@ -105,6 +107,12 @@ const tasks: SourceTask[] = [
   { key: 'push:queue', run: () => pipeline.drainPushQueue() },
   // Evening summaries that are due (each person's own time, default 18:00).
   { key: 'push:digest', run: () => ingestLock.run(() => pipeline.sendDigests()) },
+  // Data retention (PRD 11, retention.ts): delete what is past its time, once an hour.
+  { key: 'retention', run: async () => {
+    if (Date.now() - retentionLast < RETENTION_EVERY_MS) return { skipped: 'ran less than an hour ago' };
+    retentionLast = Date.now();
+    return store.purgeExpired(new Date().toISOString());
+  } },
   ...config.ninaChannels.map((channel) => ({
     key: `nina:${channel}`,
     run: async () => ingest(await fetchNinaChannel(channel, seen('nina'))),

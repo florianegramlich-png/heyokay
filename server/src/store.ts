@@ -1,6 +1,7 @@
 import type { SourceStatus } from './ingest.js';
 import type { AppEvent, AppEventCount, Platform } from './app-events.js';
 import type { PushTicket } from './push.js';
+import type { RetentionReport } from './retention.js';
 import type {
   Alert, Category, Decision, DecisionKind, Reviewer, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
 } from './types.js';
@@ -207,6 +208,10 @@ export interface Store {
   reviewerBySession(tokenHash: string, nowIso: string): Promise<Reviewer | null>;
   deleteReviewerSession(tokenHash: string): Promise<void>;
   deleteReviewerSessionsFor(reviewerId: string): Promise<void>;
+
+  // ── data retention (PRD 11) ──
+  /** Deletes what is past its retention period (retention.ts); returns how many rows of each. */
+  purgeExpired(nowIso: string): Promise<RetentionReport>;
 
   // ── product KPIs (PRD 13) ──
   /** The person used the app (foreground calls). Written at most once an hour. */
