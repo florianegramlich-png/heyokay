@@ -14,6 +14,16 @@
 
 - **BVG/VBB disruptions: which data access?** (2026-11-18) There's no open, documented source I can build on. Options: (1) apply for VBB's official API (HAFAS, includes disruption messages; it's on the "Needs a human" list as "VBB API access"); (2) ask BVG for permission to use the disruptions JSON their website loads (`bvg.de/disruption-reports-service/…`), which has no published terms; (3) use S-Bahn Berlin / VBB disruption RSS if they offer one. I'd go with (1) for the long run and (2) as a quick start if BVG agrees. Until then the item stays open and the other sources run.
 
+## 2026-11-25
+
+- **Crime bias report, part 2b: Frankfurt** (roadmap "Crime bias report, part 2b", split: Köln and the other Presseportal cities are part 2c) [PRD 6.3].
+  - What changes: the quarterly review on the Alert Desk now has a third table, Frankfurt am Main, next to Berlin and Hamburg. Each Ortsbezirk is compared with Frankfurt's own rate, with the same flag rule. Nothing changes in the phone app or on the web (no area scores for people, by design).
+  - Data (`server/src/data/frankfurt-ortsbezirke.ts`): the 16 Ortsbezirke from the city's WFS "Stadtgebietsgliederung" (`Stadtgebietsgliederung:Ortsbezirke`, geowebdienste.frankfurt.de), licence Datenlizenz Deutschland – Namensnennung 2.0, attribution "Stadt Frankfurt am Main – Bürgeramt, Statistik und Wahlen" (in the file), simplified to about 40 m. Residents: the city's open-data table "Demographische Kennzahlen Stadtteile" (same licence), 2024 values for the 45 Stadtteile, added up per Ortsbezirk (each Stadtteil placed by its outline from the same WFS). Total 776 843, matching the table's Frankfurt total. Both fetched live today.
+  - My interpretations: Ortsbezirke (16, 5 000–135 000 residents) rather than the 46 Stadtteile, because that's the level comparable to Berlin's and Hamburg's Bezirke and Stadtteile would mostly be too small to say anything. The table counts the airport (Stadtteil Flughafen) with Sachsenhausen-Süd, so it sits in Süd. The table's year "2024" is taken as 31 December 2024.
+  - Not yet: Köln's open-data and geo portals still don't answer from the sandbox, so Köln and the other cities are part 2c.
+  - Tests: `server/test/crime-bias.test.ts` (1 new: 16 Ortsbezirke and Frankfurt's total, a known place in each, the airport in Süd, Offenbach and Wiesbaden outside; 2 updated: a Frankfurt alert compared with Frankfurt only, the endpoint lists three cities). Server 435/435 on SQLite + Postgres, app 8/8, web 25/25, typechecks clean.
+  - For Flori: nothing to set up. Update the population numbers once a year (the city publishes the next year's in its open-data table).
+
 ## 2026-11-24
 
 - **Product analytics, part 2: app events** (roadmap "Product analytics, part 2 — app events") [PRD 13].

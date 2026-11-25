@@ -10,6 +10,7 @@ import { buildApi } from '../src/api.js';
 import { BERLIN_BEZIRKE } from '../src/data/berlin-bezirke.js';
 import { crimeBiasReport, districtOf, locate, quarterOf, quarterRange, type CrimeBiasReport } from '../src/bias-report.js';
 import { HAMBURG_BEZIRKE } from '../src/data/hamburg-bezirke.js';
+import { FRANKFURT_ORTSBEZIRKE } from '../src/data/frankfurt-ortsbezirke.js';
 import { DESK_HTML } from '../src/desk.js';
 
 // PRD 6.3: quarterly crime bias review by district; no area scores anywhere else.
@@ -32,6 +33,25 @@ const PLACES = {
 
 const berlin = (r: CrimeBiasReport) => r.cities.find((c) => c.key === 'berlin')!;
 const hamburg = (r: CrimeBiasReport) => r.cities.find((c) => c.key === 'hamburg')!;
+const frankfurt = (r: CrimeBiasReport) => r.cities.find((c) => c.key === 'frankfurt')!;
+const FFM = {
+  'Innenstadt I': [50.1109, 8.6821], // Römer
+  'Innenstadt II': [50.1189, 8.6520], // Bockenheimer Warte
+  'Innenstadt III': [50.1280, 8.6920], // Nordend
+  'Bornheim/Ostend': [50.1300, 8.7110], // Bornheim Mitte
+  Süd: [50.1000, 8.6830], // Sachsenhausen
+  West: [50.1020, 8.5420], // Höchst
+  'Mitte-West': [50.1300, 8.6100], // Rödelheim
+  'Nord-West': [50.1640, 8.6440], // Heddernheim
+  'Mitte-Nord': [50.1550, 8.6700], // Eschersheim
+  'Nord-Ost': [50.1560, 8.6950], // Eckenheim
+  Ost: [50.1170, 8.7550], // Fechenheim
+  'Kalbach/Riedberg': [50.1750, 8.6350], // Riedberg
+  'Nieder-Erlenbach': [50.2050, 8.7120],
+  Harheim: [50.1830, 8.6880],
+  'Nieder-Eschbach': [50.2000, 8.6650],
+  'Bergen-Enkheim': [50.1580, 8.7600],
+} as const;
 const HH = {
   'Hamburg-Mitte': [53.5503, 9.9930], // Rathaus
   Altona: [53.5511, 9.9350], // Bahnhof Altona
@@ -62,7 +82,7 @@ describe('districts and quarters', () => {
     expect(BERLIN_BEZIRKE.reduce((a, b) => a + b.population, 0)).toBe(3_917_196);
     for (const [name, [lat, lon]] of Object.entries(PLACES)) expect(districtOf(lat, lon), name).toBe(code(name));
     expect(districtOf(48.1374, 11.5755)).toBeNull(); // München
-    expect(districtOf(50.1109, 8.6821)).toBeNull(); // Frankfurt
+    expect(districtOf(50.9375, 6.9603)).toBeNull(); // Köln
     expect(districtOf(52.39, 13.06)).toBeNull(); // Potsdam
   });
 
@@ -76,6 +96,17 @@ describe('districts and quarters', () => {
     const [lon, lat] = [hole.reduce((a, p) => a + p[0], 0) / hole.length, hole.reduce((a, p) => a + p[1], 0) / hole.length];
     expect(locate(lat, lon)).toBeNull();
     expect(locate(53.5833, 9.6833)).toBeNull(); // Wedel, just outside
+  });
+
+  it('Frankfurt: 16 Ortsbezirke, 776 843 residents, places in the right one; the airport counts to Süd', () => {
+    expect(FRANKFURT_ORTSBEZIRKE).toHaveLength(16);
+    expect(FRANKFURT_ORTSBEZIRKE.reduce((a, b) => a + b.population, 0)).toBe(776_843);
+    for (const [name, [lat, lon]] of Object.entries(FFM)) {
+      expect(locate(lat, lon), name).toEqual({ city: 'frankfurt', code: FRANKFURT_ORTSBEZIRKE.find((b) => b.name === name)!.code });
+    }
+    expect(locate(50.0510, 8.5700)).toEqual({ city: 'frankfurt', code: FRANKFURT_ORTSBEZIRKE.find((b) => b.name === 'Süd')!.code }); // Terminal 1
+    expect(locate(50.1050, 8.7650)).toBeNull(); // Offenbach, across the Main
+    expect(locate(50.0820, 8.2400)).toBeNull(); // Wiesbaden
   });
 
   it('quarters', () => {
@@ -95,6 +126,7 @@ describe('crimeBiasReport', () => {
     events.push(ev('Pankow', { status: 'pending_review' }));
     events.push(ev([48.1374, 11.5755])); // München
     events.push(ev([53.5503, 9.9930], { sources: [{ sourceName: 'Polizei Hamburg', externalId: 'h', title: 'T', official: false }] })); // Hamburg-Mitte
+    events.push(ev([50.1020, 8.5420], { sources: [{ sourceName: 'Polizeipräsidium Frankfurt am Main', externalId: 'f', title: 'T', official: false }] })); // Höchst
     events.push(ev('Mitte', { startsAt: '2026-09-30T23:00:00.000Z' })); // previous quarter
     events.push(ev('Mitte', { category: 'transit' })); // not crime
 
@@ -106,6 +138,11 @@ describe('crimeBiasReport', () => {
     // Hamburg is compared with Hamburg only: one alert, in Mitte.
     expect(hamburg(r).total).toMatchObject({ population: 1_980_285, released: 1 });
     expect(hamburg(r).districts.find((x) => x.name === 'Hamburg-Mitte')).toMatchObject({ released: 1, flag: null, sources: [{ name: 'Polizei Hamburg', count: 1 }] });
+    // Frankfurt likewise: one alert in West, compared with Frankfurt's own rate.
+    expect(frankfurt(r).total).toMatchObject({ population: 776_843, released: 1 });
+    const west = frankfurt(r).districts.find((x) => x.name === 'West')!;
+    expect(west).toMatchObject({ released: 1, flag: null, sources: [{ name: 'Polizeipräsidium Frankfurt am Main', count: 1 }] });
+    expect(west.ratio).toBeCloseTo(776_843 / 135_124, 2);
     expect(d.Mitte.ratio).toBeCloseTo((15 / 398505) / (67 / 3_917_196), 1);
     expect(d.Mitte).toMatchObject({ released: 15, flag: 'more' });
     expect(d.Mitte.ratio!).toBeGreaterThan(2);
@@ -152,7 +189,7 @@ describe.each(storeBackends())('crime bias on the Alert Desk ($name)', (backend)
     expect(r.quarter).toBe('2026-Q4');
     expect(berlin(r).districts.find((d) => d.name === 'Mitte')!.released).toBe(2);
     expect(berlin(r).total.rejected).toBe(1);
-    expect(r.cities.map((c: { key: string }) => c.key)).toEqual(['berlin', 'hamburg']);
+    expect(r.cities.map((c: { key: string }) => c.key)).toEqual(['berlin', 'hamburg', 'frankfurt']);
     const q3 = (await app.inject({ method: 'GET', url: '/admin/api/crime-bias?quarter=2026-Q3', headers: h })).json();
     expect(berlin(q3).total.released).toBe(1);
     expect((await app.inject({ method: 'GET', url: '/admin/api/crime-bias?quarter=Q3', headers: h })).statusCode).toBe(400);
