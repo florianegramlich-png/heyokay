@@ -23,6 +23,13 @@
   - Not yet: Köln's open-data and geo portals still don't answer from the sandbox, so Köln and the other cities are part 2c.
   - Tests: `server/test/crime-bias.test.ts` (1 new: 16 Ortsbezirke and Frankfurt's total, a known place in each, the airport in Süd, Offenbach and Wiesbaden outside; 2 updated: a Frankfurt alert compared with Frankfurt only, the endpoint lists three cities). Server 435/435 on SQLite + Postgres, app 8/8, web 25/25, typechecks clean.
   - For Flori: nothing to set up. Update the population numbers once a year (the city publishes the next year's in its open-data table).
+- **App unit tests, part 1: api, theme, onboarding** (roadmap "App unit tests", split: the paywall gating is part 2, because there's no paywall yet).
+  - My interpretation of "jest-expo": the app already tests with Node's own runner (`node --test`, like the web), so I kept that instead of adding jest-expo and a second test setup; no new dependency. The logic under test moved into small modules without Expo imports so Node can load them.
+  - `lib/api`: the server calls are now `createApi(fetch, getToken, baseUrl)` in `app/src/lib/api-client.ts` (same shape as `web/lib/api.ts`); `lib/api.ts` only wires in the session and the API URL, so every screen keeps importing `api` and `ApiError` as before. One fix found on the way: ids in paths (alert, feedback, delete place) are now URL-encoded, as the web already did.
+  - Onboarding: the step order (value → location → "always" only if location was allowed → notifications → topics → privacy) and the "at least one topic" rule are in `app/src/lib/onboarding.ts`, and the onboarding screen uses them. Nothing changes for people.
+  - Tests: `app/test/api.test.ts` (4: token and JSON, encoded ids, no token for registering and public calls, push token sent, history query, errors with status and message, 401 without a request, a non-JSON error page), `app/test/onboarding.test.ts` (5: full order, no "always" after a refused or postponed location, the topic rule, every step is a counted funnel event), `app/test/theme.test.ts` (3: a distinct colour per topic and level, WCAG AA contrast on the background for text, muted text, topic and level colours, cool colours for levels 1–2). Server 435/435 on SQLite + Postgres, app 20/20, web 25/25, typechecks clean.
+  - Web: no change; it already had `createApi` with tests, and its onboarding is shorter (no "always" or notification steps in a browser).
+  - For Flori: nothing to do.
 
 ## 2026-11-24
 

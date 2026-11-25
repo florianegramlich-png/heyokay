@@ -58,7 +58,7 @@ Same rules as every source: official or press-office publishers only, calm Germa
 - [x] **Offline feed** [5.3]: the phone app keeps the last 20 alerts (and the details of those opened) on the device; without a connection it shows them with "No connection. As of …". Cleared on sign-out and delete. (2026-11-18)
 - [ ] **Data retention, part 2 — decision log** [11, 6.3]: delete decision-log rows after the period Flori picks (CHANGELOG → Open questions, "How long to keep the decision log?"); one line in `purgeExpired` and `RETENTION`. *(Split 2026-11-24; everything else done.)*
   - *Waiting 2026-11-24, needs Flori:* the retention period.
-- [ ] **App unit tests**: jest-expo with tests for `lib/api`, `lib/theme`, the onboarding steps and the paywall gating.
+- [ ] **App unit tests, part 2 — paywall gating**: tests for the paywall gating once "Freemium + subscriptions" exists (there's no paywall in the app yet). *(Split 2026-11-25; `lib/api`, `lib/theme` and the onboarding steps done.)*
 - [ ] **Deploy config** [10.4]: ~~server Dockerfile, a `fly.toml` (EU region, Frankfurt), a health check and a deploy section in the README~~ (done 2026-11-17, SQLite on a volume for now). Still open: managed Postgres switch (Supabase runbook). EAS Update configured 2026-11-18 (Decision 6). EAS build profiles exist in `app/eas.json`.
 
 ### Phase 2: growth
@@ -132,6 +132,7 @@ Legal and partners
 
 ## Done
 
+- [x] 2026-11-25 **App unit tests, part 1 — api, theme, onboarding**: with the app's existing runner (`node --test`, no jest-expo): `lib/api-client.ts` (the server calls as a pure `createApi`, wired up in `lib/api.ts`; ids in paths now encoded like the web), `lib/onboarding.ts` (the step order, used by the onboarding screen), and the theme's colours and contrast. Tests `app/test/api|onboarding|theme.test.ts`.
 - [x] 2026-11-25 **Crime bias report, part 2b — Frankfurt** [6.3]: Frankfurt's 16 Ortsbezirke (Stadt Frankfurt WFS "Stadtgebietsgliederung", dl-de/by-2.0) with residents per Stadtteil for 2024 (open data "Demographische Kennzahlen Stadtteile", dl-de/by-2.0) added up per Ortsbezirk, in `server/src/data/frankfurt-ortsbezirke.ts`; the third city in `BIAS_CITIES`. Tests in `server/test/crime-bias.test.ts`.
 - [x] 2026-11-24 **Data retention, part 1** [11 GDPR]: hourly worker task `retention` (`Store.purgeExpired`, policy in `server/src/retention.ts`): alerts and push tickets after 30 days, last locations not updated for 30 days cleared (the person stays), raw source items after 7 days unless their event is still running, events 120 days after they ended (keeps the last quarter for the crime bias review), expired desk sessions, sign-in codes, stuck delivery jobs and daily-summary markers. Daily totals kept; the decision log waits for Flori. 4 tests.
 - [x] 2026-11-24 **API hardening** [11]: per-address (300/min) and per-token (120/min) rate limits with 429 + Retry-After (`RATE_LIMIT_*`), the client address from Fly's `Fly-Client-IP` only when running on Fly (also for the sign-in and app-event limits), request bodies capped at 64 KB, security headers on every answer (CSP deny-all for JSON, a tight CSP for the Alert Desk, nosniff, no-referrer, DENY framing, HSTS, no-store on personal and desk answers), and a seeded fuzz test sending junk bodies, queries, ids and headers to every route (~1 150 requests, no 500). No new dependency. 7 tests.
