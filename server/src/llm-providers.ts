@@ -50,11 +50,13 @@ export function parseJsonText(text: string): unknown {
 export class OpenAICompatLLM implements StructuredLLM {
   readonly enabled = true;
   onUsage?: (u: LlmUsage) => void;
+  lastModel: string | null = null;
   constructor(private o: OpenAICompatOptions) {}
 
   get name() { return this.o.name; }
 
   async generate<T extends z.ZodType>(system: string, user: string, schema: T): Promise<z.infer<T> | null> {
+    this.lastModel = null;
     try {
       const jsonSchema = jsonSchemaFor(schema);
       const mode = this.o.jsonMode ?? 'schema';
@@ -86,6 +88,7 @@ export class OpenAICompatLLM implements StructuredLLM {
       if (!text) throw new Error(`no content (finish: ${body.choices?.[0]?.finish_reason ?? 'none'})`);
       const parsed = schema.safeParse(parseJsonText(text));
       if (!parsed.success) throw new Error(`answer doesn't match the schema: ${parsed.error.issues[0]?.message ?? 'invalid'}`);
+      this.lastModel = `${this.o.name}:${this.o.model}`;
       return parsed.data as z.infer<T>;
     } catch (err) {
       console.warn(`[llm:${this.o.name}] call failed:`, (err as Error).message);
@@ -103,6 +106,7 @@ export class FailoverLLM implements StructuredLLM {
   private state = new Map<Provider, { fails: number; pausedUntil: number }>();
   /** Which provider answered the last successful call (logs, tests). */
   lastProvider: string | null = null;
+  lastModel: string | null = null;
 
   constructor(private readonly providers: Provider[], private readonly now: () => number = Date.now, private readonly sink: ErrorSink = defaultSink) {
     for (const p of providers) this.state.set(p, { fails: 0, pausedUntil: 0 });
@@ -133,6 +137,7 @@ export class FailoverLLM implements StructuredLLM {
       if (out != null) {
         s.fails = 0;
         this.lastProvider = p.name ?? null;
+        this.lastModel = p.lastModel ?? p.name ?? null;
         return out;
       }
       s.fails++;
@@ -142,6 +147,7 @@ export class FailoverLLM implements StructuredLLM {
       }
     }
     this.lastProvider = null;
+    this.lastModel = null;
     return null;
   }
 }

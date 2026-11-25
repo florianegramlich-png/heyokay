@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { Category, ExtractedEvent, Severity, SourceItem } from '../types.js';
 import { CATEGORIES } from '../types.js';
@@ -31,21 +32,41 @@ Rules:
 - Severity: 1 info, 2 minor disruption, 3 moderate risk/disruption, 4 serious danger (e.g. large fire, armed police operation, major line closure), 5 danger to life for many people.
 - If the text is about a past incident with no ongoing risk, set isCurrentSafetyEvent=false.`;
 
+/** Changes whenever the extraction prompt or schema changes (decision log, PRD 6.3). */
+export const EXTRACT_PROMPT_VERSION = `extract@${createHash('sha256').update(SYSTEM + JSON.stringify(z.toJSONSchema(ExtractionSchema))).digest('hex').slice(0, 10)}`;
+
+/** How an item was read, for the decision log. */
+export interface ExtractTrace {
+  method: 'official' | 'structured' | 'model' | 'rules';
+  model: string | null;
+  promptVersion: string | null;
+  /** Why no event came out: too old, past incident, no place, no topic. */
+  dropped?: string;
+  /** The model's answer as given (public source facts only). */
+  modelOutput?: unknown;
+}
+
 export interface ExtractDeps {
   llm: StructuredLLM;
   geocoder: Geocoder;
   now?: Date;
   defaultArea?: { name: string; lat: number; lon: number; radiusM: number };
+  onTrace?: (t: ExtractTrace) => void;
 }
 
 /** Returns null when the item is not a current, locatable safety event. */
 export async function extract(item: SourceItem, deps: ExtractDeps): Promise<ExtractedEvent | null> {
   const now = deps.now ?? new Date();
-  if (!item.official && now.getTime() - Date.parse(item.publishedAt) > MAX_AGE_H * 3600_000) return null;
+  const trace = deps.onTrace ?? (() => {});
+  if (!item.official && now.getTime() - Date.parse(item.publishedAt) > MAX_AGE_H * 3600_000) {
+    trace({ method: 'rules', model: null, promptVersion: null, dropped: `older than ${MAX_AGE_H} h` });
+    return null;
+  }
 
   // Official feeds are already structured. Their severity is authoritative. Machine-made structured
   // items (heat from a forecast) are mapped the same way, with slightly lower confidence.
   if ((item.official || item.structured) && item.lat != null && item.lon != null) {
+    trace({ method: item.official ? 'official' : 'structured', model: null, promptVersion: null });
     return {
       category: item.category ?? 'public_safety',
       severity: item.officialSeverity ?? 2,
@@ -63,10 +84,12 @@ export async function extract(item: SourceItem, deps: ExtractDeps): Promise<Extr
   const llmOut = await deps.llm.generate(SYSTEM, `Source: ${item.sourceName}\nPublished: ${item.publishedAt}\n\n${text}`, ExtractionSchema);
 
   if (llmOut) {
-    if (!llmOut.isCurrentSafetyEvent) return null;
+    const base = { method: 'model' as const, model: deps.llm.lastModel ?? null, promptVersion: EXTRACT_PROMPT_VERSION, modelOutput: llmOut };
+    if (!llmOut.isCurrentSafetyEvent) { trace({ ...base, dropped: 'not a current safety event' }); return null; }
     const located = (llmOut.place && (await deps.geocoder.geocode(llmOut.place))) || findInText(text) || null;
     const geo = located || deps.defaultArea || null;
-    if (!geo) return null;
+    if (!geo) { trace({ ...base, dropped: 'no place found' }); return null; }
+    trace(base);
     // Only a whole city as the location (nothing more precise could be placed): a person decides.
     const precise = !!located && located.radiusM < CITY_RADIUS_M;
     const placeFromText = precise && !!llmOut.place && text.toLowerCase().includes(llmOut.place.split(',')[0].trim().toLowerCase());
@@ -86,7 +109,9 @@ export async function extract(item: SourceItem, deps: ExtractDeps): Promise<Extr
   }
 
   // No LLM: keyword rules. Low confidence on purpose, so a human reviews before anyone is alerted.
-  return heuristicExtract(item, text, deps.defaultArea ?? null);
+  const ruled = heuristicExtract(item, text, deps.defaultArea ?? null);
+  trace({ method: 'rules', model: null, promptVersion: null, ...(ruled ? {} : { dropped: rulesDropReason(item, text, deps.defaultArea ?? null) }) });
+  return ruled;
 }
 
 const KEYWORDS: Array<[Category, RegExp]> = [
@@ -115,6 +140,13 @@ export function heuristicExtract(item: SourceItem, text: string, defaultArea: Ex
     areaName: geo.name, lat: geo.lat, lon: geo.lon, radiusM: Math.min(geo.radiusM, 3000),
     startsAt: item.publishedAt, endsAt: null,
   };
+}
+
+function rulesDropReason(item: SourceItem, text: string, defaultArea: ExtractDeps['defaultArea'] | null): string {
+  if (PAST.test(text)) return 'past incident or appeal';
+  if (!item.category && !KEYWORDS.some(([, re]) => re.test(text))) return 'no safety topic found';
+  if (!findInText(text) && !defaultArea) return 'no place found';
+  return 'not an alert';
 }
 
 export function firstSentences(s: string, n: number): string {

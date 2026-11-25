@@ -1,13 +1,16 @@
 import pg from 'pg';
 import { randomUUID, randomBytes } from 'node:crypto';
 import type {
-  Alert, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
+  Decision, Reviewer,
+  Alert, Category, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
 } from './types.js';
 import { DEFAULT_PREFS, normalizePrefs, savedPrefs } from './types.js';
 import { hashToken } from './db.js';
 import { LOCATION_MAX_AGE_MS, MAX_PLACE_RADIUS_M } from './geo.js';
-import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type AccountIdentity, type IdentityProvider, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob, type LlmUsageDay } from './store.js';
+import { RETENTION, daysBefore, type RetentionReport } from './retention.js';
+import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type AccountIdentity, type IdentityProvider, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob, type LlmUsageDay, type DecisionQuery, type KpiInputs, decisionLimit } from './store.js';
 import type { PushTicket } from './push.js';
+import type { AppEvent, AppEventCount, Platform } from './app-events.js';
 import type { SourceStatus } from './ingest.js';
 
 /**
@@ -160,6 +163,39 @@ export const MIGRATIONS: { version: number; sql: string }[] = [
         PRIMARY KEY (provider, subject)
       );
       CREATE INDEX account_identities_account ON account_identities(account_id);
+    `,
+  },
+  {
+    // Decision log (PRD 6.3): every pipeline and Alert Desk decision, no user data.
+    version: 13,
+    sql: `
+      CREATE TABLE decisions (id uuid PRIMARY KEY, seq bigserial, at timestamptz NOT NULL, kind text NOT NULL, event_id text, data jsonb NOT NULL);
+      CREATE INDEX decisions_at ON decisions(at);
+      CREATE INDEX decisions_event ON decisions(event_id, at);
+    `,
+  },
+  {
+    // Alert Desk accounts: one login per reviewer instead of the shared token.
+    version: 14,
+    sql: `
+      CREATE TABLE reviewers (id uuid PRIMARY KEY, email text NOT NULL UNIQUE, name text NOT NULL, password_hash text NOT NULL, created_at timestamptz NOT NULL, disabled boolean NOT NULL DEFAULT false);
+      CREATE TABLE reviewer_sessions (token_hash text PRIMARY KEY, reviewer_id uuid NOT NULL REFERENCES reviewers(id) ON DELETE CASCADE, expires_at timestamptz NOT NULL);
+      CREATE INDEX reviewer_sessions_reviewer ON reviewer_sessions(reviewer_id);
+    `,
+  },
+  {
+    // Product KPIs (PRD 13): when someone last used the app, and when an alert was first opened.
+    version: 15,
+    sql: `
+      ALTER TABLE users ADD COLUMN last_seen_at timestamptz;
+      ALTER TABLE alerts ADD COLUMN opened_at timestamptz;
+    `,
+  },
+  {
+    // Anonymous app events (PRD 13): counts per day, platform and name. No user, device or IP.
+    version: 16,
+    sql: `
+      CREATE TABLE app_events (day date NOT NULL, platform text NOT NULL, name text NOT NULL, count integer NOT NULL, PRIMARY KEY (day, platform, name));
     `,
   },
 ];
@@ -408,6 +444,11 @@ export class PgStore implements Store {
     return rows.map((r) => r.data);
   }
 
+  async eventsStartedBetween(category: Category, fromIso: string, toIso: string): Promise<RiskEvent[]> {
+    const { rows } = await this.q(`SELECT data FROM events WHERE category = $1 AND starts_at >= $2 AND starts_at < $3 ORDER BY starts_at, id`, [category, fromIso, toIso]);
+    return rows.map((r) => r.data);
+  }
+
   async saveEventEmbedding(eventId: string, model: string, vector: number[]): Promise<void> {
     await this.q(`
       INSERT INTO event_embeddings (event_id, model, embedding, updated_at) VALUES ($1,$2,$3::public.vector,$4)
@@ -637,6 +678,128 @@ export class PgStore implements Store {
   }
 
   // ── AI spend ─────────────────────────────────────────────────────────────
+  async purgeExpired(nowIso: string): Promise<RetentionReport> {
+    const R = RETENTION;
+    const before = (d: number) => daysBefore(nowIso, d);
+    const client = await this.pool.connect();
+    const run = async (sql: string, args: unknown[]) => (await client.query(sql, args)).rowCount ?? 0;
+    try {
+      await client.query('BEGIN');
+      const out: RetentionReport = {
+        alerts: await run(`DELETE FROM alerts WHERE created_at < $1`, [before(R.alertsDays)]),
+        pushTickets: await run(`DELETE FROM push_tickets WHERE created_at < $1`, [before(R.pushTicketsDays)]),
+        locationsCleared: await run(`UPDATE users SET lat = NULL, lon = NULL, location_updated_at = NULL WHERE location_updated_at < $1`, [before(R.locationDays)]),
+        sourceItems: await run(`DELETE FROM source_items s WHERE first_seen_at < $1 AND (event_id IS NULL OR NOT EXISTS (
+            SELECT 1 FROM events e WHERE e.id = s.event_id AND e.status != 'rejected' AND (e.ends_at IS NULL OR e.ends_at > $2)))`, [before(R.sourceItemsDays), nowIso]),
+        events: await run(`DELETE FROM events WHERE COALESCE(ends_at, starts_at) < $1`, [before(R.eventsDays)]),
+        pushJobs: await run(`DELETE FROM push_jobs WHERE created_at < $1`, [before(R.pushJobsDays)]),
+        digests: await run(`DELETE FROM digests WHERE day < $1::date`, [before(R.digestsDays).slice(0, 10)]),
+        emailCodes: await run(`DELETE FROM email_codes WHERE expires_at < $1`, [before(R.emailCodesDays)]),
+        reviewerSessions: await run(`DELETE FROM reviewer_sessions WHERE expires_at <= $1`, [nowIso]),
+      };
+      out.sourceItems += await run(`DELETE FROM source_items s WHERE event_id IS NOT NULL AND first_seen_at < $1 AND NOT EXISTS (SELECT 1 FROM events e WHERE e.id = s.event_id)`, [before(R.sourceItemsDays)]);
+      await client.query('COMMIT');
+      return out;
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  }
+
+  async markSeen(userId: string, nowIso: string): Promise<void> {
+    await this.q(`UPDATE users SET last_seen_at = $2 WHERE id = $1 AND (last_seen_at IS NULL OR last_seen_at < $2::timestamptz - interval '1 hour')`, [userId, nowIso]);
+  }
+
+  async markAlertOpened(userId: string, alertId: string, nowIso: string): Promise<void> {
+    await this.q(`UPDATE alerts SET opened_at = $3 WHERE id = $1 AND user_id = $2 AND opened_at IS NULL`, [alertId, userId, nowIso]);
+  }
+
+  async kpiInputs(sinceIso: string): Promise<KpiInputs> {
+    const a = await this.q(`
+      SELECT a.event_id, a.user_id, a.data, a.delivery, a.feedback, a.created_at, a.opened_at, e.starts_at
+      FROM alerts a LEFT JOIN events e ON e.id = a.event_id WHERE a.created_at >= $1`, [sinceIso]);
+    const iso = (v: unknown) => (v == null ? null : new Date(v as string).toISOString());
+    const alerts = a.rows.map((r) => {
+      const d = r.data as Alert;
+      return { eventId: r.event_id, userId: r.user_id, kind: d.kind ?? 'new', delivery: r.delivery, feedback: r.feedback ?? null, official: !!d.official, createdAt: iso(r.created_at)!, openedAt: iso(r.opened_at), eventStartsAt: iso(r.starts_at) };
+    });
+    const u = await this.q(`SELECT created_at, last_seen_at, push_token IS NOT NULL AS has_push FROM users`);
+    return { alerts, users: u.rows.map((r) => ({ createdAt: iso(r.created_at)!, lastSeenAt: iso(r.last_seen_at), hasPush: !!r.has_push })) };
+  }
+
+  async createReviewer(r: Reviewer): Promise<void> {
+    await this.q(`INSERT INTO reviewers (id, email, name, password_hash, created_at, disabled) VALUES ($1,$2,$3,$4,$5,$6)`,
+      [r.id, r.email, r.name, r.passwordHash, r.createdAt, r.disabled]);
+  }
+
+  async reviewerByEmail(email: string): Promise<Reviewer | null> {
+    const { rows } = await this.q(`SELECT * FROM reviewers WHERE email = $1`, [email]);
+    return rows[0] ? pgReviewer(rows[0]) : null;
+  }
+
+  async reviewers(): Promise<Reviewer[]> {
+    const { rows } = await this.q(`SELECT * FROM reviewers ORDER BY created_at, email`);
+    return rows.map(pgReviewer);
+  }
+
+  async updateReviewer(id: string, patch: Partial<Pick<Reviewer, 'name' | 'passwordHash' | 'disabled'>>): Promise<boolean> {
+    const { rowCount } = await this.q(
+      `UPDATE reviewers SET name = COALESCE($2, name), password_hash = COALESCE($3, password_hash), disabled = COALESCE($4, disabled) WHERE id = $1`,
+      [id, patch.name ?? null, patch.passwordHash ?? null, patch.disabled ?? null]);
+    return (rowCount ?? 0) > 0;
+  }
+
+  async createReviewerSession(tokenHash: string, reviewerId: string, expiresAt: string): Promise<void> {
+    await this.q(`INSERT INTO reviewer_sessions (token_hash, reviewer_id, expires_at) VALUES ($1,$2,$3)`, [tokenHash, reviewerId, expiresAt]);
+  }
+
+  async reviewerBySession(tokenHash: string, nowIso: string): Promise<Reviewer | null> {
+    const { rows } = await this.q(
+      `SELECT r.* FROM reviewer_sessions s JOIN reviewers r ON r.id = s.reviewer_id WHERE s.token_hash = $1 AND s.expires_at > $2 AND NOT r.disabled`,
+      [tokenHash, nowIso]);
+    return rows[0] ? pgReviewer(rows[0]) : null;
+  }
+
+  async deleteReviewerSession(tokenHash: string): Promise<void> {
+    await this.q(`DELETE FROM reviewer_sessions WHERE token_hash = $1`, [tokenHash]);
+  }
+
+  async deleteReviewerSessionsFor(reviewerId: string): Promise<void> {
+    await this.q(`DELETE FROM reviewer_sessions WHERE reviewer_id = $1`, [reviewerId]);
+  }
+
+  async addAppEvents(day: string, platform: Platform, counts: Map<AppEvent, number>): Promise<void> {
+    if (!counts.size) return;
+    const names = [...counts.keys()];
+    await this.q(
+      `INSERT INTO app_events (day, platform, name, count) SELECT $1::date, $2, n, c FROM unnest($3::text[], $4::int[]) AS t(n, c)
+       ON CONFLICT (day, platform, name) DO UPDATE SET count = app_events.count + excluded.count`,
+      [day, platform, names, names.map((n) => counts.get(n)!)],
+    );
+  }
+
+  async appEventCounts(sinceDay: string): Promise<AppEventCount[]> {
+    const { rows } = await this.q(`SELECT to_char(day, 'YYYY-MM-DD') AS day, platform, name, count FROM app_events WHERE day >= $1::date ORDER BY day, platform, name`, [sinceDay]);
+    return rows.map((r) => ({ day: r.day, platform: r.platform, name: r.name, count: Number(r.count) }));
+  }
+
+  async recordDecision(d: Decision): Promise<void> {
+    await this.q(`INSERT INTO decisions (id, at, kind, event_id, data) VALUES ($1,$2,$3,$4,$5::jsonb) ON CONFLICT (id) DO NOTHING`,
+      [d.id, d.at, d.kind, d.eventId, JSON.stringify(d)]);
+  }
+
+  async decisions(q: DecisionQuery): Promise<Decision[]> {
+    const where: string[] = [];
+    const args: unknown[] = [];
+    if (q.eventId) { args.push(q.eventId); where.push(`event_id = $${args.length}`); }
+    if (q.kind) { args.push(q.kind); where.push(`kind = $${args.length}`); }
+    if (q.since) { args.push(new Date(q.since).toISOString()); where.push(`at >= $${args.length}::timestamptz`); }
+    const { rows } = await this.q(`SELECT data FROM decisions ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY at DESC, seq DESC LIMIT ${decisionLimit(q)}`, args);
+    return rows.map((r) => r.data);
+  }
+
   async addLlmUsage(day: string, u: { calls: number; inputTokens: number; outputTokens: number; eur: number; skipped: number }): Promise<void> {
     await this.q(`
       INSERT INTO llm_usage (day, calls, input_tokens, output_tokens, eur, skipped) VALUES ($1::date,$2,$3,$4,$5,$6)
@@ -751,4 +914,8 @@ function rowToUser(r: any): User {
 function toVector(v: number[]): string {
   if (!v.every((x) => Number.isFinite(x))) throw new Error('embedding contains a non-finite value');
   return `[${v.join(',')}]`;
+}
+
+function pgReviewer(r: any): Reviewer {
+  return { id: r.id, email: r.email, name: r.name, passwordHash: r.password_hash, createdAt: new Date(r.created_at).toISOString(), disabled: !!r.disabled };
 }

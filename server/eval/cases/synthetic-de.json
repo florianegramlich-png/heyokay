@@ -1,0 +1,712 @@
+{
+ "name": "Synthetic German cases",
+ "description": "50 written cases covering every category, plus past incidents, statistics, missing-person searches and other press releases that must not become alerts. Labels follow the severity scale in src/pipeline/extract.ts.",
+ "cases": [
+  {
+   "id": "s01",
+   "item": {
+    "sourceName": "BVG",
+    "title": "Sperrung der U-Bahn-Linie U5 zwischen Alexanderplatz und Frankfurter Allee",
+    "body": "Wegen einer Signalstörung ist die U5 zwischen Alexanderplatz und Frankfurter Allee seit 7:40 Uhr unterbrochen. Ein Ersatzverkehr mit Bussen ist eingerichtet. Die Störung dauert voraussichtlich bis 10 Uhr.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": true,
+    "category": "transit",
+    "severity": 3
+   }
+  },
+  {
+   "id": "s02",
+   "item": {
+    "sourceName": "S-Bahn Berlin",
+    "title": "Einschränkungen auf der Ringbahn am Ostkreuz",
+    "body": "Wegen eines Polizeieinsatzes am Ostkreuz fahren die Züge der Ringbahn S41 und S42 dort ohne Halt durch. Fahrgäste werden gebeten, auf andere Linien auszuweichen.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": true,
+    "category": [
+     "transit",
+     "public_safety"
+    ],
+    "severity": 3
+   }
+  },
+  {
+   "id": "s03",
+   "item": {
+    "sourceName": "BVG",
+    "title": "Tram M10 fährt wieder normal",
+    "body": "Die Störung bei der Tram M10 in Friedrichshain ist behoben. Alle Bahnen fahren wieder nach Fahrplan.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": false
+   }
+  },
+  {
+   "id": "s04",
+   "item": {
+    "sourceName": "S-Bahn Berlin",
+    "title": "Bauarbeiten: S-Bahn Spandau am Wochenende",
+    "body": "Von Freitag 22 Uhr bis Montag 1:30 Uhr fahren zwischen Westkreuz und Spandau keine S-Bahnen. Ersatzverkehr mit Bussen ist eingerichtet.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": true,
+    "category": "transit",
+    "severity": 2
+   }
+  },
+  {
+   "id": "s05",
+   "item": {
+    "sourceName": "MVG",
+    "title": "U-Bahn München: Ausfall der U3 nach Stellwerksstörung",
+    "body": "Eine Stellwerksstörung legt die U3 in München zwischen Münchner Freiheit und Odeonsplatz lahm. Die MVG richtet Ersatzverkehr ein.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": true,
+    "category": "transit",
+    "severity": 3
+   }
+  },
+  {
+   "id": "s06",
+   "item": {
+    "sourceName": "Deutsche Bahn",
+    "title": "Zugausfall am Hauptbahnhof nach Oberleitungsschaden",
+    "body": "Am Hauptbahnhof Berlin ist eine Oberleitung beschädigt. Mehrere Fernzüge fallen aus oder enden vorzeitig. Reisende sollten ihre Verbindung prüfen.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": true,
+    "category": "transit",
+    "severity": 3
+   }
+  },
+  {
+   "id": "s07",
+   "item": {
+    "sourceName": "BVG",
+    "title": "Neue Fahrplanbroschüre ab Dezember erhältlich",
+    "body": "Ab 1. Dezember gibt es den neuen Fahrplan in allen Kundenzentren der BVG. Die wichtigsten Änderungen betreffen die Buslinien in Pankow.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": false
+   }
+  },
+  {
+   "id": "s08",
+   "item": {
+    "sourceName": "HVV",
+    "title": "Busse in Hamburg wegen Glatteis eingeschränkt",
+    "body": "Wegen Glätte fahren mehrere Buslinien in Hamburg heute Morgen nur eingeschränkt. Der HVV bittet um Geduld.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": true,
+    "category": [
+     "transit",
+     "weather"
+    ],
+    "severity": 2
+   }
+  },
+  {
+   "id": "s09",
+   "item": {
+    "sourceName": "Feuerwehr Berlin",
+    "title": "Großbrand in Lagerhalle in Spandau – Fenster und Türen geschlossen halten",
+    "body": "In Spandau brennt seit 6 Uhr eine Lagerhalle. Es entsteht starker Rauch. Anwohnende sollen Fenster und Türen geschlossen halten und Lüftungen ausschalten.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": true,
+    "category": "public_safety",
+    "severity": 4
+   }
+  },
+  {
+   "id": "s10",
+   "item": {
+    "sourceName": "Polizei Berlin",
+    "title": "Bombenentschärfung in Mitte: Sperrkreis ab 10 Uhr",
+    "body": "Bei Bauarbeiten in Mitte wurde ein Blindgänger aus dem Zweiten Weltkrieg gefunden. Ab 10 Uhr wird ein Sperrkreis von 500 Metern eingerichtet, Anwohnende werden evakuiert.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": true,
+    "category": "public_safety",
+    "severity": 4
+   }
+  },
+  {
+   "id": "s11",
+   "item": {
+    "sourceName": "Feuerwehr Berlin",
+    "title": "Gasaustritt in Neukölln – Straße gesperrt",
+    "body": "In der Karl-Marx-Straße in Neukölln ist bei Bauarbeiten eine Gasleitung beschädigt worden. Die Straße ist gesperrt, zwei Häuser wurden vorsorglich geräumt.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": true,
+    "category": [
+     "public_safety",
+     "infrastructure"
+    ],
+    "severity": 4
+   }
+  },
+  {
+   "id": "s12",
+   "item": {
+    "sourceName": "Feuerwehr Hamburg",
+    "title": "Kellerbrand in Hamburg schnell gelöscht",
+    "body": "Ein Kellerbrand in einem Mehrfamilienhaus in Hamburg wurde nach 30 Minuten gelöscht. Verletzt wurde niemand. Die Einsatzstelle ist wieder freigegeben.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": false
+   }
+  },
+  {
+   "id": "s13",
+   "item": {
+    "sourceName": "Feuerwehr Berlin",
+    "title": "Rauchentwicklung am Alexanderplatz – Bereich weiträumig umfahren",
+    "body": "Wegen eines Brandes in einem Geschäft am Alexanderplatz kommt es zu starker Rauchentwicklung. Die Feuerwehr ist mit vielen Kräften im Einsatz. Der Bereich soll weiträumig umfahren werden.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": true,
+    "category": "public_safety",
+    "severity": 3
+   }
+  },
+  {
+   "id": "s14",
+   "item": {
+    "sourceName": "Polizei München",
+    "title": "Großeinsatz in München: Verdächtiger Gegenstand am Stachus",
+    "body": "Am Stachus in München untersucht die Polizei einen verdächtigen Gegenstand. Der Platz ist gesperrt. Die Polizei bittet, den Bereich zu meiden.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": true,
+    "category": [
+     "public_safety",
+     "crime"
+    ],
+    "severity": 3
+   }
+  },
+  {
+   "id": "s15",
+   "item": {
+    "sourceName": "Feuerwehr Köln",
+    "title": "Chemieunfall in Köln: Warnung für Anwohnende",
+    "body": "Nach einem Chemieunfall in einem Betrieb in Köln zieht eine Rauchwolke nach Osten. Anwohnende sollen Fenster schließen und im Haus bleiben. Messungen laufen.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": true,
+    "category": "public_safety",
+    "severity": 4
+   }
+  },
+  {
+   "id": "s16",
+   "item": {
+    "sourceName": "Feuerwehr Berlin",
+    "title": "Feuerwehr zeigt neue Drehleiter beim Tag der offenen Tür",
+    "body": "Am Samstag stellt die Feuerwache Kreuzberg ihre neue Drehleiter vor. Besucherinnen und Besucher sind von 10 bis 16 Uhr willkommen.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": false
+   }
+  },
+  {
+   "id": "s17",
+   "item": {
+    "sourceName": "Polizei Berlin",
+    "title": "Bewaffneter Raubüberfall auf Supermarkt in Wedding – Täter flüchtig",
+    "body": "Heute Morgen gegen 7:30 Uhr hat ein bewaffneter Mann einen Supermarkt in Wedding überfallen und ist zu Fuß geflüchtet. Die Polizei ist mit vielen Kräften im Umfeld im Einsatz.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": true,
+    "category": "crime",
+    "severity": 4
+   }
+  },
+  {
+   "id": "s18",
+   "item": {
+    "sourceName": "Polizei Berlin",
+    "title": "Zeugenaufruf nach Einbruch in Steglitz",
+    "body": "Bereits am vergangenen Wochenende wurde in eine Wohnung in Steglitz eingebrochen. Die Polizei sucht Zeugen.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": false
+   }
+  },
+  {
+   "id": "s19",
+   "item": {
+    "sourceName": "Polizei Berlin",
+    "title": "Polizeieinsatz in Kreuzberg nach Schüssen – Bereich gesperrt",
+    "body": "Nach Schüssen in einer Wohnung in Kreuzberg ist die Polizei mit Spezialkräften im Einsatz. Der Bereich um die Wohnung ist gesperrt. Anwohnende sollen in ihren Wohnungen bleiben.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": true,
+    "category": "crime",
+    "severity": 4
+   }
+  },
+  {
+   "id": "s20",
+   "item": {
+    "sourceName": "Polizei Berlin",
+    "title": "Prozess gegen Bande von Taschendieben beginnt",
+    "body": "Vor dem Landgericht beginnt heute der Prozess gegen fünf Männer, denen Taschendiebstähle in der U-Bahn vorgeworfen werden.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": false
+   }
+  },
+  {
+   "id": "s21",
+   "item": {
+    "sourceName": "Polizei Hamburg",
+    "title": "Kriminalstatistik: Weniger Wohnungseinbrüche in Hamburg",
+    "body": "Die Zahl der Wohnungseinbrüche in Hamburg ist im vergangenen Jahr um 12 Prozent gesunken, teilt die Polizei mit.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": false
+   }
+  },
+  {
+   "id": "s22",
+   "item": {
+    "sourceName": "Polizei Berlin",
+    "title": "Taschendiebe am Weihnachtsmarkt Alexanderplatz – Polizei warnt",
+    "body": "Am Weihnachtsmarkt am Alexanderplatz kam es in den letzten Tagen zu mehreren Taschendiebstählen. Die Polizei rät, Wertsachen eng am Körper zu tragen.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": true,
+    "category": "crime",
+    "severity": 2
+   }
+  },
+  {
+   "id": "s23",
+   "item": {
+    "sourceName": "Polizei Berlin",
+    "title": "Messerangriff in Moabit – Tatverdächtiger festgenommen",
+    "body": "Nach einem Streit in Moabit wurde heute Nacht ein Mann mit einem Messer verletzt. Der Tatverdächtige wurde noch vor Ort festgenommen. Es besteht keine Gefahr für Anwohnende.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": false
+   }
+  },
+  {
+   "id": "s24",
+   "item": {
+    "sourceName": "Polizei Berlin",
+    "title": "Die Polizei Berlin stellt ein – Bewerbungen bis Ende Januar",
+    "body": "Die Polizei Berlin sucht neue Anwärterinnen und Anwärter. Bewerbungen sind bis Ende Januar online möglich.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": false
+   }
+  },
+  {
+   "id": "s25",
+   "item": {
+    "sourceName": "Polizei Berlin",
+    "title": "Vermisste Seniorin aus Pankow – Polizei bittet um Mithilfe",
+    "body": "Seit gestern Abend wird eine 82-jährige Frau aus Pankow vermisst. Die Polizei bittet um Hinweise.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": false
+   }
+  },
+  {
+   "id": "s26",
+   "item": {
+    "sourceName": "Polizei Köln",
+    "title": "Versammlung in Köln: Straßensperrungen in der Innenstadt",
+    "body": "Wegen einer angemeldeten Versammlung sind in der Kölner Innenstadt heute ab 12 Uhr mehrere Straßen gesperrt. Mit Verkehrsbehinderungen ist zu rechnen.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": true,
+    "category": [
+     "events",
+     "public_safety",
+     "transit"
+    ],
+    "severity": 2
+   }
+  },
+  {
+   "id": "s27",
+   "item": {
+    "sourceName": "Deutscher Wetterdienst",
+    "title": "Unwetterwarnung: Orkanböen in Hamburg",
+    "body": "Für Hamburg warnt der Deutsche Wetterdienst vor Orkanböen bis 120 km/h ab heute 14 Uhr. Aufenthalt im Freien vermeiden.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": true,
+    "category": "weather",
+    "severity": 4
+   }
+  },
+  {
+   "id": "s28",
+   "item": {
+    "sourceName": "Bezirksamt Pankow",
+    "title": "Glätte auf Gehwegen in Pankow",
+    "body": "Wegen überfrierender Nässe ist es auf Gehwegen und Radwegen in Pankow glatt. Bitte vorsichtig gehen und fahren.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": true,
+    "category": "weather",
+    "severity": 2
+   }
+  },
+  {
+   "id": "s29",
+   "item": {
+    "sourceName": "Deutscher Wetterdienst",
+    "title": "Starkregen in München erwartet",
+    "body": "Für München werden heute Nachmittag Starkregen bis 30 Liter pro Quadratmeter in kurzer Zeit erwartet. Keller und Unterführungen können überflutet werden.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": true,
+    "category": "weather",
+    "severity": 3
+   }
+  },
+  {
+   "id": "s30",
+   "item": {
+    "sourceName": "Senatsverwaltung",
+    "title": "Hitzeschutzplan für den Sommer vorgestellt",
+    "body": "Der Senat hat den Hitzeschutzplan für das kommende Jahr vorgestellt. Er sieht mehr Trinkbrunnen und kühle Räume vor.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": false
+   }
+  },
+  {
+   "id": "s31",
+   "item": {
+    "sourceName": "Bezirksamt Köpenick",
+    "title": "Hochwasser an der Dahme in Köpenick – Uferwege gesperrt",
+    "body": "Wegen des hohen Wasserstands der Dahme sind in Köpenick mehrere Uferwege gesperrt. Keller in Ufernähe können volllaufen.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": true,
+    "category": "weather",
+    "severity": 3
+   }
+  },
+  {
+   "id": "s32",
+   "item": {
+    "sourceName": "Deutscher Wetterdienst",
+    "title": "Schwere Gewitter mit Hagel über Berlin",
+    "body": "Der Deutsche Wetterdienst warnt für Berlin vor schweren Gewittern mit Hagel bis 3 cm und Sturmböen. Die Warnung gilt bis 20 Uhr.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": true,
+    "category": "weather",
+    "severity": 3
+   }
+  },
+  {
+   "id": "s33",
+   "item": {
+    "sourceName": "Gesundheitsamt Neukölln",
+    "title": "Abkochgebot für Trinkwasser in Neukölln",
+    "body": "Im Leitungsnetz in Teilen von Neukölln wurden Bakterien gefunden. Das Gesundheitsamt ordnet ein Abkochgebot an: Leitungswasser nur abgekocht trinken.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": true,
+    "category": "health",
+    "severity": 3
+   }
+  },
+  {
+   "id": "s34",
+   "item": {
+    "sourceName": "Gesundheitsamt Mitte",
+    "title": "Legionellen in Schwimmhalle in Mitte – Halle geschlossen",
+    "body": "In einer Schwimmhalle in Mitte wurden Legionellen nachgewiesen. Die Halle bleibt bis auf Weiteres geschlossen.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": true,
+    "category": "health",
+    "severity": 2
+   }
+  },
+  {
+   "id": "s35",
+   "item": {
+    "sourceName": "Gesundheitsamt Hamburg",
+    "title": "Grippeimpfung jetzt in allen Hausarztpraxen",
+    "body": "Das Gesundheitsamt Hamburg erinnert daran, dass die Grippeimpfung jetzt in allen Hausarztpraxen angeboten wird.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": false
+   }
+  },
+  {
+   "id": "s36",
+   "item": {
+    "sourceName": "Gesundheitsamt Lichtenberg",
+    "title": "Masernfälle an Schule in Lichtenberg",
+    "body": "An einer Grundschule in Lichtenberg sind drei Masernfälle aufgetreten. Das Gesundheitsamt bittet Eltern, den Impfstatus ihrer Kinder zu prüfen.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": true,
+    "category": "health",
+    "severity": 2
+   }
+  },
+  {
+   "id": "s37",
+   "item": {
+    "sourceName": "Stromnetz Berlin",
+    "title": "Stromausfall in Marzahn",
+    "body": "In Teilen von Marzahn ist seit 6:15 Uhr der Strom ausgefallen. Rund 4000 Haushalte sind betroffen. Die Störung soll bis zum Mittag behoben sein.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": true,
+    "category": "infrastructure",
+    "severity": 3
+   }
+  },
+  {
+   "id": "s38",
+   "item": {
+    "sourceName": "Berliner Wasserbetriebe",
+    "title": "Wasserrohrbruch in Charlottenburg – Kantstraße gesperrt",
+    "body": "Nach einem Wasserrohrbruch ist die Kantstraße in Charlottenburg gesperrt. Anliegende Häuser haben zeitweise kein Wasser.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": true,
+    "category": [
+     "infrastructure",
+     "transit"
+    ],
+    "severity": 3
+   }
+  },
+  {
+   "id": "s39",
+   "item": {
+    "sourceName": "Vattenfall",
+    "title": "Fernwärme in Schöneberg unterbrochen",
+    "body": "Wegen eines Schadens an einer Leitung ist die Fernwärme in Teilen von Schöneberg unterbrochen. Die Reparatur dauert voraussichtlich bis morgen.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": true,
+    "category": "infrastructure",
+    "severity": 2
+   }
+  },
+  {
+   "id": "s40",
+   "item": {
+    "sourceName": "Senatsverwaltung",
+    "title": "Brücke in Treptow gesperrt nach Prüfung",
+    "body": "Die Elsenbrücke in Treptow wird nach einer Prüfung ab sofort für Fahrzeuge gesperrt. Fußgänger können die Brücke weiter nutzen.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": true,
+    "category": [
+     "infrastructure",
+     "transit"
+    ],
+    "severity": 2
+   }
+  },
+  {
+   "id": "s41",
+   "item": {
+    "sourceName": "Stromnetz Berlin",
+    "title": "Wartungsarbeiten am Stromnetz im nächsten Jahr",
+    "body": "Stromnetz Berlin plant im nächsten Jahr Wartungsarbeiten in mehreren Bezirken. Kundinnen und Kunden werden rechtzeitig informiert.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": false
+   }
+  },
+  {
+   "id": "s42",
+   "item": {
+    "sourceName": "Stadtwerke München",
+    "title": "Gasversorgung in München nach Leck unterbrochen",
+    "body": "Nach einem Leck an einer Gasleitung ist die Gasversorgung in Teilen von München unterbrochen. Die Stadtwerke arbeiten an der Reparatur.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": true,
+    "category": [
+     "infrastructure",
+     "public_safety"
+    ],
+    "severity": 3
+   }
+  },
+  {
+   "id": "s43",
+   "item": {
+    "sourceName": "Polizei Berlin",
+    "title": "Verkehrsunfall auf der A100 – Fahrstreifen gesperrt",
+    "body": "Nach einem Unfall mit drei Fahrzeugen ist auf der A100 in Höhe Tempelhof ein Fahrstreifen gesperrt. Es staut sich.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": true,
+    "category": [
+     "transit",
+     "public_safety"
+    ],
+    "severity": 2
+   }
+  },
+  {
+   "id": "s44",
+   "item": {
+    "sourceName": "Feuerwehr Berlin",
+    "title": "Feuerwehr rettet Katze von Baum in Zehlendorf",
+    "body": "Die Feuerwehr hat in Zehlendorf eine Katze aus einer Baumkrone gerettet. Das Tier ist wohlauf.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": false
+   }
+  },
+  {
+   "id": "s45",
+   "item": {
+    "sourceName": "Polizei Berlin",
+    "title": "Evakuierung des Hauptbahnhofs nach Drohung",
+    "body": "Nach einer Drohung wird der Hauptbahnhof geräumt. Der Zugverkehr ist unterbrochen. Die Polizei bittet, den Bahnhof weiträumig zu meiden.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": true,
+    "category": [
+     "public_safety",
+     "crime",
+     "transit"
+    ],
+    "severity": 4
+   }
+  },
+  {
+   "id": "s46",
+   "item": {
+    "sourceName": "Feuerwehr Berlin",
+    "title": "Explosion in Wohnhaus in Reinickendorf – mehrere Verletzte",
+    "body": "In einem Wohnhaus in Reinickendorf hat sich eine Explosion ereignet. Mehrere Menschen wurden verletzt. Die Feuerwehr ist mit einem Großaufgebot vor Ort, die Straße ist gesperrt.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": true,
+    "category": "public_safety",
+    "severity": 4
+   }
+  },
+  {
+   "id": "s47",
+   "item": {
+    "sourceName": "Polizei Berlin",
+    "title": "Fußballspiel in Köpenick: Polizei mit vielen Kräften im Einsatz",
+    "body": "Zum Fußballspiel am Samstag in Köpenick ist die Polizei mit vielen Kräften im Einsatz. Rund um das Stadion ist mit Sperrungen zu rechnen.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": true,
+    "category": [
+     "events",
+     "public_safety",
+     "transit"
+    ],
+    "severity": 2
+   }
+  },
+  {
+   "id": "s48",
+   "item": {
+    "sourceName": "Polizei Hamburg",
+    "title": "Bilanz zum Hafengeburtstag",
+    "body": "Die Polizei Hamburg zieht eine positive Bilanz zum Hafengeburtstag. Es blieb weitgehend friedlich.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": false
+   }
+  },
+  {
+   "id": "s49",
+   "item": {
+    "sourceName": "Polizei Berlin",
+    "title": "Brand in Hochhaus in Prenzlauer Berg – Bewohnende in Wohnungen bleiben",
+    "body": "In einem Hochhaus in Prenzlauer Berg brennt es im 8. Stock. Bewohnende sollen in ihren Wohnungen bleiben und Türen geschlossen halten, bis die Feuerwehr sie informiert.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": true,
+    "category": "public_safety",
+    "severity": 4
+   }
+  },
+  {
+   "id": "s50",
+   "item": {
+    "sourceName": "Polizei Berlin",
+    "title": "Polizei warnt vor Trickbetrügern am Telefon",
+    "body": "Derzeit rufen in Berlin vermehrt falsche Polizeibeamte bei älteren Menschen an. Die Polizei rät: Niemals Geld oder Wertsachen an Unbekannte übergeben.",
+    "publishedAt": "2026-11-20T08:00:00Z"
+   },
+   "expect": {
+    "isEvent": true,
+    "category": "crime",
+    "severity": 2
+   }
+  }
+ ]
+}

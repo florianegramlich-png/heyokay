@@ -131,7 +131,7 @@ To move from SQLite to Postgres, set `DATABASE_URL` as a Fly secret (the databas
 
 **Errors:** unexpected server errors (HTTP 5xx, ingest failures, unhandled rejections, uncaught exceptions) are written to stderr as one JSON line each with `"level":"error"` or `"fatal"`, with the route pattern but no query strings, headers or tokens.
 
-**Privacy:** only the latest location per user is kept (rounded to about 100 m on the device), with no history. The model only ever sees public source text, never user data. Device tokens are stored hashed. `DELETE /v1/me` erases everything (GDPR Art. 17).
+**Privacy:** only the latest location per user is kept (rounded to about 100 m on the device), with no history, and it is cleared after 30 days without an update; alerts are deleted after 30 days (`server/src/retention.ts`). The model only ever sees public source text, never user data. Device tokens are stored hashed. `DELETE /v1/me` erases everything (GDPR Art. 17).
 
 ## App (PRD 5.3)
 

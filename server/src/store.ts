@@ -1,7 +1,9 @@
 import type { SourceStatus } from './ingest.js';
+import type { AppEvent, AppEventCount, Platform } from './app-events.js';
 import type { PushTicket } from './push.js';
+import type { RetentionReport } from './retention.js';
 import type {
-  Alert, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
+  Alert, Category, Decision, DecisionKind, Reviewer, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
 } from './types.js';
 
 /** How far back an event with a known, future end time still counts as active. */
@@ -104,6 +106,8 @@ export interface Store {
    */
   activeEvents(now: Date, lookbackHours?: number): Promise<RiskEvent[]>;
   eventsByStatus(status: EventStatus): Promise<RiskEvent[]>;
+  /** Events of one topic that began in [fromIso, toIso), any status, oldest first (bias review). */
+  eventsStartedBetween(category: Category, fromIso: string, toIso: string): Promise<RiskEvent[]>;
   /** Store (or replace) the dedup embedding of an event. Postgres: pgvector. */
   saveEventEmbedding(eventId: string, model: string, vector: number[]): Promise<void>;
   /**
@@ -193,8 +197,57 @@ export interface Store {
   /** Gives the lease up early (clean shutdown), so another worker can take over at once. */
   releaseLease(name: string, holder: string): Promise<void>;
 
+  // ── Alert Desk reviewers (PRD 6.2 step 5) ──
+  createReviewer(r: Reviewer): Promise<void>;
+  reviewerByEmail(email: string): Promise<Reviewer | null>;
+  reviewers(): Promise<Reviewer[]>;
+  updateReviewer(id: string, patch: Partial<Pick<Reviewer, 'name' | 'passwordHash' | 'disabled'>>): Promise<boolean>;
+  /** Sessions are stored as a hash of the cookie value. */
+  createReviewerSession(tokenHash: string, reviewerId: string, expiresAt: string): Promise<void>;
+  /** The reviewer behind a session that hasn't expired, unless they were disabled. */
+  reviewerBySession(tokenHash: string, nowIso: string): Promise<Reviewer | null>;
+  deleteReviewerSession(tokenHash: string): Promise<void>;
+  deleteReviewerSessionsFor(reviewerId: string): Promise<void>;
+
+  // ── data retention (PRD 11) ──
+  /** Deletes what is past its retention period (retention.ts); returns how many rows of each. */
+  purgeExpired(nowIso: string): Promise<RetentionReport>;
+
+  // ── product KPIs (PRD 13) ──
+  /** The person used the app (foreground calls). Written at most once an hour. */
+  markSeen(userId: string, nowIso: string): Promise<void>;
+  /** First time the person opened this alert's detail (a push tap or a tap in the feed). */
+  markAlertOpened(userId: string, alertId: string, nowIso: string): Promise<void>;
+  /** Raw inputs for computeKpis: first alerts since `sinceIso` and every person's dates. */
+  kpiInputs(sinceIso: string): Promise<KpiInputs>;
+
+  // ── anonymous app events (PRD 13): counts per day, platform and name only ──
+  addAppEvents(day: string, platform: Platform, counts: Map<AppEvent, number>): Promise<void>;
+  /** Rows from `sinceDay` (YYYY-MM-DD, inclusive). */
+  appEventCounts(sinceDay: string): Promise<AppEventCount[]>;
+
+  // ── decision log (PRD 6.3) ──
+  recordDecision(d: Decision): Promise<void>;
+  /** Newest first. */
+  decisions(q: DecisionQuery): Promise<Decision[]>;
+
   close(): Promise<void>;
 }
+
+export interface KpiInputs {
+  alerts: Array<{ eventId: string; userId: string; kind: string; delivery: string; feedback: string | null; official: boolean; createdAt: string; openedAt: string | null; eventStartsAt: string | null }>;
+  users: Array<{ createdAt: string; lastSeenAt: string | null; hasPush: boolean }>;
+}
+
+export interface DecisionQuery {
+  eventId?: string;
+  kind?: DecisionKind;
+  /** ISO time, inclusive. */
+  since?: string;
+  /** Default 200, at most 10 000. */
+  limit?: number;
+}
+export const decisionLimit = (q: DecisionQuery) => Math.min(Math.max(1, q.limit ?? 200), 10_000);
 
 /** Shared by both implementations so the numbers can't drift apart. */
 /** Centre of the grid cell containing a point (also used to build the cell list in both stores). */

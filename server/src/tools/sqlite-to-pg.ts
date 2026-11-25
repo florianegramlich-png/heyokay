@@ -32,6 +32,9 @@ export const TABLES: TableCopy[] = [
   { table: 'events', columns: ['id', 'data', 'status', 'category', 'lat', 'lon', 'starts_at', 'ends_at', 'updated_at'], casts: { data: 'jsonb' } },
   { table: 'event_embeddings', columns: ['event_id', 'model', 'embedding', 'updated_at'], casts: { embedding: 'public.vector' }, from: { embedding: 'vector' } },
   { table: 'alerts', columns: ['id', 'user_id', 'event_id', 'event_revision', 'data', 'delivery', 'feedback', 'created_at'], casts: { data: 'jsonb' } },
+  { table: 'reviewers', columns: ['id', 'email', 'name', 'password_hash', 'created_at', 'disabled'], casts: { disabled: 'boolean' } },
+  { table: 'app_events', columns: ['day', 'platform', 'name', 'count'], casts: { day: 'date' } },
+  { table: 'decisions', columns: ['id', 'at', 'kind', 'event_id', 'data'], casts: { data: 'jsonb' } },
   { table: 'push_tickets', columns: ['id', 'ticket_id', 'alert_id', 'user_id', 'token', 'status', 'error', 'attempt', 'created_at', 'checked_at'] },
 ];
 

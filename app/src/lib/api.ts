@@ -34,6 +34,8 @@ export const api = {
   emailVerify: (email: string, code: string) =>
     request<{ userId: string; prefs: UserPrefs; places: SavedPlace[]; account: { email: string } }>('POST', '/v1/auth/email/verify', { email, code }),
   signOut: () => request<{ userId: string; token: string; prefs: UserPrefs }>('POST', '/v1/auth/signout'),
+  /** Anonymous app events (lib/analytics.ts): event names and the platform, no token. */
+  events: (body: { platform: 'ios' | 'android' | 'web'; events: { name: string }[] }) => request<{ ok: true }>('POST', '/v1/events', body, false),
   /** Which sign-in methods the server has switched on (public). */
   authProviders: () => request<Providers>('GET', '/v1/auth/providers', undefined, false),
   /** Sign in with Apple / Google: the provider's identity token and the raw nonce (lib/signin.ts). */

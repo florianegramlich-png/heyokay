@@ -1,0 +1,20 @@
+{
+ "name": "Real press releases from the test fixtures",
+ "description": "Items from the saved feeds in test/fixtures, labelled by hand. Missing-person searches are left out: the source adapters drop them before extraction.",
+ "cases": [
+  { "id": "fx-berlin-ostkreuz", "fixture": { "file": "police-berlin.rss", "format": "rss", "index": 0 }, "sourceName": "Polizei Berlin", "category": "crime", "expect": { "isEvent": true, "category": ["public_safety", "crime", "transit"], "severity": 3 } },
+  { "id": "fx-berlin-bike-appeal", "fixture": { "file": "police-berlin.rss", "format": "rss", "index": 1 }, "sourceName": "Polizei Berlin", "category": "crime", "expect": { "isEvent": false } },
+  { "id": "fx-hh-sulldorf-appeal", "fixture": { "file": "presseportal-polizei-hamburg.rss2", "format": "presseportal", "index": 1 }, "sourceName": "Polizei Hamburg", "category": "crime", "defaultArea": "Hamburg", "expect": { "isEvent": false } },
+  { "id": "fx-hh-taxi-warrant", "fixture": { "file": "presseportal-polizei-hamburg.rss2", "format": "presseportal", "index": 2 }, "sourceName": "Polizei Hamburg", "category": "crime", "defaultArea": "Hamburg", "expect": { "isEvent": false } },
+  { "id": "fx-hh-winterhude-appeal", "fixture": { "file": "presseportal-polizei-hamburg.rss2", "format": "presseportal", "index": 4 }, "sourceName": "Polizei Hamburg", "category": "crime", "defaultArea": "Hamburg", "expect": { "isEvent": false } },
+  { "id": "fx-hh-eimsbuettel-appeal", "fixture": { "file": "presseportal-polizei-hamburg.rss2", "format": "presseportal", "index": 5 }, "sourceName": "Polizei Hamburg", "category": "crime", "defaultArea": "Hamburg", "expect": { "isEvent": false } },
+  { "id": "fx-fwhh-new-station", "fixture": { "file": "presseportal-feuerwehr-hamburg.rss2", "format": "presseportal", "index": 0 }, "sourceName": "Feuerwehr Hamburg", "category": "public_safety", "defaultArea": "Hamburg", "expect": { "isEvent": false } },
+  { "id": "fx-fwhh-farmsen-fire", "fixture": { "file": "presseportal-feuerwehr-hamburg.rss2", "format": "presseportal", "index": 1 }, "sourceName": "Feuerwehr Hamburg", "category": "public_safety", "defaultArea": "Hamburg", "expect": { "isEvent": false } },
+  { "id": "fx-fwhh-school-spray", "fixture": { "file": "presseportal-feuerwehr-hamburg.rss2", "format": "presseportal", "index": 2 }, "sourceName": "Feuerwehr Hamburg", "category": "public_safety", "defaultArea": "Hamburg", "expect": { "isEvent": false } },
+  { "id": "fx-fwhh-heimfeld-blast", "fixture": { "file": "presseportal-feuerwehr-hamburg.rss2", "format": "presseportal", "index": 4 }, "sourceName": "Feuerwehr Hamburg", "category": "public_safety", "defaultArea": "Hamburg", "expect": { "isEvent": false } },
+  { "id": "fx-f-bockenheim-chase", "fixture": { "file": "presseportal-polizei-frankfurt.rss2", "format": "presseportal", "index": 0 }, "sourceName": "Polizei Frankfurt", "category": "crime", "defaultArea": "Frankfurt", "expect": { "isEvent": false } },
+  { "id": "fx-f-bornheim-trick", "fixture": { "file": "presseportal-polizei-frankfurt.rss2", "format": "presseportal", "index": 1 }, "sourceName": "Polizei Frankfurt", "category": "crime", "defaultArea": "Frankfurt", "expect": { "isEvent": false } },
+  { "id": "fx-f-christmas-market", "fixture": { "file": "presseportal-polizei-frankfurt.rss2", "format": "presseportal", "index": 3 }, "sourceName": "Polizei Frankfurt", "category": "crime", "defaultArea": "Frankfurt", "expect": { "isEvent": false } },
+  { "id": "fx-f-gallus-school", "fixture": { "file": "presseportal-polizei-frankfurt.rss2", "format": "presseportal", "index": 4 }, "sourceName": "Polizei Frankfurt", "category": "crime", "defaultArea": "Frankfurt", "expect": { "isEvent": false } }
+ ]
+}

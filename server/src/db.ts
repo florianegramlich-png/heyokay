@@ -1,13 +1,16 @@
 import { DatabaseSync } from 'node:sqlite';
 import { randomUUID, createHash, randomBytes } from 'node:crypto';
 import type {
-  Alert, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
+  Decision, Reviewer,
+  Alert, Category, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
 } from './types.js';
 import { DEFAULT_PREFS, normalizePrefs, savedPrefs } from './types.js';
-import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type AccountIdentity, type IdentityProvider, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob, type LlmUsageDay } from './store.js';
+import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type AccountIdentity, type IdentityProvider, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob, type LlmUsageDay, type DecisionQuery, type KpiInputs, decisionLimit } from './store.js';
 import type { PushTicket } from './push.js';
+import type { AppEvent, AppEventCount, Platform } from './app-events.js';
 import type { SourceStatus } from './ingest.js';
 import { distanceM, LOCATION_MAX_AGE_MS } from './geo.js';
+import { RETENTION, daysBefore, type RetentionReport } from './retention.js';
 import { cosine } from './embeddings.js';
 
 export type { Store } from './store.js';
@@ -90,10 +93,20 @@ export class SqliteStore implements Store {
         user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, day TEXT NOT NULL, sent_at TEXT NOT NULL,
         PRIMARY KEY (user_id, day)
       );
+      CREATE TABLE IF NOT EXISTS reviewers (id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, name TEXT NOT NULL, password_hash TEXT NOT NULL, created_at TEXT NOT NULL, disabled INTEGER NOT NULL DEFAULT 0);
+      CREATE TABLE IF NOT EXISTS reviewer_sessions (token_hash TEXT PRIMARY KEY, reviewer_id TEXT NOT NULL REFERENCES reviewers(id) ON DELETE CASCADE, expires_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS app_events (day TEXT NOT NULL, platform TEXT NOT NULL, name TEXT NOT NULL, count INTEGER NOT NULL, PRIMARY KEY (day, platform, name));
+      CREATE TABLE IF NOT EXISTS decisions (id TEXT PRIMARY KEY, at TEXT NOT NULL, kind TEXT NOT NULL, event_id TEXT, data TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS decisions_at ON decisions(at);
+      CREATE INDEX IF NOT EXISTS decisions_event ON decisions(event_id, at);
       -- Users from before devices existed sign in with their original token.
       INSERT OR IGNORE INTO devices (token_hash, user_id, created_at) SELECT token_hash, id, created_at FROM users;
       PRAGMA foreign_keys = ON;
     `);
+    // Columns added after launch (SQLite has no migrations here): add if missing.
+    for (const sql of [`ALTER TABLE users ADD COLUMN last_seen_at TEXT`, `ALTER TABLE alerts ADD COLUMN opened_at TEXT`]) {
+      try { this.db.exec(sql); } catch (e) { if (!/duplicate column/i.test((e as Error).message)) throw e; }
+    }
   }
 
   // ── users ────────────────────────────────────────────────────────────────
@@ -245,6 +258,11 @@ export class SqliteStore implements Store {
   async eventsByStatus(status: EventStatus): Promise<RiskEvent[]> {
     return this.db.prepare(`SELECT data FROM events WHERE status = ? ORDER BY updated_at DESC`)
       .all(status).map((r: any) => JSON.parse(r.data));
+  }
+
+  async eventsStartedBetween(category: Category, fromIso: string, toIso: string): Promise<RiskEvent[]> {
+    return this.db.prepare(`SELECT data FROM events WHERE category = ? AND starts_at >= ? AND starts_at < ? ORDER BY starts_at, id`)
+      .all(category, new Date(fromIso).toISOString(), new Date(toIso).toISOString()).map((r: any) => JSON.parse(r.data));
   }
 
   async saveEventEmbedding(eventId: string, model: string, vector: number[]): Promise<void> {
@@ -470,6 +488,125 @@ export class SqliteStore implements Store {
       .map((r) => ({ day: r.day, calls: r.calls, inputTokens: r.input_tokens, outputTokens: r.output_tokens, eur: r.eur, skipped: r.skipped }));
   }
 
+  // ── data retention ───────────────────────────────────────────────────────
+  async purgeExpired(nowIso: string): Promise<RetentionReport> {
+    const R = RETENTION;
+    const before = (d: number) => daysBefore(nowIso, d);
+    const run = (sql: string, ...args: (string | number)[]) => Number(this.db.prepare(sql).run(...args).changes);
+    this.db.exec('BEGIN');
+    try {
+      const out: RetentionReport = {
+        alerts: run(`DELETE FROM alerts WHERE created_at < ?`, before(R.alertsDays)),
+        pushTickets: run(`DELETE FROM push_tickets WHERE created_at < ?`, before(R.pushTicketsDays)),
+        locationsCleared: run(`UPDATE users SET lat = NULL, lon = NULL, location_updated_at = NULL WHERE location_updated_at IS NOT NULL AND location_updated_at < ?`, before(R.locationDays)),
+        // Not while its event is running: updates and cancellations find the event through it.
+        sourceItems: run(`DELETE FROM source_items WHERE first_seen_at < ? AND (event_id IS NULL OR NOT EXISTS (
+            SELECT 1 FROM events e WHERE e.id = source_items.event_id AND e.status != 'rejected' AND (e.ends_at IS NULL OR e.ends_at > ?)))`, before(R.sourceItemsDays), nowIso),
+        events: run(`DELETE FROM events WHERE COALESCE(ends_at, starts_at) < ?`, before(R.eventsDays)),
+        pushJobs: run(`DELETE FROM push_jobs WHERE created_at < ?`, before(R.pushJobsDays)),
+        digests: run(`DELETE FROM digests WHERE day < ?`, before(R.digestsDays).slice(0, 10)),
+        emailCodes: run(`DELETE FROM email_codes WHERE expires_at < ?`, before(R.emailCodesDays)),
+        reviewerSessions: run(`DELETE FROM reviewer_sessions WHERE expires_at <= ?`, nowIso),
+      };
+      // Source items of deleted events go too (their event is gone).
+      out.sourceItems += run(`DELETE FROM source_items WHERE event_id IS NOT NULL AND first_seen_at < ? AND NOT EXISTS (SELECT 1 FROM events e WHERE e.id = source_items.event_id)`, before(R.sourceItemsDays));
+      this.db.exec('COMMIT');
+      return out;
+    } catch (e) {
+      this.db.exec('ROLLBACK');
+      throw e;
+    }
+  }
+
+  // ── product KPIs ─────────────────────────────────────────────────────────
+  async markSeen(userId: string, nowIso: string): Promise<void> {
+    const hourAgo = new Date(Date.parse(nowIso) - 3600_000).toISOString();
+    this.db.prepare(`UPDATE users SET last_seen_at = ? WHERE id = ? AND (last_seen_at IS NULL OR last_seen_at < ?)`).run(nowIso, userId, hourAgo);
+  }
+
+  async markAlertOpened(userId: string, alertId: string, nowIso: string): Promise<void> {
+    this.db.prepare(`UPDATE alerts SET opened_at = ? WHERE id = ? AND user_id = ? AND opened_at IS NULL`).run(nowIso, alertId, userId);
+  }
+
+  async kpiInputs(sinceIso: string): Promise<KpiInputs> {
+    const alerts = (this.db.prepare(`
+      SELECT a.event_id, a.user_id, a.data, a.delivery, a.feedback, a.created_at, a.opened_at, e.starts_at
+      FROM alerts a LEFT JOIN events e ON e.id = a.event_id WHERE a.created_at >= ?`).all(sinceIso) as any[]).map((r) => {
+      const d = JSON.parse(r.data) as Alert;
+      return { eventId: r.event_id, userId: r.user_id, kind: d.kind ?? 'new', delivery: r.delivery, feedback: r.feedback ?? null, official: !!d.official, createdAt: r.created_at, openedAt: r.opened_at ?? null, eventStartsAt: r.starts_at ?? null };
+    });
+    const users = (this.db.prepare(`SELECT created_at, last_seen_at, push_token IS NOT NULL AS has_push FROM users`).all() as any[])
+      .map((r) => ({ createdAt: r.created_at, lastSeenAt: r.last_seen_at ?? null, hasPush: !!r.has_push }));
+    return { alerts, users };
+  }
+
+  // ── reviewers ────────────────────────────────────────────────────────────
+  async createReviewer(r: Reviewer): Promise<void> {
+    this.db.prepare(`INSERT INTO reviewers (id, email, name, password_hash, created_at, disabled) VALUES (?,?,?,?,?,?)`)
+      .run(r.id, r.email, r.name, r.passwordHash, r.createdAt, r.disabled ? 1 : 0);
+  }
+
+  async reviewerByEmail(email: string): Promise<Reviewer | null> {
+    const r = this.db.prepare(`SELECT * FROM reviewers WHERE email = ?`).get(email);
+    return r ? reviewerRow(r) : null;
+  }
+
+  async reviewers(): Promise<Reviewer[]> {
+    return (this.db.prepare(`SELECT * FROM reviewers ORDER BY created_at, email`).all() as any[]).map(reviewerRow);
+  }
+
+  async updateReviewer(id: string, patch: Partial<Pick<Reviewer, 'name' | 'passwordHash' | 'disabled'>>): Promise<boolean> {
+    const r: any = this.db.prepare(`SELECT * FROM reviewers WHERE id = ?`).get(id);
+    if (!r) return false;
+    this.db.prepare(`UPDATE reviewers SET name = ?, password_hash = ?, disabled = ? WHERE id = ?`)
+      .run(patch.name ?? r.name, patch.passwordHash ?? r.password_hash, (patch.disabled ?? !!r.disabled) ? 1 : 0, id);
+    return true;
+  }
+
+  async createReviewerSession(tokenHash: string, reviewerId: string, expiresAt: string): Promise<void> {
+    this.db.prepare(`INSERT INTO reviewer_sessions (token_hash, reviewer_id, expires_at) VALUES (?,?,?)`).run(tokenHash, reviewerId, expiresAt);
+  }
+
+  async reviewerBySession(tokenHash: string, nowIso: string): Promise<Reviewer | null> {
+    const r = this.db.prepare(`SELECT r.* FROM reviewer_sessions s JOIN reviewers r ON r.id = s.reviewer_id WHERE s.token_hash = ? AND s.expires_at > ? AND r.disabled = 0`).get(tokenHash, nowIso);
+    return r ? reviewerRow(r) : null;
+  }
+
+  async deleteReviewerSession(tokenHash: string): Promise<void> {
+    this.db.prepare(`DELETE FROM reviewer_sessions WHERE token_hash = ?`).run(tokenHash);
+  }
+
+  async deleteReviewerSessionsFor(reviewerId: string): Promise<void> {
+    this.db.prepare(`DELETE FROM reviewer_sessions WHERE reviewer_id = ?`).run(reviewerId);
+  }
+
+  // ── anonymous app events ─────────────────────────────────────────────────
+  async addAppEvents(day: string, platform: Platform, counts: Map<AppEvent, number>): Promise<void> {
+    const st = this.db.prepare(`INSERT INTO app_events (day, platform, name, count) VALUES (?,?,?,?) ON CONFLICT (day, platform, name) DO UPDATE SET count = count + excluded.count`);
+    for (const [name, n] of counts) st.run(day, platform, name, n);
+  }
+
+  async appEventCounts(sinceDay: string): Promise<AppEventCount[]> {
+    return (this.db.prepare(`SELECT day, platform, name, count FROM app_events WHERE day >= ? ORDER BY day, platform, name`).all(sinceDay) as any[])
+      .map((r) => ({ day: r.day, platform: r.platform, name: r.name, count: Number(r.count) }));
+  }
+
+  // ── decision log ─────────────────────────────────────────────────────────
+  async recordDecision(d: Decision): Promise<void> {
+    this.db.prepare(`INSERT INTO decisions (id, at, kind, event_id, data) VALUES (?,?,?,?,?) ON CONFLICT (id) DO NOTHING`)
+      .run(d.id, d.at, d.kind, d.eventId, JSON.stringify(d));
+  }
+
+  async decisions(q: DecisionQuery): Promise<Decision[]> {
+    const where: string[] = [];
+    const args: string[] = [];
+    if (q.eventId) { where.push('event_id = ?'); args.push(q.eventId); }
+    if (q.kind) { where.push('kind = ?'); args.push(q.kind); }
+    if (q.since) { where.push('at >= ?'); args.push(new Date(q.since).toISOString()); }
+    return (this.db.prepare(`SELECT data FROM decisions ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY at DESC, rowid DESC LIMIT ${decisionLimit(q)}`)
+      .all(...args) as any[]).map((r) => JSON.parse(r.data));
+  }
+
   // ── leases ───────────────────────────────────────────────────────────────
   async acquireLease(name: string, holder: string, ttlMs: number, now = new Date()): Promise<boolean> {
     const until = new Date(now.getTime() + ttlMs).toISOString();
@@ -523,6 +660,10 @@ export class SqliteStore implements Store {
 function iso(t: string): string {
   const ms = Date.parse(t);
   return Number.isNaN(ms) ? t : new Date(ms).toISOString();
+}
+
+function reviewerRow(r: any): Reviewer {
+  return { id: r.id, email: r.email, name: r.name, passwordHash: r.password_hash, createdAt: r.created_at, disabled: !!r.disabled };
 }
 
 export function hashToken(token: string): string {

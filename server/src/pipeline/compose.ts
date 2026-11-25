@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { packFor } from '../countries.js';
 import { z } from 'zod';
 import type { AlertCopy, Language, RiskEvent } from '../types.js';
@@ -22,8 +23,22 @@ Hard rules:
 - Never describe an area or neighbourhood as dangerous. Report the event only.
 - No personal details about any person involved.`;
 
+/** Changes whenever the copy prompt or schema changes (decision log, PRD 6.3). */
+export const COMPOSE_PROMPT_VERSION = `compose@${createHash('sha256').update(system('de') + system('en') + JSON.stringify(z.toJSONSchema(CopySchema))).digest('hex').slice(0, 10)}`;
+
+/** What happened while writing the copy, for the decision log. */
+export interface ComposeTrace {
+  model: string | null;
+  promptVersion: string | null;
+  /** One entry per AI attempt: the verifier's problems (empty = accepted). */
+  attempts: Array<{ problems: string[] }>;
+  template: boolean;
+}
+
 /** Write and verify alert copy for an event. Falls back to a template built from source text. */
-export async function compose(event: RiskEvent, llm: StructuredLLM): Promise<AlertCopy & { isTemplate: boolean }> {
+export async function compose(event: RiskEvent, llm: StructuredLLM, onTrace?: (t: ComposeTrace) => void): Promise<AlertCopy & { isTemplate: boolean }> {
+  const attempts: ComposeTrace['attempts'] = [];
+  let model: string | null = null;
   const language = event.language ?? 'de';
   const action = recommendedAction(event.category, event.severity, language, event.hazard, packFor(event));
   if (llm.enabled) {
@@ -35,11 +50,17 @@ export async function compose(event: RiskEvent, llm: StructuredLLM): Promise<Ale
         CopySchema,
       );
       if (!out) break;
+      model = llm.lastModel ?? model;
       const problems = verify(out, event.facts);
-      if (problems.length === 0) return { title: out.title.trim(), body: out.body.trim(), action, isTemplate: false };
+      attempts.push({ problems });
+      if (problems.length === 0) {
+        onTrace?.({ model, promptVersion: COMPOSE_PROMPT_VERSION, attempts, template: false });
+        return { title: out.title.trim(), body: out.body.trim(), action, isTemplate: false };
+      }
       feedback = `\n\nYour previous attempt was rejected: ${problems.join('; ')}. Fix these.`;
     }
   }
+  onTrace?.({ model, promptVersion: attempts.length ? COMPOSE_PROMPT_VERSION : null, attempts, template: true });
   return { ...template(event), action, isTemplate: true };
 }
 

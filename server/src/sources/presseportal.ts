@@ -29,7 +29,7 @@ export interface PresseportalAgency {
   area: { name: string; lat: number; lon: number; radiusM: number };
 }
 
-const AREA = {
+export const AREA = {
   Berlin: { name: 'Berlin', lat: 52.52, lon: 13.405, radiusM: 20000 },
   München: { name: 'München', lat: 48.1374, lon: 11.5755, radiusM: 15000 },
   Hamburg: { name: 'Hamburg', lat: 53.5511, lon: 9.9937, radiusM: 18000 },

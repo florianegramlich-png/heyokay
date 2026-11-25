@@ -9,6 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { CategoryIcon } from '@/components/category-icon';
 import { api } from '@/lib/api';
 import { session } from '@/lib/session';
+import { analytics } from '@/lib/track';
 import { currentPosition } from '@/lib/location';
 import { useI18n } from '@/lib/i18n';
 import { CATEGORIES, DEFAULT_PREFS, type Category } from '@/lib/types';
@@ -31,12 +32,15 @@ export default function Onboarding() {
   const [error, setError] = useState(false);
 
   useEffect(() => { if (session.getToken()) router.replace('/now'); }, [router]);
+  // Anonymous counts per screen (PRD 13 funnel): which step was shown, never who.
+  useEffect(() => { analytics.track(`onb_${step}`); }, [step]);
 
   const askLocation = async () => {
     setLocating(true);
     const r = await currentPosition();
     setLocating(false);
     if (r.ok) setCoords({ lat: r.lat, lon: r.lon });
+    if (r.ok || r.reason === 'denied') analytics.permission('location', r.ok);
     setStep('categories');
   };
 
@@ -48,6 +52,8 @@ export default function Onboarding() {
       session.setToken(token);
       // First sync fills the feed with what's going on, without counting as alerts.
       if (coords) await api.sendLocation(coords.lat, coords.lon, true).catch(() => {});
+      analytics.track('onb_done');
+      void analytics.flush();
       router.replace('/now');
     } catch {
       setError(true);
@@ -76,7 +82,7 @@ export default function Onboarding() {
           <p className="text-muted-foreground">{t('onb.location.text')}</p>
           <p className="text-sm text-muted-foreground">{t('web.onb.locationWeb')}</p>
           <Button size="lg" className="w-full" onClick={askLocation} disabled={locating}>{locating ? t('web.now.locating') : t('onb.location.cta')}</Button>
-          <Button variant="ghost" className="w-full" onClick={() => setStep('categories')}>{t('onb.later')}</Button>
+          <Button variant="ghost" className="w-full" onClick={() => { analytics.permission('location', 'later'); setStep('categories'); }}>{t('onb.later')}</Button>
         </CardContent></Card>
       )}
 

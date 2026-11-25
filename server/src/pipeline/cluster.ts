@@ -134,7 +134,7 @@ export function mergeInto(e: RiskEvent, ext: ExtractedEvent, item: SourceItem, n
   return { escalated, changed };
 }
 
-function factText(item: SourceItem): string {
+export function factText(item: SourceItem): string {
   return [item.title, item.body, item.areaName].filter(Boolean).join('\n');
 }
 
