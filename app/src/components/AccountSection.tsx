@@ -6,15 +6,17 @@ import { api, ApiError } from '../lib/api';
 import { useI18n, type Key } from '../lib/i18n';
 import { session } from '../lib/session';
 import { clearOffline } from '../lib/offline';
+import { googleIdToken } from '../lib/google-signin';
+import { googleNative } from '../lib/google-native';
 import { colors } from '../lib/theme';
 import { buttonsToShow, makeNonce, NO_PROVIDERS, providerErrorKey, type Providers } from '../lib/signin';
 import type { SavedPlace, UserPrefs } from '../lib/types';
 import { Button, s, Section } from './ui';
 
 /**
- * Sign-in with an email code or, on iPhone, with Apple (PRD 5.3): restore places and settings on a new phone.
- * The Apple button shows only when the server has Apple sign-in switched on and the phone supports it.
- * Google on the phone follows (roadmap "Sign-in: Apple + Google, part 2b").
+ * Sign-in with an email code, with Apple on iPhone, or with Google on iPhone and Android (PRD 5.3):
+ * restore places and settings on a new phone. Each button shows only when the server has that
+ * sign-in switched on and this build/phone can do it (Google: client ids set at build time).
  * Optional — the app works the same without it. The device keeps its token; the server attaches
  * it to the account (and merges the places this phone already had).
  */
@@ -39,7 +41,8 @@ export function AccountSection({ email: signedIn, onChanged }: {
     if (Platform.OS === 'ios') AppleAuthentication.isAvailableAsync().then((ok) => { if (live) setAppleHere(ok); }).catch(() => {});
     return () => { live = false; };
   }, [signedIn]);
-  const buttons = buttonsToShow(providers, { apple: appleHere, google: false });
+  const google = googleNative();
+  const buttons = buttonsToShow(providers, { apple: appleHere, google: google !== null });
 
   async function signInWithApple() {
     setBusy(true); setError(null);
@@ -51,6 +54,21 @@ export function AccountSection({ email: signedIn, onChanged }: {
       onChanged({ email: r.account.email, prefs: r.prefs, places: r.places });
     } catch (e) {
       if ((e as { code?: string }).code === 'ERR_REQUEST_CANCELED') return; // closed the sheet: nothing to say
+      setError(e instanceof ApiError ? providerErrorKey(e.status, e.message) : 'acc.err.generic');
+    } finally { setBusy(false); }
+  }
+
+  async function signInWithGoogle() {
+    if (!google) return;
+    setBusy(true); setError(null);
+    try {
+      const nonce = await makeNonce(Crypto.getRandomBytes, (s) => Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, s));
+      const got = await googleIdToken(google.mod, google.ids, nonce.hashed, Platform.OS === 'android');
+      if (got.kind === 'cancelled') return; // closed the sheet: nothing to say
+      if (got.kind === 'failed') { setError('acc.err.provider'); return; }
+      const r = await api.signInWith('google', got.idToken, nonce.raw);
+      onChanged({ email: r.account.email, prefs: r.prefs, places: r.places });
+    } catch (e) {
       setError(e instanceof ApiError ? providerErrorKey(e.status, e.message) : 'acc.err.generic');
     } finally { setBusy(false); }
   }
@@ -105,8 +123,9 @@ export function AccountSection({ email: signedIn, onChanged }: {
       ) : step === 'email' ? (
         <View>
           <Text style={s.p}>{t('acc.intro')}</Text>
-          {buttons.includes('apple') ? (
+          {buttons.length > 0 ? (
             <View style={{ marginBottom: 12 }}>
+              {buttons.includes('apple') ? (
               <AppleAuthentication.AppleAuthenticationButton
                 buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
                 buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
@@ -114,6 +133,12 @@ export function AccountSection({ email: signedIn, onChanged }: {
                 style={{ width: '100%', height: 44, opacity: busy ? 0.5 : 1 }}
                 onPress={() => { if (!busy) void signInWithApple(); }}
               />
+              ) : null}
+              {buttons.includes('google') ? (
+                <View style={{ marginTop: buttons.includes('apple') ? 8 : 0 }}>
+                  <Button kind="secondary" title={t('acc.google')} disabled={busy} onPress={() => { void signInWithGoogle(); }} />
+                </View>
+              ) : null}
               <Text style={[s.muted, { marginTop: 10 }]}>{t('acc.or')}</Text>
             </View>
           ) : null}
