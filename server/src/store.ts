@@ -31,6 +31,11 @@ export type PushStatus = 'pending' | 'delivered' | 'error' | 'retried' | 'unknow
 
 export interface Account { id: string; email: string; userId: string; createdAt: string }
 
+/** One person in a family (family.ts). `id` is what other members see; the user id never leaves the server. */
+export interface FamilyMember { id: string; familyId: string; userId: string; name: string; joinedAt: string }
+/** A family's current invite code, stored as a hash. */
+export interface FamilyInvite { codeHash: string; familyId: string; expiresAt: string }
+
 /** A sign-in provider other than email codes (PRD 5.3, 7.1). */
 export type IdentityProvider = 'apple' | 'google';
 export interface AccountIdentity { provider: IdentityProvider; subject: string }
@@ -157,7 +162,7 @@ export interface Store {
   /** Removes one device token (signing out); the user and other devices stay. */
   removeDevice(token: string): Promise<void>;
   deviceCount(userId: string): Promise<number>;
-  /** Moves saved places (skipping duplicates) from one user to another, then deletes the first. */
+  /** Moves saved places (skipping duplicates) and the family membership (if the second has none) from one user to another, then deletes the first. */
   mergeUserInto(fromUserId: string, toUserId: string): Promise<void>;
   saveEmailCode(c: EmailCode): Promise<void>;
   emailCode(email: string): Promise<EmailCode | null>;
@@ -208,6 +213,18 @@ export interface Store {
   reviewerBySession(tokenHash: string, nowIso: string): Promise<Reviewer | null>;
   deleteReviewerSession(tokenHash: string): Promise<void>;
   deleteReviewerSessionsFor(reviewerId: string): Promise<void>;
+
+  // ── family sharing (PRD 6.1 #8; rules in family.ts) ──
+  familyMemberByUser(userId: string): Promise<FamilyMember | null>;
+  familyMembers(familyId: string): Promise<FamilyMember[]>;
+  /** False when this person is already in a family. */
+  addFamilyMember(m: FamilyMember): Promise<boolean>;
+  removeFamilyMember(familyId: string, memberId: string): Promise<boolean>;
+  /** Replaces the family's invite (one at a time). */
+  setFamilyInvite(invite: FamilyInvite): Promise<void>;
+  /** Uses up an invite that hasn't expired: deletes it and returns its family, else null. Atomic. */
+  takeFamilyInvite(codeHash: string, nowIso: string): Promise<string | null>;
+  deleteFamilyInvites(familyId: string): Promise<void>;
 
   // ── data retention (PRD 11) ──
   /** Deletes what is past its retention period (retention.ts); returns how many rows of each. */

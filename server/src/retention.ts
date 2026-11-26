@@ -8,7 +8,7 @@
  *   (updates and cancellations find their event through them);
  * - events: 120 days after they ended (or began, without an end), so the quarterly crime bias
  *   review still has the last quarter, plus a month to look at it;
- * - expired desk sessions, sign-in codes a day after they expired, stuck delivery jobs after a day,
+ * - expired desk sessions and family invite codes, sign-in codes a day after they expired, stuck delivery jobs after a day,
  *   daily-summary markers after 30 days;
  * - the decision log: kept until Flori decides (CHANGELOG → Open questions);
  * - daily totals (AI spend, app event counts): kept, they name nobody.
@@ -34,6 +34,7 @@ export interface RetentionReport {
   digests: number;
   emailCodes: number;
   reviewerSessions: number;
+  familyInvites: number;
 }
 
 export const daysBefore = (nowIso: string, days: number) => new Date(Date.parse(nowIso) - days * 86_400_000).toISOString();

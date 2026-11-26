@@ -19,6 +19,7 @@ import { sourceReport } from './sources/registry.js';
 import { MAX_PLACE_RADIUS_M, distanceM } from './geo.js';
 import { AuthError, checkEmailCode, signIn, signInWithIdentity, signOut, startEmailSignIn, type Mailer } from './auth.js';
 import { IdentityError, nonceMatches, type IdentityVerifier } from './identity.js';
+import { FamilyError, createFamily, createInvite, joinFamily, leaveFamily, myFamily, removeMember } from './family.js';
 import type { IdentityProvider } from './store.js';
 import { logError, defaultSink, type ErrorSink } from './errors.js';
 import { HISTORY_SCAN, searchHistory } from './history.js';
@@ -210,6 +211,50 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
     const u = await authed(req, reply); if (!u) return;
     await store.deletePlace(u.id, (req.params as any).id);
     return { ok: true };
+  });
+
+  // ── family sharing (PRD 6.1 #8; rules in family.ts) ────────────────────
+  const FamilyName = z.string().trim().min(1).max(30);
+  const family = async (reply: FastifyReply, fn: () => Promise<unknown>) => {
+    try { return await fn(); } catch (e) {
+      if (e instanceof FamilyError) return reply.code(e.status).send({ error: e.code });
+      throw e;
+    }
+  };
+
+  app.get('/v1/me/family', async (req, reply) => {
+    const u = await authed(req, reply); if (!u) return;
+    return { family: await myFamily(store, u.id) };
+  });
+
+  /** Starts a family with this person in it. `name` is how the others will see them. */
+  app.post('/v1/me/family', async (req, reply) => {
+    const u = await authed(req, reply); if (!u) return;
+    const { name } = z.object({ name: FamilyName }).strict().parse(req.body);
+    return family(reply, async () => ({ family: await createFamily(store, u.id, name) }));
+  });
+
+  /** A new invite code (admin only); the previous one stops working. */
+  app.post('/v1/me/family/invite', async (req, reply) => {
+    const u = await authed(req, reply); if (!u) return;
+    return family(reply, () => createInvite(store, u.id));
+  });
+
+  app.post('/v1/me/family/join', async (req, reply) => {
+    const u = await authed(req, reply); if (!u) return;
+    const { code, name } = z.object({ code: z.string().max(20), name: FamilyName }).strict().parse(req.body);
+    return family(reply, async () => ({ family: await joinFamily(store, u.id, code, name) }));
+  });
+
+  app.delete('/v1/me/family', async (req, reply) => {
+    const u = await authed(req, reply); if (!u) return;
+    return family(reply, async () => { await leaveFamily(store, u.id); return { ok: true }; });
+  });
+
+  app.delete('/v1/me/family/members/:id', async (req, reply) => {
+    const u = await authed(req, reply); if (!u) return;
+    const id = z.string().max(64).parse((req.params as { id: string }).id);
+    return family(reply, async () => ({ family: await removeMember(store, u.id, id) }));
   });
 
   /** GDPR Art. 17 — delete account and all data. */

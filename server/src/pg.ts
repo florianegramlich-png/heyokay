@@ -8,7 +8,7 @@ import { DEFAULT_PREFS, normalizePrefs, savedPrefs } from './types.js';
 import { hashToken } from './db.js';
 import { LOCATION_MAX_AGE_MS, MAX_PLACE_RADIUS_M } from './geo.js';
 import { RETENTION, daysBefore, type RetentionReport } from './retention.js';
-import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type AccountIdentity, type IdentityProvider, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob, type LlmUsageDay, type DecisionQuery, type KpiInputs, decisionLimit } from './store.js';
+import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type AccountIdentity, type IdentityProvider, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob, type LlmUsageDay, type DecisionQuery, type KpiInputs, type FamilyMember, type FamilyInvite, decisionLimit } from './store.js';
 import type { PushTicket } from './push.js';
 import type { AppEvent, AppEventCount, Platform } from './app-events.js';
 import type { SourceStatus } from './ingest.js';
@@ -198,6 +198,18 @@ export const MIGRATIONS: { version: number; sql: string }[] = [
       CREATE TABLE app_events (day date NOT NULL, platform text NOT NULL, name text NOT NULL, count integer NOT NULL, PRIMARY KEY (day, platform, name));
     `,
   },
+  {
+    // Family sharing (PRD 6.1 #8): who is in which family, and each family's current invite code (hashed).
+    version: 17,
+    sql: `
+      CREATE TABLE family_members (
+        id uuid PRIMARY KEY, family_id uuid NOT NULL, user_id uuid NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+        name text NOT NULL, joined_at timestamptz NOT NULL
+      );
+      CREATE INDEX family_members_family ON family_members(family_id);
+      CREATE TABLE family_invites (code_hash text PRIMARY KEY, family_id uuid NOT NULL, expires_at timestamptz NOT NULL);
+    `,
+  },
 ];
 
 /**
@@ -327,6 +339,7 @@ export class PgStore implements Store {
       await c.query(`DELETE FROM devices WHERE user_id = $1`, [userId]);
       await c.query(`DELETE FROM alerts WHERE user_id = $1`, [userId]);
       await c.query(`DELETE FROM saved_places WHERE user_id = $1`, [userId]);
+      await c.query(`DELETE FROM family_members WHERE user_id = $1`, [userId]);
       await c.query(`DELETE FROM users WHERE id = $1`, [userId]);
     });
   }
@@ -606,6 +619,7 @@ export class PgStore implements Store {
       if (!dup && existing.length < 10) { await this.addPlace(toUserId, p.label, p.lat, p.lon, p.radiusM); existing.push(p); }
     }
     await this.q(`UPDATE devices SET user_id = $1 WHERE user_id = $2`, [toUserId, fromUserId]);
+    await this.q(`UPDATE family_members SET user_id = $1 WHERE user_id = $2 AND NOT EXISTS (SELECT 1 FROM family_members WHERE user_id = $1)`, [toUserId, fromUserId]);
     await this.deleteUser(fromUserId);
   }
 
@@ -677,6 +691,49 @@ export class PgStore implements Store {
     return Object.fromEntries(rows.map((r) => [r.key, r.data]));
   }
 
+  // ── family sharing ───────────────────────────────────────────────────────
+  async familyMemberByUser(userId: string): Promise<FamilyMember | null> {
+    if (!isUuid(userId)) return null;
+    const { rows } = await this.q(`SELECT * FROM family_members WHERE user_id = $1`, [userId]);
+    return rows[0] ? rowToFamilyMember(rows[0]) : null;
+  }
+
+  async familyMembers(familyId: string): Promise<FamilyMember[]> {
+    if (!isUuid(familyId)) return [];
+    const { rows } = await this.q(`SELECT * FROM family_members WHERE family_id = $1 ORDER BY joined_at, id`, [familyId]);
+    return rows.map(rowToFamilyMember);
+  }
+
+  async addFamilyMember(m: FamilyMember): Promise<boolean> {
+    if (!isUuid(m.userId)) return false;
+    const r = await this.q(`INSERT INTO family_members (id, family_id, user_id, name, joined_at) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING`,
+      [m.id, m.familyId, m.userId, m.name, m.joinedAt]);
+    return r.rowCount === 1;
+  }
+
+  async removeFamilyMember(familyId: string, memberId: string): Promise<boolean> {
+    if (!isUuid(familyId) || !isUuid(memberId)) return false;
+    return (await this.q(`DELETE FROM family_members WHERE family_id = $1 AND id = $2`, [familyId, memberId])).rowCount === 1;
+  }
+
+  async setFamilyInvite(invite: FamilyInvite): Promise<void> {
+    await this.tx(async (c) => {
+      await c.query(`DELETE FROM family_invites WHERE family_id = $1`, [invite.familyId]);
+      await c.query(`INSERT INTO family_invites (code_hash, family_id, expires_at) VALUES ($1,$2,$3)
+        ON CONFLICT (code_hash) DO UPDATE SET family_id = EXCLUDED.family_id, expires_at = EXCLUDED.expires_at`, [invite.codeHash, invite.familyId, invite.expiresAt]);
+    });
+  }
+
+  async takeFamilyInvite(codeHash: string, nowIso: string): Promise<string | null> {
+    const { rows } = await this.q(`DELETE FROM family_invites WHERE code_hash = $1 AND expires_at > $2 RETURNING family_id`, [codeHash, nowIso]);
+    return rows[0]?.family_id ?? null;
+  }
+
+  async deleteFamilyInvites(familyId: string): Promise<void> {
+    if (!isUuid(familyId)) return;
+    await this.q(`DELETE FROM family_invites WHERE family_id = $1`, [familyId]);
+  }
+
   // ── AI spend ─────────────────────────────────────────────────────────────
   async purgeExpired(nowIso: string): Promise<RetentionReport> {
     const R = RETENTION;
@@ -696,6 +753,7 @@ export class PgStore implements Store {
         digests: await run(`DELETE FROM digests WHERE day < $1::date`, [before(R.digestsDays).slice(0, 10)]),
         emailCodes: await run(`DELETE FROM email_codes WHERE expires_at < $1`, [before(R.emailCodesDays)]),
         reviewerSessions: await run(`DELETE FROM reviewer_sessions WHERE expires_at <= $1`, [nowIso]),
+        familyInvites: await run(`DELETE FROM family_invites WHERE expires_at <= $1`, [nowIso]),
       };
       out.sourceItems += await run(`DELETE FROM source_items s WHERE event_id IS NOT NULL AND first_seen_at < $1 AND NOT EXISTS (SELECT 1 FROM events e WHERE e.id = s.event_id)`, [before(R.sourceItemsDays)]);
       await client.query('COMMIT');
@@ -896,6 +954,10 @@ function isUuid(s: string) { return UUID.test(s); }
 
 function iso(v: Date | string | null): string | null {
   return v == null ? null : v instanceof Date ? v.toISOString() : new Date(v).toISOString();
+}
+
+function rowToFamilyMember(r: any): FamilyMember {
+  return { id: r.id, familyId: r.family_id, userId: r.user_id, name: r.name, joinedAt: iso(r.joined_at)! };
 }
 
 function rowToAccount(r: any): Account {

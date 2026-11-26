@@ -28,6 +28,8 @@ export const TABLES: TableCopy[] = [
   { table: 'accounts', columns: ['id', 'email', 'user_id', 'created_at'] },
   { table: 'account_identities', columns: ['provider', 'subject', 'account_id', 'created_at'] },
   { table: 'saved_places', columns: ['id', 'user_id', 'label', 'lat', 'lon', 'radius_m'] },
+  { table: 'family_members', columns: ['id', 'family_id', 'user_id', 'name', 'joined_at'] },
+  { table: 'family_invites', columns: ['code_hash', 'family_id', 'expires_at'] },
   { table: 'source_items', columns: ['source', 'external_id', 'payload', 'event_id', 'first_seen_at'], casts: { payload: 'jsonb' } },
   { table: 'events', columns: ['id', 'data', 'status', 'category', 'lat', 'lon', 'starts_at', 'ends_at', 'updated_at'], casts: { data: 'jsonb' } },
   { table: 'event_embeddings', columns: ['event_id', 'model', 'embedding', 'updated_at'], casts: { embedding: 'public.vector' }, from: { embedding: 'vector' } },

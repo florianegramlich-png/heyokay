@@ -5,7 +5,7 @@ import type {
   Alert, Category, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
 } from './types.js';
 import { DEFAULT_PREFS, normalizePrefs, savedPrefs } from './types.js';
-import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type AccountIdentity, type IdentityProvider, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob, type LlmUsageDay, type DecisionQuery, type KpiInputs, decisionLimit } from './store.js';
+import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type AccountIdentity, type IdentityProvider, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob, type LlmUsageDay, type DecisionQuery, type KpiInputs, type FamilyMember, type FamilyInvite, decisionLimit } from './store.js';
 import type { PushTicket } from './push.js';
 import type { AppEvent, AppEventCount, Platform } from './app-events.js';
 import type { SourceStatus } from './ingest.js';
@@ -99,6 +99,12 @@ export class SqliteStore implements Store {
       CREATE TABLE IF NOT EXISTS decisions (id TEXT PRIMARY KEY, at TEXT NOT NULL, kind TEXT NOT NULL, event_id TEXT, data TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS decisions_at ON decisions(at);
       CREATE INDEX IF NOT EXISTS decisions_event ON decisions(event_id, at);
+      CREATE TABLE IF NOT EXISTS family_members (
+        id TEXT PRIMARY KEY, family_id TEXT NOT NULL, user_id TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+        name TEXT NOT NULL, joined_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS family_members_family ON family_members(family_id);
+      CREATE TABLE IF NOT EXISTS family_invites (code_hash TEXT PRIMARY KEY, family_id TEXT NOT NULL, expires_at TEXT NOT NULL);
       -- Users from before devices existed sign in with their original token.
       INSERT OR IGNORE INTO devices (token_hash, user_id, created_at) SELECT token_hash, id, created_at FROM users;
       PRAGMA foreign_keys = ON;
@@ -158,6 +164,7 @@ export class SqliteStore implements Store {
     this.db.prepare(`DELETE FROM devices WHERE user_id = ?`).run(userId);
     this.db.prepare(`DELETE FROM alerts WHERE user_id = ?`).run(userId);
     this.db.prepare(`DELETE FROM saved_places WHERE user_id = ?`).run(userId);
+    this.db.prepare(`DELETE FROM family_members WHERE user_id = ?`).run(userId);
     this.db.prepare(`DELETE FROM users WHERE id = ?`).run(userId);
   }
 
@@ -417,6 +424,7 @@ export class SqliteStore implements Store {
       if (!dup && existing.length < 10) { await this.addPlace(toUserId, p.label, p.lat, p.lon, p.radiusM); existing.push(p); }
     }
     this.db.prepare(`UPDATE devices SET user_id = ? WHERE user_id = ?`).run(toUserId, fromUserId);
+    this.db.prepare(`UPDATE family_members SET user_id = ? WHERE user_id = ? AND NOT EXISTS (SELECT 1 FROM family_members WHERE user_id = ?)`).run(toUserId, fromUserId, toUserId);
     await this.deleteUser(fromUserId);
   }
 
@@ -488,6 +496,44 @@ export class SqliteStore implements Store {
       .map((r) => ({ day: r.day, calls: r.calls, inputTokens: r.input_tokens, outputTokens: r.output_tokens, eur: r.eur, skipped: r.skipped }));
   }
 
+  // ── family sharing ───────────────────────────────────────────────────────
+  async familyMemberByUser(userId: string): Promise<FamilyMember | null> {
+    const r: any = this.db.prepare(`SELECT * FROM family_members WHERE user_id = ?`).get(userId);
+    return r ? rowToFamilyMember(r) : null;
+  }
+
+  async familyMembers(familyId: string): Promise<FamilyMember[]> {
+    return (this.db.prepare(`SELECT * FROM family_members WHERE family_id = ? ORDER BY joined_at, id`).all(familyId) as any[]).map(rowToFamilyMember);
+  }
+
+  async addFamilyMember(m: FamilyMember): Promise<boolean> {
+    const r = this.db.prepare(`INSERT OR IGNORE INTO family_members (id, family_id, user_id, name, joined_at) VALUES (?,?,?,?,?)`)
+      .run(m.id, m.familyId, m.userId, m.name, m.joinedAt);
+    return Number(r.changes) === 1;
+  }
+
+  async removeFamilyMember(familyId: string, memberId: string): Promise<boolean> {
+    return Number(this.db.prepare(`DELETE FROM family_members WHERE family_id = ? AND id = ?`).run(familyId, memberId).changes) === 1;
+  }
+
+  async setFamilyInvite(invite: FamilyInvite): Promise<void> {
+    this.db.exec('BEGIN');
+    try {
+      this.db.prepare(`DELETE FROM family_invites WHERE family_id = ?`).run(invite.familyId);
+      this.db.prepare(`INSERT OR REPLACE INTO family_invites (code_hash, family_id, expires_at) VALUES (?,?,?)`).run(invite.codeHash, invite.familyId, invite.expiresAt);
+      this.db.exec('COMMIT');
+    } catch (e) { this.db.exec('ROLLBACK'); throw e; }
+  }
+
+  async takeFamilyInvite(codeHash: string, nowIso: string): Promise<string | null> {
+    const r: any = this.db.prepare(`DELETE FROM family_invites WHERE code_hash = ? AND expires_at > ? RETURNING family_id`).get(codeHash, nowIso);
+    return r ? r.family_id : null;
+  }
+
+  async deleteFamilyInvites(familyId: string): Promise<void> {
+    this.db.prepare(`DELETE FROM family_invites WHERE family_id = ?`).run(familyId);
+  }
+
   // ── data retention ───────────────────────────────────────────────────────
   async purgeExpired(nowIso: string): Promise<RetentionReport> {
     const R = RETENTION;
@@ -507,6 +553,7 @@ export class SqliteStore implements Store {
         digests: run(`DELETE FROM digests WHERE day < ?`, before(R.digestsDays).slice(0, 10)),
         emailCodes: run(`DELETE FROM email_codes WHERE expires_at < ?`, before(R.emailCodesDays)),
         reviewerSessions: run(`DELETE FROM reviewer_sessions WHERE expires_at <= ?`, nowIso),
+        familyInvites: run(`DELETE FROM family_invites WHERE expires_at <= ?`, nowIso),
       };
       // Source items of deleted events go too (their event is gone).
       out.sourceItems += run(`DELETE FROM source_items WHERE event_id IS NOT NULL AND first_seen_at < ? AND NOT EXISTS (SELECT 1 FROM events e WHERE e.id = source_items.event_id)`, before(R.sourceItemsDays));
@@ -682,3 +729,6 @@ function rowToUser(r: any): User {
   };
 }
 
+function rowToFamilyMember(r: any): FamilyMember {
+  return { id: r.id, familyId: r.family_id, userId: r.user_id, name: r.name, joinedAt: r.joined_at };
+}
