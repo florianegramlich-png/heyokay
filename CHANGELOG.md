@@ -30,6 +30,11 @@
   - Tests: `app/test/api.test.ts` (4: token and JSON, encoded ids, no token for registering and public calls, push token sent, history query, errors with status and message, 401 without a request, a non-JSON error page), `app/test/onboarding.test.ts` (5: full order, no "always" after a refused or postponed location, the topic rule, every step is a counted funnel event), `app/test/theme.test.ts` (3: a distinct colour per topic and level, WCAG AA contrast on the background for text, muted text, topic and level colours, cool colours for levels 1–2). Server 435/435 on SQLite + Postgres, app 20/20, web 25/25, typechecks clean.
   - Web: no change; it already had `createApi` with tests, and its onboarding is shorter (no "always" or notification steps in a browser).
   - For Flori: nothing to do.
+- **Android: installable web app and an APK for testers** (asked by Flori, 2026-11-25: "optimise for android too", while sharing Hey-Okay with her co-founder).
+  - Web: a web app manifest (`web/app/manifest.ts`, served at `/manifest.webmanifest`) with name, standalone window, the night-sky background and theme colour, and 192/512 px icons (`web/public/`, also maskable), so Chrome on Android offers "App installieren" and Hey-Okay opens in its own window from the home screen. The browser's status bar now matches the app's background (`#0F1430`). iPhone gets a home-screen icon too (`apple-touch-icon`).
+  - Phone app: nothing to change for an APK: the `preview` EAS profile already builds an installable APK (internal distribution, checked against Expo's docs). New shortcut `npm run build:android-preview` in `app/`, and a README section "Sharing with testers on Android".
+  - Tests: `web/test/manifest.test.ts` (2 new: installable fields; every icon exists with the size it claims, one maskable). Checked the manifest and head tags on a local production build. Server 435/435 on SQLite + Postgres, app 20/20, web 27/27, typechecks clean.
+  - For Flori: the icons are a simple placeholder "H" mark; the phone app's own icons are still Expo's template ones. Both need a real app icon before launch. Push notifications in the Android app need the Firebase/FCM step under "Needs a human".
 
 ## 2026-11-24
 

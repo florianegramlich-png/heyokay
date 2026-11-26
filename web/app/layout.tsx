@@ -8,9 +8,12 @@ import { LangSync } from '@/components/lang-sync';
 export const metadata: Metadata = {
   title: 'Hey-Okay',
   description: 'Ruhige Warnungen für deine Umgebung: nur was dich betrifft, und was du tun kannst.',
+  applicationName: 'Hey-Okay',
+  icons: { icon: '/icon-192.png', apple: '/apple-touch-icon.png' },
+  appleWebApp: { capable: true, title: 'Hey-Okay', statusBarStyle: 'black-translucent' },
 };
 
-export const viewport: Viewport = { themeColor: '#0f172a', width: 'device-width', initialScale: 1 };
+export const viewport: Viewport = { themeColor: '#0F1430', width: 'device-width', initialScale: 1 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

@@ -38,6 +38,7 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "test": "node --test test/*.test.ts",
+    "build:android-preview": "npx eas-cli@latest build --profile preview --platform android",
     "update:preview": "npx eas-cli@latest update --channel preview --platform all --auto",
     "update:production": "npx eas-cli@latest update --channel production --platform all --auto"
   },
