@@ -1,6 +1,7 @@
 import { session } from './session';
 import type { Alert, AlertDetail, Category, Feedback, SavedPlace, TechService, UserPrefs } from './types';
 import type { Provider, Providers } from './signin';
+import type { Family, FamilyInvite } from './family';
 
 /** The Hey-Okay server. NEXT_PUBLIC_API_URL for a local server (e.g. http://localhost:8787). */
 export const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'https://heyokay.fly.dev').replace(/\/$/, '');
@@ -47,6 +48,15 @@ export function createApi(fetchImpl: Fetch = (...a) => fetch(...a), getToken = (
     addPlace: (label: string, lat: number, lon: number, radiusM = 500) =>
       request<{ place: SavedPlace }>('POST', '/v1/me/places', { label, lat, lon, radiusM }),
     deletePlace: (id: string) => request<{ ok: true }>('DELETE', `/v1/me/places/${encodeURIComponent(id)}`),
+    /** Share one of your places with your family, or stop (PATCH /v1/me/places/:id). */
+    sharePlace: (id: string, shared: boolean) => request<{ place: SavedPlace }>('PATCH', `/v1/me/places/${encodeURIComponent(id)}`, { shared }),
+    // Family sharing (server: family.ts). `name` is how the others see you.
+    family: () => request<{ family: Family | null }>('GET', '/v1/me/family'),
+    startFamily: (name: string) => request<{ family: Family }>('POST', '/v1/me/family', { name }),
+    familyInvite: () => request<FamilyInvite>('POST', '/v1/me/family/invite', {}),
+    joinFamily: (code: string, name: string) => request<{ family: Family }>('POST', '/v1/me/family/join', { code, name }),
+    leaveFamily: () => request<{ ok: true }>('DELETE', '/v1/me/family'),
+    removeFamilyMember: (memberId: string) => request<{ family: Family }>('DELETE', `/v1/me/family/members/${encodeURIComponent(memberId)}`),
     deleteAccount: () => request<{ ok: true }>('DELETE', '/v1/me'),
     alerts: () => request<{ alerts: Alert[] }>('GET', '/v1/me/alerts'),
     /** Services whose outages can be followed one by one ("only the services I use"). */

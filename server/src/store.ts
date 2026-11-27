@@ -31,6 +31,11 @@ export type PushStatus = 'pending' | 'delivered' | 'error' | 'retried' | 'unknow
 
 export interface Account { id: string; email: string; userId: string; createdAt: string }
 
+/** One person in a family (family.ts). `id` is what other members see; the user id never leaves the server. */
+export interface FamilyMember { id: string; familyId: string; userId: string; name: string; joinedAt: string }
+/** A family's current invite code, stored as a hash. */
+export interface FamilyInvite { codeHash: string; familyId: string; expiresAt: string }
+
 /** A sign-in provider other than email codes (PRD 5.3, 7.1). */
 export type IdentityProvider = 'apple' | 'google';
 export interface AccountIdentity { provider: IdentityProvider; subject: string }
@@ -73,10 +78,18 @@ export interface Store {
   addPlace(userId: string, label: string, lat: number, lon: number, radiusM: number): Promise<SavedPlace>;
   places(userId: string): Promise<SavedPlace[]>;
   deletePlace(userId: string, placeId: string): Promise<void>;
+  /** Shares one of this person's places with their family, or stops. Null when it isn't theirs. */
+  setPlaceShared(userId: string, placeId: string, shared: boolean): Promise<SavedPlace | null>;
+  /** Stops sharing all of this person's places (when they join, start or leave a family). */
+  unshareAllPlaces(userId: string): Promise<void>;
+  /** The places the other members of this person's family share, each with `sharedBy` (their family name). */
+  familyPlaces(userId: string): Promise<SavedPlace[]>;
   /**
    * Users who may be inside an area: their current location (if updated within
    * LOCATION_MAX_AGE_MS of `now`) is within radius + bufferM, or one of their saved places
-   * overlaps it (radius + place radius). Each comes with all of their saved places.
+   * overlaps it (radius + place radius), or a place another member of their family shared
+   * overlaps it. Each comes with all of their saved places plus their family's shared places
+   * (those with `sharedBy`, as in `familyPlaces`).
    * A superset is allowed (the pipeline's `match` makes the final call); missing a user is not.
    */
   usersNear(area: Area, bufferM: number, now: Date): Promise<UserWithPlaces[]>;
@@ -157,7 +170,7 @@ export interface Store {
   /** Removes one device token (signing out); the user and other devices stay. */
   removeDevice(token: string): Promise<void>;
   deviceCount(userId: string): Promise<number>;
-  /** Moves saved places (skipping duplicates) from one user to another, then deletes the first. */
+  /** Moves saved places (skipping duplicates) and the family membership (if the second has none) from one user to another, then deletes the first. */
   mergeUserInto(fromUserId: string, toUserId: string): Promise<void>;
   saveEmailCode(c: EmailCode): Promise<void>;
   emailCode(email: string): Promise<EmailCode | null>;
@@ -208,6 +221,21 @@ export interface Store {
   reviewerBySession(tokenHash: string, nowIso: string): Promise<Reviewer | null>;
   deleteReviewerSession(tokenHash: string): Promise<void>;
   deleteReviewerSessionsFor(reviewerId: string): Promise<void>;
+
+  // ── family sharing (PRD 6.1 #8; rules in family.ts) ──
+  familyMemberByUser(userId: string): Promise<FamilyMember | null>;
+  familyMembers(familyId: string): Promise<FamilyMember[]>;
+  /**
+   * Adds the person unless they are already in a family or the family already has `max` people.
+   * Atomic: two people joining at the same moment can't take a family over `max`.
+   */
+  addFamilyMember(m: FamilyMember, max: number): Promise<'added' | 'already_in_family' | 'family_full'>;
+  removeFamilyMember(familyId: string, memberId: string): Promise<boolean>;
+  /** Replaces the family's invite (one at a time). */
+  setFamilyInvite(invite: FamilyInvite): Promise<void>;
+  /** Uses up an invite that hasn't expired: deletes it and returns its family, else null. Atomic. */
+  takeFamilyInvite(codeHash: string, nowIso: string): Promise<string | null>;
+  deleteFamilyInvites(familyId: string): Promise<void>;
 
   // ── data retention (PRD 11) ──
   /** Deletes what is past its retention period (retention.ts); returns how many rows of each. */

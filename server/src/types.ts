@@ -241,6 +241,13 @@ export interface SavedPlace {
   lat: number;
   lon: number;
   radiusM: number;
+  /** Shared with the person's family (family sharing, PRD 6.1 #8). Missing = not shared. */
+  shared?: boolean;
+  /**
+   * Only on a family member's shared place as another member gets it (`Store.familyPlaces`):
+   * the name its owner goes by in the family. Alerts show it next to the label.
+   */
+  sharedBy?: string;
 }
 
 export interface Alert {

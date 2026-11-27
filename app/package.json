@@ -24,6 +24,8 @@
     "react-dom": "19.3.0",
     "react-native": "0.88.1",
     "react-native-maps": "1.29.11",
+    "react-native-nitro-google-signin": "^2.3.1",
+    "react-native-nitro-modules": "^0.37.2",
     "react-native-safe-area-context": "~5.11.1",
     "react-native-screens": "~4.30.1"
   },
@@ -38,6 +40,7 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "test": "node --test test/*.test.ts",
+    "build:android-preview": "npx eas-cli@latest build --profile preview --platform android",
     "update:preview": "npx eas-cli@latest update --channel preview --platform all --auto",
     "update:production": "npx eas-cli@latest update --channel production --platform all --auto"
   },

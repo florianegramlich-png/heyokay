@@ -137,7 +137,7 @@ export function translate(lang: Lang, key: Key, vars?: Record<string, string | n
   const dict = (key in WEB.de ? WEB[lang] : APP_STRINGS[lang]) as Record<string, string>;
   const fallback = (key in WEB.de ? WEB.en : APP_STRINGS.en) as Record<string, string>;
   let s = dict[key] ?? fallback[key] ?? key;
-  if (vars) for (const [k, v] of Object.entries(vars)) s = s.replace(`{${k}}`, String(v));
+  if (vars) for (const [k, v] of Object.entries(vars)) s = s.split(`{${k}}`).join(String(v));
   return s;
 }
 

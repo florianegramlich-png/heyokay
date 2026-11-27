@@ -3,6 +3,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
+import { DatabaseSync } from 'node:sqlite';
 import { SqliteStore } from '../src/db.js';
 import { PgStore } from '../src/pg.js';
 import { copySqliteToPg } from '../src/tools/sqlite-to-pg.js';
@@ -37,6 +38,31 @@ describe.skipIf(!url)('SQLite → Postgres copy', () => {
       expect(near.map((u) => u.user.id)).toContain(user.id);
     } finally {
       await pg.close();
+    }
+  });
+
+  it('copies the family share switch; an older file without it copies as not shared', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'hk-'));
+    const file = join(dir, 'h.db'), old = join(dir, 'old.db');
+    for (const f of [file, old]) {
+      const src = new SqliteStore(f);
+      const { user } = await src.createUser(null);
+      const p = await src.addPlace(user.id, 'Zuhause', 48.137, 11.575, 500);
+      await src.setPlaceShared(user.id, p.id, true);
+      await src.close();
+    }
+    const raw = new DatabaseSync(old);
+    raw.exec('ALTER TABLE saved_places DROP COLUMN shared');
+    raw.close();
+    for (const [f, shared] of [[file, true], [old, false]] as const) {
+      const pg = await PgStore.connect(url!, { schema: `t_${randomBytes(6).toString('hex')}`, dropSchemaOnClose: true, max: 2 });
+      try {
+        expect((await copySqliteToPg(f, pg)).saved_places).toEqual({ source: 1, copied: 1, skipped: 0, failed: 0 });
+        const { rows } = await pg.pool.query('SELECT shared FROM saved_places');
+        expect(rows).toEqual([{ shared }]);
+      } finally {
+        await pg.close();
+      }
     }
   });
 });

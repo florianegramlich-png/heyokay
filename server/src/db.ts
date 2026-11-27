@@ -5,7 +5,7 @@ import type {
   Alert, Category, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
 } from './types.js';
 import { DEFAULT_PREFS, normalizePrefs, savedPrefs } from './types.js';
-import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type AccountIdentity, type IdentityProvider, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob, type LlmUsageDay, type DecisionQuery, type KpiInputs, decisionLimit } from './store.js';
+import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type AccountIdentity, type IdentityProvider, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob, type LlmUsageDay, type DecisionQuery, type KpiInputs, type FamilyMember, type FamilyInvite, decisionLimit } from './store.js';
 import type { PushTicket } from './push.js';
 import type { AppEvent, AppEventCount, Platform } from './app-events.js';
 import type { SourceStatus } from './ingest.js';
@@ -99,12 +99,18 @@ export class SqliteStore implements Store {
       CREATE TABLE IF NOT EXISTS decisions (id TEXT PRIMARY KEY, at TEXT NOT NULL, kind TEXT NOT NULL, event_id TEXT, data TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS decisions_at ON decisions(at);
       CREATE INDEX IF NOT EXISTS decisions_event ON decisions(event_id, at);
+      CREATE TABLE IF NOT EXISTS family_members (
+        id TEXT PRIMARY KEY, family_id TEXT NOT NULL, user_id TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+        name TEXT NOT NULL, joined_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS family_members_family ON family_members(family_id);
+      CREATE TABLE IF NOT EXISTS family_invites (code_hash TEXT PRIMARY KEY, family_id TEXT NOT NULL, expires_at TEXT NOT NULL);
       -- Users from before devices existed sign in with their original token.
       INSERT OR IGNORE INTO devices (token_hash, user_id, created_at) SELECT token_hash, id, created_at FROM users;
       PRAGMA foreign_keys = ON;
     `);
     // Columns added after launch (SQLite has no migrations here): add if missing.
-    for (const sql of [`ALTER TABLE users ADD COLUMN last_seen_at TEXT`, `ALTER TABLE alerts ADD COLUMN opened_at TEXT`]) {
+    for (const sql of [`ALTER TABLE users ADD COLUMN last_seen_at TEXT`, `ALTER TABLE alerts ADD COLUMN opened_at TEXT`, `ALTER TABLE saved_places ADD COLUMN shared INTEGER NOT NULL DEFAULT 0`]) {
       try { this.db.exec(sql); } catch (e) { if (!/duplicate column/i.test((e as Error).message)) throw e; }
     }
   }
@@ -158,24 +164,40 @@ export class SqliteStore implements Store {
     this.db.prepare(`DELETE FROM devices WHERE user_id = ?`).run(userId);
     this.db.prepare(`DELETE FROM alerts WHERE user_id = ?`).run(userId);
     this.db.prepare(`DELETE FROM saved_places WHERE user_id = ?`).run(userId);
+    this.db.prepare(`DELETE FROM family_members WHERE user_id = ?`).run(userId);
     this.db.prepare(`DELETE FROM users WHERE id = ?`).run(userId);
   }
 
   // ── saved places ─────────────────────────────────────────────────────────
   async addPlace(userId: string, label: string, lat: number, lon: number, radiusM: number): Promise<SavedPlace> {
-    const place: SavedPlace = { id: randomUUID(), userId, label, lat, lon, radiusM };
-    this.db.prepare(`INSERT INTO saved_places VALUES (?,?,?,?,?,?)`).run(place.id, userId, label, lat, lon, radiusM);
+    const place: SavedPlace = { id: randomUUID(), userId, label, lat, lon, radiusM, shared: false };
+    this.db.prepare(`INSERT INTO saved_places (id, user_id, label, lat, lon, radius_m) VALUES (?,?,?,?,?,?)`).run(place.id, userId, label, lat, lon, radiusM);
     return place;
   }
 
   async places(userId: string): Promise<SavedPlace[]> {
-    return this.db.prepare(`SELECT * FROM saved_places WHERE user_id = ?`).all(userId).map((r: any) => ({
-      id: r.id, userId: r.user_id, label: r.label, lat: r.lat, lon: r.lon, radiusM: r.radius_m,
-    }));
+    return this.db.prepare(`SELECT * FROM saved_places WHERE user_id = ?`).all(userId).map(rowToPlace);
   }
 
   async deletePlace(userId: string, placeId: string): Promise<void> {
     this.db.prepare(`DELETE FROM saved_places WHERE id = ? AND user_id = ?`).run(placeId, userId);
+  }
+
+  async setPlaceShared(userId: string, placeId: string, shared: boolean): Promise<SavedPlace | null> {
+    const r: any = this.db.prepare(`UPDATE saved_places SET shared = ? WHERE id = ? AND user_id = ? RETURNING *`).get(shared ? 1 : 0, placeId, userId);
+    return r ? rowToPlace(r) : null;
+  }
+
+  async unshareAllPlaces(userId: string): Promise<void> {
+    this.db.prepare(`UPDATE saved_places SET shared = 0 WHERE user_id = ?`).run(userId);
+  }
+
+  async familyPlaces(userId: string): Promise<SavedPlace[]> {
+    return (this.db.prepare(`
+      SELECT p.*, owner.name AS shared_by FROM family_members me
+      JOIN family_members owner ON owner.family_id = me.family_id AND owner.user_id <> me.user_id
+      JOIN saved_places p ON p.user_id = owner.user_id AND p.shared = 1
+      WHERE me.user_id = ? ORDER BY p.label, p.id`).all(userId) as any[]).map(rowToPlace);
   }
 
   /**
@@ -185,10 +207,14 @@ export class SqliteStore implements Store {
    */
   async usersNear(area: Area, bufferM: number, now: Date): Promise<UserWithPlaces[]> {
     const placesByUser = new Map<string, SavedPlace[]>();
-    for (const r of this.db.prepare(`SELECT * FROM saved_places ORDER BY label, id`).all() as any[]) {
-      const p: SavedPlace = { id: r.id, userId: r.user_id, label: r.label, lat: r.lat, lon: r.lon, radiusM: r.radius_m };
-      placesByUser.set(p.userId, [...(placesByUser.get(p.userId) ?? []), p]);
-    }
+    const add = (userId: string, p: SavedPlace) => placesByUser.set(userId, [...(placesByUser.get(userId) ?? []), p]);
+    for (const r of this.db.prepare(`SELECT * FROM saved_places ORDER BY label, id`).all() as any[]) add(r.user_id, rowToPlace(r));
+    // Shared places reach the other members of the owner's family, labelled with the owner's family name.
+    for (const r of this.db.prepare(`
+      SELECT p.*, owner.name AS shared_by, me.user_id AS recipient FROM saved_places p
+      JOIN family_members owner ON owner.user_id = p.user_id
+      JOIN family_members me ON me.family_id = owner.family_id AND me.user_id <> owner.user_id
+      WHERE p.shared = 1 ORDER BY p.label, p.id`).all() as any[]) add(r.recipient, rowToPlace(r));
     const out: UserWithPlaces[] = [];
     for (const user of this.db.prepare(`SELECT * FROM users`).all().map(rowToUser)) {
       const places = placesByUser.get(user.id) ?? [];
@@ -417,6 +443,7 @@ export class SqliteStore implements Store {
       if (!dup && existing.length < 10) { await this.addPlace(toUserId, p.label, p.lat, p.lon, p.radiusM); existing.push(p); }
     }
     this.db.prepare(`UPDATE devices SET user_id = ? WHERE user_id = ?`).run(toUserId, fromUserId);
+    this.db.prepare(`UPDATE family_members SET user_id = ? WHERE user_id = ? AND NOT EXISTS (SELECT 1 FROM family_members WHERE user_id = ?)`).run(toUserId, fromUserId, toUserId);
     await this.deleteUser(fromUserId);
   }
 
@@ -488,6 +515,48 @@ export class SqliteStore implements Store {
       .map((r) => ({ day: r.day, calls: r.calls, inputTokens: r.input_tokens, outputTokens: r.output_tokens, eur: r.eur, skipped: r.skipped }));
   }
 
+  // ── family sharing ───────────────────────────────────────────────────────
+  async familyMemberByUser(userId: string): Promise<FamilyMember | null> {
+    const r: any = this.db.prepare(`SELECT * FROM family_members WHERE user_id = ?`).get(userId);
+    return r ? rowToFamilyMember(r) : null;
+  }
+
+  async familyMembers(familyId: string): Promise<FamilyMember[]> {
+    return (this.db.prepare(`SELECT * FROM family_members WHERE family_id = ? ORDER BY joined_at, id`).all(familyId) as any[]).map(rowToFamilyMember);
+  }
+
+  async addFamilyMember(m: FamilyMember, max: number): Promise<'added' | 'already_in_family' | 'family_full'> {
+    // node:sqlite is synchronous, so the check and the insert can't interleave with another join.
+    if (this.db.prepare(`SELECT 1 FROM family_members WHERE user_id = ?`).get(m.userId)) return 'already_in_family';
+    const n = Number((this.db.prepare(`SELECT COUNT(*) AS n FROM family_members WHERE family_id = ?`).get(m.familyId) as any).n);
+    if (n >= max) return 'family_full';
+    this.db.prepare(`INSERT INTO family_members (id, family_id, user_id, name, joined_at) VALUES (?,?,?,?,?)`)
+      .run(m.id, m.familyId, m.userId, m.name, m.joinedAt);
+    return 'added';
+  }
+
+  async removeFamilyMember(familyId: string, memberId: string): Promise<boolean> {
+    return Number(this.db.prepare(`DELETE FROM family_members WHERE family_id = ? AND id = ?`).run(familyId, memberId).changes) === 1;
+  }
+
+  async setFamilyInvite(invite: FamilyInvite): Promise<void> {
+    this.db.exec('BEGIN');
+    try {
+      this.db.prepare(`DELETE FROM family_invites WHERE family_id = ?`).run(invite.familyId);
+      this.db.prepare(`INSERT OR REPLACE INTO family_invites (code_hash, family_id, expires_at) VALUES (?,?,?)`).run(invite.codeHash, invite.familyId, invite.expiresAt);
+      this.db.exec('COMMIT');
+    } catch (e) { this.db.exec('ROLLBACK'); throw e; }
+  }
+
+  async takeFamilyInvite(codeHash: string, nowIso: string): Promise<string | null> {
+    const r: any = this.db.prepare(`DELETE FROM family_invites WHERE code_hash = ? AND expires_at > ? RETURNING family_id`).get(codeHash, nowIso);
+    return r ? r.family_id : null;
+  }
+
+  async deleteFamilyInvites(familyId: string): Promise<void> {
+    this.db.prepare(`DELETE FROM family_invites WHERE family_id = ?`).run(familyId);
+  }
+
   // ── data retention ───────────────────────────────────────────────────────
   async purgeExpired(nowIso: string): Promise<RetentionReport> {
     const R = RETENTION;
@@ -507,6 +576,7 @@ export class SqliteStore implements Store {
         digests: run(`DELETE FROM digests WHERE day < ?`, before(R.digestsDays).slice(0, 10)),
         emailCodes: run(`DELETE FROM email_codes WHERE expires_at < ?`, before(R.emailCodesDays)),
         reviewerSessions: run(`DELETE FROM reviewer_sessions WHERE expires_at <= ?`, nowIso),
+        familyInvites: run(`DELETE FROM family_invites WHERE expires_at <= ?`, nowIso),
       };
       // Source items of deleted events go too (their event is gone).
       out.sourceItems += run(`DELETE FROM source_items WHERE event_id IS NOT NULL AND first_seen_at < ? AND NOT EXISTS (SELECT 1 FROM events e WHERE e.id = source_items.event_id)`, before(R.sourceItemsDays));
@@ -682,3 +752,13 @@ function rowToUser(r: any): User {
   };
 }
 
+function rowToFamilyMember(r: any): FamilyMember {
+  return { id: r.id, familyId: r.family_id, userId: r.user_id, name: r.name, joinedAt: r.joined_at };
+}
+
+function rowToPlace(r: any): SavedPlace {
+  return {
+    id: r.id, userId: r.user_id, label: r.label, lat: r.lat, lon: r.lon, radiusM: r.radius_m, shared: !!r.shared,
+    ...(r.shared_by != null ? { sharedBy: r.shared_by } : {}),
+  };
+}

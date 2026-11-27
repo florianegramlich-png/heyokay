@@ -1,10 +1,12 @@
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert as RNAlert, Linking, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert as RNAlert, Linking, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import { SkyScreen } from '../components/Starfield';
 import { Button, s, Section, ToggleRow } from '../components/ui';
 import { LanguagePicker } from '../components/LanguagePicker';
 import { AccountSection } from '../components/AccountSection';
+import { FamilySection } from '../components/FamilySection';
+import type { Family } from '../lib/family';
 import { api } from '../lib/api';
 import { crashReportingAvailable, getCrashReportsOptIn, setCrashReportsOptIn } from '../lib/crash';
 import { setLanguage, useI18n, type Lang } from '../lib/i18n';
@@ -35,6 +37,7 @@ export default function Settings() {
   const [crashReports, setCrashReports] = useState(false);
   const [account, setAccount] = useState<string | null>(null);
   const [services, setServices] = useState<TechService[]>([]);
+  const [family, setFamily] = useState<Family | null>(null);
   const showCrashToggle = crashReportingAvailable();
   const { t, lang, categoryLabel, categoryHint } = useI18n();
 
@@ -44,6 +47,24 @@ export default function Settings() {
     getCrashReportsOptIn().then(setCrashReports);
     api.services().then((r) => setServices(r.services)).catch(() => null);
   }, []);
+
+  // The family belongs to the person, so it follows sign-in and sign-out.
+  useEffect(() => { api.family().then((r) => setFamily(r.family)).catch(() => null); }, [account]);
+
+  async function sharePlace(id: string, shared: boolean) {
+    setPlaces((ps) => ps.map((p) => (p.id === id ? { ...p, shared } : p))); // optimistic
+    try {
+      await api.sharePlace(id, shared);
+      setFamily((await api.family()).family);
+    } catch {
+      setPlaces((ps) => ps.map((p) => (p.id === id ? { ...p, shared: !shared } : p)));
+    }
+  }
+
+  function familyChanged(next: Family | null, placesChanged?: boolean) {
+    setFamily(next);
+    if (placesChanged) api.places().then((r) => setPlaces(r.places)).catch(() => null);
+  }
 
   async function toggleCrashReports(v: boolean) {
     setCrashReports(v);
@@ -235,9 +256,20 @@ export default function Settings() {
 
       <Section title={t('set.places')}>
         {places.map((p) => (
-          <View key={p.id} style={[s.row, s.rowLine]}>
-            <Text style={[s.rowLabel, { flex: 1 }]}>{p.label}</Text>
-            <Text style={{ color: colors.danger }} onPress={() => removePlace(p.id)}>{t('set.places.remove')}</Text>
+          <View key={p.id} style={s.rowLine}>
+            <View style={s.row}>
+              <Text style={[s.rowLabel, { flex: 1 }]}>{p.label}</Text>
+              <Text style={{ color: colors.danger }} onPress={() => removePlace(p.id)}>{t('set.places.remove')}</Text>
+            </View>
+            {family ? (
+              <View style={[s.row, { paddingTop: 0 }]}>
+                <Text style={[s.rowHint, { flex: 1, marginTop: 0 }]}>{t('set.places.share')}</Text>
+                <Switch
+                  value={!!p.shared} onValueChange={(v) => void sharePlace(p.id, v)} accessibilityLabel={`${t('set.places.share')}: ${p.label}`}
+                  trackColor={{ true: colors.brand, false: 'rgba(255,255,255,0.18)' }} thumbColor="#FFFFFF" ios_backgroundColor="rgba(255,255,255,0.18)"
+                />
+              </View>
+            ) : null}
           </View>
         ))}
         <TextInput placeholder={t('set.places.name')} placeholderTextColor={colors.muted} value={label} onChangeText={setLabel} style={input} maxLength={40} keyboardAppearance="dark" />
@@ -245,6 +277,8 @@ export default function Settings() {
         {placeError ? <Text style={{ color: colors.danger, marginTop: 6 }}>{placeError}</Text> : null}
         <Button kind="secondary" title={t('set.places.add')} disabled={!address.trim()} onPress={addPlace} />
       </Section>
+
+      <FamilySection family={family} onChanged={familyChanged} />
 
       <Section title={t('set.privacy')}>
         <Text style={s.p}>{t('set.privacy.text')}</Text>

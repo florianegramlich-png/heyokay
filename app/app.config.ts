@@ -2,6 +2,7 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ConfigContext, ExpoConfig } from 'expo/config';
+import { googleIdsFromEnv, reversedClientId } from './src/lib/google-signin.ts';
 
 // Firebase (Crashlytics) is switched on only when both config files from the Firebase console
 // are present in ./firebase. Until the Firebase project exists, builds work without it and
@@ -13,9 +14,23 @@ export function firebaseFilesPresent(root: string): boolean {
   return existsSync(join(root, IOS_FILE)) && existsSync(join(root, ANDROID_FILE));
 }
 
-export default ({ config }: ConfigContext): ExpoConfig => {
+// Sign in with Google on the phone: on only when GOOGLE_WEB_CLIENT_ID and GOOGLE_IOS_CLIENT_ID are set
+// for the build (EAS environment variables). Then the plugin adds the iOS URL scheme and the app gets
+// the ids in extra.google; react-native.config.js links the native code under the same rule.
+export function withGoogle(base: ExpoConfig, env: Record<string, string | undefined>): ExpoConfig {
+  const ids = googleIdsFromEnv(env);
+  if (!ids) return base;
+  return {
+    ...base,
+    plugins: [...(base.plugins ?? []), ['react-native-nitro-google-signin', { iosUrlScheme: reversedClientId(ids.iosClientId) }]],
+    extra: { ...base.extra, google: ids },
+  };
+}
+
+export default ({ config }: ConfigContext): ExpoConfig => withGoogle(withFirebase(config as ExpoConfig), process.env);
+
+function withFirebase(base: ExpoConfig): ExpoConfig {
   const firebaseEnabled = firebaseFilesPresent(process.cwd());
-  const base = config as ExpoConfig;
   if (!firebaseEnabled) {
     return { ...base, extra: { ...base.extra, firebaseEnabled: false } };
   }
@@ -32,4 +47,4 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ],
     extra: { ...base.extra, firebaseEnabled: true },
   };
-};
+}

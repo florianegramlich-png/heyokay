@@ -35,7 +35,8 @@ export const DEFAULT_PREFS: UserPrefs = {
   language: 'en',
 };
 
-export interface SavedPlace { id: string; label: string; lat: number; lon: number; radiusM: number }
+/** `shared`: shared with the person's family (family sharing). */
+export interface SavedPlace { id: string; label: string; lat: number; lon: number; radiusM: number; shared?: boolean }
 
 export interface Alert {
   id: string;

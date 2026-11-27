@@ -142,6 +142,11 @@ To move from SQLite to Postgres, set `DATABASE_URL` as a Fly secret (the databas
 - **Background**: location task (about every 300 m or 15 min), push-token registration and notification tap → alert.
 - **Crash reporting**: Firebase Crashlytics, opt-in via Settings ("Absturzberichte senden"), plus a calm error screen that reports render errors. Active only in development/store builds once `app/firebase/` holds the Firebase config files (see `app/firebase/README.md`); a no-op in Expo Go.
 
+### Sharing with testers on Android
+
+- **Web app (no install, no store):** open https://heyokay-2zag.vercel.app in Chrome → menu → "App installieren" / "Zum Startbildschirm hinzufügen". It opens in its own window with the Hey-Okay icon (`web/app/manifest.ts`). No push notifications in a browser.
+- **Phone app (APK, no Play account):** `cd app && npm run build:android-preview` (EAS, profile `preview`, internal distribution → an installable APK). EAS prints a link; send it, the tester opens it on the phone and allows "install unknown apps" once. Later builds can be updated over the air with `npm run update:preview`. Push notifications on Android need the Firebase step under "Needs a human" (FCM) first; everything else works.
+
 ## Done vs. next
 
 **Done:** everything above. Server: typechecked, 28 tests passing, and an end-to-end run over HTTP. App: typechecked and bundles for Android.

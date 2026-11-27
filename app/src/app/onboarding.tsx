@@ -9,12 +9,11 @@ import { api } from '../lib/api';
 import { setLanguage, useI18n } from '../lib/i18n';
 import { requestBackground, requestForeground, startBackgroundUpdates, syncNow } from '../lib/location';
 import { getPushToken, requestPermission } from '../lib/notifications';
+import { canContinue, nextStep, type Step } from '../lib/onboarding';
 import { session } from '../lib/session';
 import { analytics } from '../lib/track';
 import { colors } from '../lib/theme';
 import { CATEGORIES, DEFAULT_PREFS, type Category } from '../lib/types';
-
-type Step = 'value' | 'location' | 'always' | 'notifications' | 'categories' | 'consent';
 
 /** PRD 5.3 onboarding: value → location (foreground, then always) → notifications → categories → consent. */
 export default function Onboarding() {
@@ -59,7 +58,7 @@ export default function Onboarding() {
       <ScrollView contentContainerStyle={{ padding: 24, flexGrow: 1, justifyContent: 'center' }}>
         {step === 'value' && (
           <Screen title={t('onb.value.title')} text={t('onb.value.text')}>
-            <Button title={t('onb.value.cta')} onPress={() => setStep('location')} />
+            <Button title={t('onb.value.cta')} onPress={() => setStep(nextStep('value')!)} />
             <LanguagePicker compact value={lang} onChange={(l) => { void setLanguage(l); }} />
           </Screen>
         )}
@@ -71,24 +70,24 @@ export default function Onboarding() {
               onPress={async () => {
                 const ok = await requestForeground();
                 analytics.permission('location', ok);
-                setStep(ok ? 'always' : 'notifications');
+                setStep(nextStep('location', ok)!);
               }}
             />
-            <Button kind="secondary" title={t('onb.later')} onPress={() => { analytics.permission('location', 'later'); setStep('notifications'); }} />
+            <Button kind="secondary" title={t('onb.later')} onPress={() => { analytics.permission('location', 'later'); setStep(nextStep('location', 'later')!); }} />
           </Screen>
         )}
 
         {step === 'always' && (
           <Screen title={t('onb.always.title')} text={t('onb.always.text')}>
-            <Button title={t('onb.always.cta')} onPress={async () => { analytics.permission('background', await requestBackground()); setStep('notifications'); }} />
-            <Button kind="secondary" title={t('onb.always.skip')} onPress={() => { analytics.permission('background', 'later'); setStep('notifications'); }} />
+            <Button title={t('onb.always.cta')} onPress={async () => { analytics.permission('background', await requestBackground()); setStep(nextStep('always')!); }} />
+            <Button kind="secondary" title={t('onb.always.skip')} onPress={() => { analytics.permission('background', 'later'); setStep(nextStep('always')!); }} />
           </Screen>
         )}
 
         {step === 'notifications' && (
           <Screen title={t('onb.notif.title')} text={t('onb.notif.text')}>
-            <Button title={t('onb.notif.cta')} onPress={async () => { analytics.permission('push', await requestPermission()); setStep('categories'); }} />
-            <Button kind="secondary" title={t('onb.notif.skip')} onPress={() => { analytics.permission('push', 'later'); setStep('categories'); }} />
+            <Button title={t('onb.notif.cta')} onPress={async () => { analytics.permission('push', await requestPermission()); setStep(nextStep('notifications')!); }} />
+            <Button kind="secondary" title={t('onb.notif.skip')} onPress={() => { analytics.permission('push', 'later'); setStep(nextStep('notifications')!); }} />
           </Screen>
         )}
 
@@ -107,7 +106,7 @@ export default function Onboarding() {
               ))}
             </Card>
             <Text style={s.muted}>{t('onb.cat.always')}</Text>
-            <Button title={t('onb.next')} disabled={categories.length === 0} onPress={() => setStep('consent')} />
+            <Button title={t('onb.next')} disabled={!canContinue('categories', categories)} onPress={() => setStep(nextStep('categories')!)} />
           </Screen>
         )}
 

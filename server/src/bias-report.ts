@@ -1,5 +1,6 @@
 import { BERLIN_BEZIRKE, BERLIN_POPULATION_AS_OF, type District } from './data/berlin-bezirke.js';
 import { HAMBURG_BEZIRKE, HAMBURG_POPULATION_AS_OF } from './data/hamburg-bezirke.js';
+import { FRANKFURT_ORTSBEZIRKE, FRANKFURT_POPULATION_AS_OF } from './data/frankfurt-ortsbezirke.js';
 import { pointInRing } from './geo.js';
 import type { RiskEvent } from './types.js';
 
@@ -29,6 +30,7 @@ export interface City {
 export const BIAS_CITIES: City[] = [
   { key: 'berlin', name: 'Berlin', populationAsOf: BERLIN_POPULATION_AS_OF, districts: BERLIN_BEZIRKE },
   { key: 'hamburg', name: 'Hamburg', populationAsOf: HAMBURG_POPULATION_AS_OF, districts: HAMBURG_BEZIRKE },
+  { key: 'frankfurt', name: 'Frankfurt am Main', populationAsOf: FRANKFURT_POPULATION_AS_OF, districts: FRANKFURT_ORTSBEZIRKE },
 ];
 
 export interface DistrictRow {

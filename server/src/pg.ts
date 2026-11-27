@@ -8,7 +8,7 @@ import { DEFAULT_PREFS, normalizePrefs, savedPrefs } from './types.js';
 import { hashToken } from './db.js';
 import { LOCATION_MAX_AGE_MS, MAX_PLACE_RADIUS_M } from './geo.js';
 import { RETENTION, daysBefore, type RetentionReport } from './retention.js';
-import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type AccountIdentity, type IdentityProvider, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob, type LlmUsageDay, type DecisionQuery, type KpiInputs, decisionLimit } from './store.js';
+import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type AccountIdentity, type IdentityProvider, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob, type LlmUsageDay, type DecisionQuery, type KpiInputs, type FamilyMember, type FamilyInvite, decisionLimit } from './store.js';
 import type { PushTicket } from './push.js';
 import type { AppEvent, AppEventCount, Platform } from './app-events.js';
 import type { SourceStatus } from './ingest.js';
@@ -198,6 +198,26 @@ export const MIGRATIONS: { version: number; sql: string }[] = [
       CREATE TABLE app_events (day date NOT NULL, platform text NOT NULL, name text NOT NULL, count integer NOT NULL, PRIMARY KEY (day, platform, name));
     `,
   },
+  {
+    // Family sharing (PRD 6.1 #8): who is in which family, and each family's current invite code (hashed).
+    version: 17,
+    sql: `
+      CREATE TABLE family_members (
+        id uuid PRIMARY KEY, family_id uuid NOT NULL, user_id uuid NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+        name text NOT NULL, joined_at timestamptz NOT NULL
+      );
+      CREATE INDEX family_members_family ON family_members(family_id);
+      CREATE TABLE family_invites (code_hash text PRIMARY KEY, family_id uuid NOT NULL, expires_at timestamptz NOT NULL);
+    `,
+  },
+  {
+    // Family sharing, part 1b: a saved place can be shared with the person's family.
+    version: 18,
+    sql: `
+      ALTER TABLE saved_places ADD COLUMN shared boolean NOT NULL DEFAULT false;
+      CREATE INDEX saved_places_shared_geog ON saved_places USING GIST (geog) WHERE shared;
+    `,
+  },
 ];
 
 /**
@@ -327,13 +347,14 @@ export class PgStore implements Store {
       await c.query(`DELETE FROM devices WHERE user_id = $1`, [userId]);
       await c.query(`DELETE FROM alerts WHERE user_id = $1`, [userId]);
       await c.query(`DELETE FROM saved_places WHERE user_id = $1`, [userId]);
+      await c.query(`DELETE FROM family_members WHERE user_id = $1`, [userId]);
       await c.query(`DELETE FROM users WHERE id = $1`, [userId]);
     });
   }
 
   // ── saved places ─────────────────────────────────────────────────────────
   async addPlace(userId: string, label: string, lat: number, lon: number, radiusM: number): Promise<SavedPlace> {
-    const place: SavedPlace = { id: randomUUID(), userId, label, lat, lon, radiusM };
+    const place: SavedPlace = { id: randomUUID(), userId, label, lat, lon, radiusM, shared: false };
     await this.q(`INSERT INTO saved_places (id, user_id, label, lat, lon, radius_m) VALUES ($1,$2,$3,$4,$5,$6)`,
       [place.id, userId, label, lat, lon, radiusM]);
     return place;
@@ -341,13 +362,34 @@ export class PgStore implements Store {
 
   async places(userId: string): Promise<SavedPlace[]> {
     if (!isUuid(userId)) return [];
-    const { rows } = await this.q(`SELECT * FROM saved_places WHERE user_id = $1 ORDER BY label, id`, [userId]);
-    return rows.map((r) => ({ id: r.id, userId: r.user_id, label: r.label, lat: r.lat, lon: r.lon, radiusM: r.radius_m }));
+    const { rows } = await this.q(`SELECT ${PLACE_COLS} FROM saved_places p WHERE user_id = $1 ORDER BY label, id`, [userId]);
+    return rows.map(rowToPlace);
   }
 
   async deletePlace(userId: string, placeId: string): Promise<void> {
     if (!isUuid(userId) || !isUuid(placeId)) return;
     await this.q(`DELETE FROM saved_places WHERE id = $1 AND user_id = $2`, [placeId, userId]);
+  }
+
+  async setPlaceShared(userId: string, placeId: string, shared: boolean): Promise<SavedPlace | null> {
+    if (!isUuid(userId) || !isUuid(placeId)) return null;
+    const { rows } = await this.q(`UPDATE saved_places p SET shared = $3 WHERE id = $1 AND user_id = $2 RETURNING ${PLACE_COLS}`, [placeId, userId, shared]);
+    return rows[0] ? rowToPlace(rows[0]) : null;
+  }
+
+  async unshareAllPlaces(userId: string): Promise<void> {
+    if (!isUuid(userId)) return;
+    await this.q(`UPDATE saved_places SET shared = false WHERE user_id = $1 AND shared`, [userId]);
+  }
+
+  async familyPlaces(userId: string): Promise<SavedPlace[]> {
+    if (!isUuid(userId)) return [];
+    const { rows } = await this.q(`
+      SELECT ${PLACE_COLS}, owner.name AS shared_by FROM family_members me
+      JOIN family_members owner ON owner.family_id = me.family_id AND owner.user_id <> me.user_id
+      JOIN saved_places p ON p.user_id = owner.user_id AND p.shared
+      WHERE me.user_id = $1 ORDER BY p.label, p.id`, [userId]);
+    return rows.map(rowToPlace);
   }
 
   async usersNear(area: Area, bufferM: number, now: Date): Promise<UserWithPlaces[]> {
@@ -363,16 +405,28 @@ export class PgStore implements Store {
         SELECT p.user_id FROM saved_places p, ev
         WHERE public.ST_DWithin(p.geog, ev.g, ($4::float8 + ${MAX_PLACE_RADIUS_M}) * ${SPHEROID_SLACK} + ${SLACK_M})
           AND public.ST_Distance(p.geog, ev.g) <= ($4::float8 + p.radius_m) * ${SPHEROID_SLACK} + ${SLACK_M}
+        UNION
+        -- The other members of a family where someone shared a place nearby (partial index on shared places).
+        SELECT me.user_id FROM saved_places p, ev, family_members owner, family_members me
+        WHERE p.shared AND owner.user_id = p.user_id AND me.family_id = owner.family_id AND me.user_id <> owner.user_id
+          AND public.ST_DWithin(p.geog, ev.g, ($4::float8 + ${MAX_PLACE_RADIUS_M}) * ${SPHEROID_SLACK} + ${SLACK_M})
+          AND public.ST_Distance(p.geog, ev.g) <= ($4::float8 + p.radius_m) * ${SPHEROID_SLACK} + ${SLACK_M}
       )
       SELECT u.* FROM users u WHERE u.id IN (SELECT id FROM hits)
     `, [area.lat, area.lon, freshSince, area.radiusM, bufferM]);
     if (!rows.length) return [];
     const users = rows.map(rowToUser);
-    const placeRows = (await this.q(`SELECT * FROM saved_places WHERE user_id = ANY($1::uuid[]) ORDER BY label, id`, [users.map((u) => u.id)])).rows;
+    const ids = users.map((u) => u.id);
+    const placeRows = (await this.q(`
+      SELECT ${PLACE_COLS}, p.user_id AS recipient, NULL AS shared_by FROM saved_places p WHERE p.user_id = ANY($1::uuid[])
+      UNION ALL
+      SELECT ${PLACE_COLS}, me.user_id AS recipient, owner.name AS shared_by FROM family_members me
+      JOIN family_members owner ON owner.family_id = me.family_id AND owner.user_id <> me.user_id
+      JOIN saved_places p ON p.user_id = owner.user_id AND p.shared
+      WHERE me.user_id = ANY($1::uuid[])
+      ORDER BY label, id`, [ids])).rows;
     const byUser = new Map<string, SavedPlace[]>();
-    for (const r of placeRows) {
-      byUser.set(r.user_id, [...(byUser.get(r.user_id) ?? []), { id: r.id, userId: r.user_id, label: r.label, lat: r.lat, lon: r.lon, radiusM: r.radius_m }]);
-    }
+    for (const r of placeRows) byUser.set(r.recipient, [...(byUser.get(r.recipient) ?? []), rowToPlace(r)]);
     return users.map((user) => ({ user, places: byUser.get(user.id) ?? [] }));
   }
 
@@ -606,6 +660,7 @@ export class PgStore implements Store {
       if (!dup && existing.length < 10) { await this.addPlace(toUserId, p.label, p.lat, p.lon, p.radiusM); existing.push(p); }
     }
     await this.q(`UPDATE devices SET user_id = $1 WHERE user_id = $2`, [toUserId, fromUserId]);
+    await this.q(`UPDATE family_members SET user_id = $1 WHERE user_id = $2 AND NOT EXISTS (SELECT 1 FROM family_members WHERE user_id = $1)`, [toUserId, fromUserId]);
     await this.deleteUser(fromUserId);
   }
 
@@ -677,6 +732,57 @@ export class PgStore implements Store {
     return Object.fromEntries(rows.map((r) => [r.key, r.data]));
   }
 
+  // ── family sharing ───────────────────────────────────────────────────────
+  async familyMemberByUser(userId: string): Promise<FamilyMember | null> {
+    if (!isUuid(userId)) return null;
+    const { rows } = await this.q(`SELECT * FROM family_members WHERE user_id = $1`, [userId]);
+    return rows[0] ? rowToFamilyMember(rows[0]) : null;
+  }
+
+  async familyMembers(familyId: string): Promise<FamilyMember[]> {
+    if (!isUuid(familyId)) return [];
+    const { rows } = await this.q(`SELECT * FROM family_members WHERE family_id = $1 ORDER BY joined_at, id`, [familyId]);
+    return rows.map(rowToFamilyMember);
+  }
+
+  async addFamilyMember(m: FamilyMember, max: number): Promise<'added' | 'already_in_family' | 'family_full'> {
+    if (!isUuid(m.userId) || !isUuid(m.familyId)) return 'already_in_family';
+    let out: 'added' | 'already_in_family' | 'family_full' = 'added';
+    await this.tx(async (c) => {
+      // One join per family at a time, so two people joining at once can't both see "5 of 6".
+      await c.query(`SELECT pg_advisory_xact_lock(hashtext('family:' || $1::text))`, [m.familyId]);
+      const n = Number((await c.query(`SELECT COUNT(*) AS n FROM family_members WHERE family_id = $1`, [m.familyId])).rows[0].n);
+      if (n >= max) { out = 'family_full'; return; }
+      const r = await c.query(`INSERT INTO family_members (id, family_id, user_id, name, joined_at) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING`,
+        [m.id, m.familyId, m.userId, m.name, m.joinedAt]);
+      if (r.rowCount !== 1) out = 'already_in_family';
+    });
+    return out;
+  }
+
+  async removeFamilyMember(familyId: string, memberId: string): Promise<boolean> {
+    if (!isUuid(familyId) || !isUuid(memberId)) return false;
+    return (await this.q(`DELETE FROM family_members WHERE family_id = $1 AND id = $2`, [familyId, memberId])).rowCount === 1;
+  }
+
+  async setFamilyInvite(invite: FamilyInvite): Promise<void> {
+    await this.tx(async (c) => {
+      await c.query(`DELETE FROM family_invites WHERE family_id = $1`, [invite.familyId]);
+      await c.query(`INSERT INTO family_invites (code_hash, family_id, expires_at) VALUES ($1,$2,$3)
+        ON CONFLICT (code_hash) DO UPDATE SET family_id = EXCLUDED.family_id, expires_at = EXCLUDED.expires_at`, [invite.codeHash, invite.familyId, invite.expiresAt]);
+    });
+  }
+
+  async takeFamilyInvite(codeHash: string, nowIso: string): Promise<string | null> {
+    const { rows } = await this.q(`DELETE FROM family_invites WHERE code_hash = $1 AND expires_at > $2 RETURNING family_id`, [codeHash, nowIso]);
+    return rows[0]?.family_id ?? null;
+  }
+
+  async deleteFamilyInvites(familyId: string): Promise<void> {
+    if (!isUuid(familyId)) return;
+    await this.q(`DELETE FROM family_invites WHERE family_id = $1`, [familyId]);
+  }
+
   // ── AI spend ─────────────────────────────────────────────────────────────
   async purgeExpired(nowIso: string): Promise<RetentionReport> {
     const R = RETENTION;
@@ -696,6 +802,7 @@ export class PgStore implements Store {
         digests: await run(`DELETE FROM digests WHERE day < $1::date`, [before(R.digestsDays).slice(0, 10)]),
         emailCodes: await run(`DELETE FROM email_codes WHERE expires_at < $1`, [before(R.emailCodesDays)]),
         reviewerSessions: await run(`DELETE FROM reviewer_sessions WHERE expires_at <= $1`, [nowIso]),
+        familyInvites: await run(`DELETE FROM family_invites WHERE expires_at <= $1`, [nowIso]),
       };
       out.sourceItems += await run(`DELETE FROM source_items s WHERE event_id IS NOT NULL AND first_seen_at < $1 AND NOT EXISTS (SELECT 1 FROM events e WHERE e.id = s.event_id)`, [before(R.sourceItemsDays)]);
       await client.query('COMMIT');
@@ -898,6 +1005,10 @@ function iso(v: Date | string | null): string | null {
   return v == null ? null : v instanceof Date ? v.toISOString() : new Date(v).toISOString();
 }
 
+function rowToFamilyMember(r: any): FamilyMember {
+  return { id: r.id, familyId: r.family_id, userId: r.user_id, name: r.name, joinedAt: iso(r.joined_at)! };
+}
+
 function rowToAccount(r: any): Account {
   return { id: r.id, email: r.email, userId: r.user_id, createdAt: iso(r.created_at)! };
 }
@@ -918,4 +1029,14 @@ function toVector(v: number[]): string {
 
 function pgReviewer(r: any): Reviewer {
   return { id: r.id, email: r.email, name: r.name, passwordHash: r.password_hash, createdAt: new Date(r.created_at).toISOString(), disabled: !!r.disabled };
+}
+
+/** The saved_places columns (aliased `p`), without the generated geography. */
+const PLACE_COLS = 'p.id, p.user_id, p.label, p.lat, p.lon, p.radius_m, p.shared';
+
+function rowToPlace(r: any): SavedPlace {
+  return {
+    id: r.id, userId: r.user_id, label: r.label, lat: r.lat, lon: r.lon, radiusM: r.radius_m, shared: !!r.shared,
+    ...(r.shared_by != null ? { sharedBy: r.shared_by } : {}),
+  };
 }
