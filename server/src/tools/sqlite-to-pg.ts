@@ -20,6 +20,8 @@ interface TableCopy {
   casts?: Record<string, string>;
   /** Source column name, where it differs. */
   from?: Record<string, string>;
+  /** Value for a column that an older SQLite file doesn't have yet. */
+  defaults?: Record<string, unknown>;
 }
 
 export const TABLES: TableCopy[] = [
@@ -27,7 +29,7 @@ export const TABLES: TableCopy[] = [
   { table: 'devices', columns: ['token_hash', 'user_id', 'created_at'] },
   { table: 'accounts', columns: ['id', 'email', 'user_id', 'created_at'] },
   { table: 'account_identities', columns: ['provider', 'subject', 'account_id', 'created_at'] },
-  { table: 'saved_places', columns: ['id', 'user_id', 'label', 'lat', 'lon', 'radius_m'] },
+  { table: 'saved_places', columns: ['id', 'user_id', 'label', 'lat', 'lon', 'radius_m', 'shared'], casts: { shared: 'boolean' }, defaults: { shared: 0 } },
   { table: 'family_members', columns: ['id', 'family_id', 'user_id', 'name', 'joined_at'] },
   { table: 'family_invites', columns: ['code_hash', 'family_id', 'expires_at'] },
   { table: 'source_items', columns: ['source', 'external_id', 'payload', 'event_id', 'first_seen_at'], casts: { payload: 'jsonb' } },
@@ -50,7 +52,10 @@ export async function copySqliteToPg(sqlitePath: string, pg: PgStore, log: (line
       const srcCols = t.columns.map((c) => t.from?.[c] ?? c);
       let rows: Row[];
       try {
-        rows = db.prepare(`SELECT ${srcCols.join(', ')} FROM ${t.table}`).all() as Row[];
+        const have = new Set((db.prepare(`PRAGMA table_info(${t.table})`).all() as Row[]).map((r) => r.name as string));
+        const select = srcCols.map((c) => (have.has(c) || !t.defaults || !(c in t.defaults) ? c : `? AS ${c}`));
+        const params = srcCols.filter((c) => !have.has(c) && t.defaults && c in t.defaults).map((c) => t.defaults![c] as any);
+        rows = db.prepare(`SELECT ${select.join(', ')} FROM ${t.table}`).all(...params) as Row[];
       } catch {
         rows = []; // table didn't exist yet in this SQLite file
       }

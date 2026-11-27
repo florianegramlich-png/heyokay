@@ -8,11 +8,31 @@ import { Pipeline } from '../src/pipeline/run.js';
 import { buildApi } from '../src/api.js';
 import { MemoryMailer } from '../src/auth.js';
 import { loadConfig } from '../src/config.js';
-import { CODE_ALPHABET, FAMILY_MAX, inviteCodeHash, makeInviteCode, normalizeInviteCode } from '../src/family.js';
+import { CODE_ALPHABET, FAMILY_MAX, inviteCodeHash, makeInviteCode, normalizeInviteCode, placeLabel } from '../src/family.js';
+import type { RiskEvent } from '../src/types.js';
 
-// PRD 6.1 #8, 3.3 #4: family groups with invite codes (part 1a). Places, never people's locations.
+// PRD 6.1 #8, 3.3 #4: family groups with invite codes (part 1a) and shared places (part 1b).
+// Places, never people's locations.
+
+const OSTKREUZ = { lat: 52.503, lon: 13.469 };
+function event(id: string, over: Partial<RiskEvent> = {}): RiskEvent {
+  const now = new Date().toISOString();
+  return {
+    id, revision: 1, status: 'auto', category: 'transit', severity: 3, confidence: 0.9, official: false,
+    title: 'S-Bahn gesperrt', summary: 'Ostkreuz gesperrt', facts: '', areaName: 'Ostkreuz',
+    ...OSTKREUZ, radiusM: 800, startsAt: now, endsAt: null,
+    sources: [{ sourceName: 'S-Bahn Berlin', externalId: id, title: 'S-Bahn gesperrt', official: false }],
+    copyTitle: null, copyBody: null, copyAction: null, copyIsTemplate: false, createdAt: now, updatedAt: now,
+    ...over,
+  };
+}
 
 describe('invite codes', () => {
+  it('a family member\'s place says whose it is', () => {
+    expect(placeLabel({ label: 'Zuhause' })).toBe('Zuhause');
+    expect(placeLabel({ label: 'Zuhause', sharedBy: 'Mama' })).toBe('Zuhause (Mama)');
+  });
+
   it('8 easy-to-read symbols in two groups; typing is forgiving', () => {
     expect(CODE_ALPHABET).toHaveLength(32);
     expect(CODE_ALPHABET).not.toMatch(/[01IO]/);
@@ -27,11 +47,11 @@ describe('invite codes', () => {
 });
 
 describe.each(storeBackends())('family sharing ($name)', (backend) => {
-  let store: Store, mailer: MemoryMailer, app: ReturnType<typeof buildApi>;
+  let store: Store, mailer: MemoryMailer, app: ReturnType<typeof buildApi>, pipeline: Pipeline;
   beforeEach(async () => {
     store = await backend.make();
     mailer = new MemoryMailer();
-    const pipeline = new Pipeline({ store, llm: new NoLLM(), geocoder: new GazetteerGeocoder(), push: new MemoryPushSender(), config: loadConfig({}) });
+    pipeline = new Pipeline({ store, llm: new NoLLM(), geocoder: new GazetteerGeocoder(), push: new MemoryPushSender(), config: loadConfig({}) });
     app = buildApi({ store, pipeline, adminToken: 'a', runIngest: async () => ({}), mailer, errorSink: () => {} });
   });
   afterEach(async () => { await store.close(); });
@@ -61,6 +81,7 @@ describe.each(storeBackends())('family sharing ($name)', (backend) => {
     const seen = (await call('GET', '/v1/me/family', mama)).json().family;
     expect(seen.members).toHaveLength(2);
     for (const m of seen.members) expect(Object.keys(m).sort()).toEqual(['admin', 'id', 'joinedAt', 'name', 'you']);
+    expect(seen.places).toEqual([]);
     expect(JSON.stringify(seen)).not.toContain((await call('GET', '/v1/me', kid)).json().userId);
   });
 
@@ -150,5 +171,110 @@ describe.each(storeBackends())('family sharing ($name)', (backend) => {
     expect((await call('POST', '/v1/me/family/join', t, { code: 'x'.repeat(21), name: 'A' })).statusCode).toBe(400);
     expect((await call('GET', '/v1/me/family')).statusCode).toBe(401);
     expect((await call('POST', '/v1/me/family/invite', t, {})).json()).toEqual({ error: 'not_in_family' });
+  });
+
+  // ── part 1b: shared places ──
+  const userId = async (t: string) => (await call('GET', '/v1/me', t)).json().userId as string;
+  const family2 = async () => {
+    const mama = await device(), kid = await device();
+    await call('POST', '/v1/me/family', mama, { name: 'Mama' });
+    await call('POST', '/v1/me/family/join', kid, { code: await invite(mama), name: 'Lena' });
+    await store.updateLocation(await userId(kid), 48.137, 11.575); // the kid is in München
+    const home = (await call('POST', '/v1/me/places', mama, { label: 'Zuhause', ...OSTKREUZ, radiusM: 500 })).json().place;
+    return { mama, kid, home };
+  };
+
+  it('a shared place reaches the whole family, labelled with whose it is; never its coordinates', async () => {
+    const { mama, kid, home } = await family2();
+    expect(home.shared).toBe(false);
+    await store.saveEvent(event('before'));
+    await pipeline.deliver((await store.getEvent('before'))!);
+    expect(await store.alertsForUser(await userId(kid), 10)).toEqual([]); // not shared yet
+
+    expect((await call('PATCH', `/v1/me/places/${home.id}`, kid, { shared: true })).json()).toEqual({ error: 'not_found' }); // not hers
+    const shared = await call('PATCH', `/v1/me/places/${home.id}`, mama, { shared: true });
+    expect(shared.statusCode).toBe(200);
+    expect(shared.json().place).toMatchObject({ id: home.id, shared: true });
+
+    // What's already going on there arrives in the feed, not as a push.
+    const caughtUp = await store.alertsForUser(await userId(kid), 10);
+    expect(caughtUp.map((a) => [a.eventId, a.matchedPlace, a.delivery])).toEqual([['before', 'Zuhause (Mama)', 'feed']]);
+
+    // Everyone sees what is shared, by label and whose; nobody but Mama sees where.
+    const seen = (await call('GET', '/v1/me/family', kid)).json().family;
+    const mamaId = seen.members.find((m: any) => m.name === 'Mama').id;
+    expect(seen.places).toEqual([{ id: home.id, label: 'Zuhause', memberId: mamaId }]);
+    expect(JSON.stringify(seen)).not.toContain('52.503');
+    expect((await call('GET', '/v1/me/places', kid)).json().places).toEqual([]);
+
+    // A new event there: matching finds the kid through the family, far from her own location.
+    await store.saveEvent(event('later'));
+    const kidId = await userId(kid), mamaUserId = await userId(mama);
+    const near = await store.usersNear(event('later'), 0, new Date());
+    expect(near.find((n) => n.user.id === kidId)?.places).toMatchObject([{ label: 'Zuhause', sharedBy: 'Mama', shared: true }]);
+    expect(near.find((n) => n.user.id === mamaUserId)?.places.map((p) => [p.label, p.sharedBy])).toEqual([['Zuhause', undefined]]);
+    await pipeline.deliver((await store.getEvent('later'))!);
+    expect((await store.alertsForUser(kidId, 10)).find((a) => a.eventId === 'later')?.matchedPlace).toBe('Zuhause (Mama)');
+    expect((await store.alertsForUser(mamaUserId, 10)).find((a) => a.eventId === 'later')?.matchedPlace).toBe('Zuhause');
+
+    // Stop sharing: the next event there no longer reaches the kid.
+    expect((await call('PATCH', `/v1/me/places/${home.id}`, mama, { shared: false })).json().place.shared).toBe(false);
+    await store.saveEvent(event('after'));
+    await pipeline.deliver((await store.getEvent('after'))!);
+    expect((await store.alertsForUser(kidId, 10)).map((a) => a.eventId).sort()).toEqual(['before', 'later']);
+    expect((await call('GET', '/v1/me/family', kid)).json().family.places).toEqual([]);
+  });
+
+  it('sharing starts fresh with every family: leaving, being taken out or joining stops it', async () => {
+    const { mama, kid, home } = await family2();
+    const kidPlace = (await call('POST', '/v1/me/places', kid, { label: 'Schule', lat: 48.14, lon: 11.58 })).json().place;
+    await call('PATCH', `/v1/me/places/${home.id}`, mama, { shared: true });
+    await call('PATCH', `/v1/me/places/${kidPlace.id}`, kid, { shared: true });
+    expect((await call('GET', '/v1/me/family', mama)).json().family.places.map((p: any) => p.label)).toEqual(['Schule', 'Zuhause']);
+    expect((await store.familyPlaces(await userId(mama))).map((p) => [p.label, p.sharedBy])).toEqual([['Schule', 'Lena']]);
+
+    const members = (await call('GET', '/v1/me/family', mama)).json().family.members;
+    await call('DELETE', `/v1/me/family/members/${members[1].id}`, mama); // the kid is taken out
+    expect((await call('GET', '/v1/me/places', kid)).json().places[0].shared).toBe(false);
+    expect(await store.familyPlaces(await userId(kid))).toEqual([]);
+    expect(await store.familyPlaces(await userId(mama))).toEqual([]);
+
+    await call('DELETE', '/v1/me/family', mama); // Mama leaves
+    expect((await call('GET', '/v1/me/places', mama)).json().places[0].shared).toBe(false);
+    expect((await call('PATCH', `/v1/me/places/${home.id}`, mama, { shared: true })).json()).toEqual({ error: 'not_in_family' });
+    expect((await call('PATCH', `/v1/me/places/${home.id}`, mama, { shared: false })).statusCode).toBe(200); // stopping always works
+
+    // A place shared in one family isn't shared with the next one.
+    await call('POST', '/v1/me/family', kid, { name: 'Lena' });
+    await call('PATCH', `/v1/me/places/${kidPlace.id}`, kid, { shared: true });
+    await call('DELETE', '/v1/me/family', kid);
+    await call('POST', '/v1/me/family', kid, { name: 'Lena' });
+    expect((await call('GET', '/v1/me/family', kid)).json().family.places).toEqual([]);
+  });
+
+  it('refuses junk on the share switch', async () => {
+    const { mama, home } = await family2();
+    expect((await call('PATCH', `/v1/me/places/${home.id}`, mama, { shared: 'yes' })).statusCode).toBe(400);
+    expect((await call('PATCH', `/v1/me/places/${home.id}`, mama, { shared: true, label: 'x' })).statusCode).toBe(400);
+    expect((await call('PATCH', `/v1/me/places/${home.id}`, mama, {})).statusCode).toBe(400);
+    expect((await call('PATCH', '/v1/me/places/nope', mama, { shared: true })).json()).toEqual({ error: 'not_found' });
+    expect((await call('PATCH', `/v1/me/places/${home.id}`, undefined, { shared: true })).statusCode).toBe(401);
+  });
+
+  it('never more than six, even when people join at the very same moment', async () => {
+    const admin = await device();
+    await call('POST', '/v1/me/family', admin, { name: 'Admin' });
+    const familyId = (await store.familyMemberByUser(await userId(admin)))!.familyId;
+    for (let i = 1; i < FAMILY_MAX - 1; i++) {
+      await call('POST', '/v1/me/family/join', await device(), { code: await invite(admin), name: `P${i}` });
+    }
+    expect(await store.familyMembers(familyId)).toHaveLength(FAMILY_MAX - 1);
+    const racers = await Promise.all(Array.from({ length: 4 }, async () => userId(await device())));
+    const results = await Promise.all(racers.map((u, i) =>
+      store.addFamilyMember({ id: crypto.randomUUID(), familyId, userId: u, name: `R${i}`, joinedAt: new Date().toISOString() }, FAMILY_MAX)));
+    expect(results.filter((r) => r === 'added')).toHaveLength(1);
+    expect(results.filter((r) => r === 'family_full')).toHaveLength(3);
+    expect(await store.familyMembers(familyId)).toHaveLength(FAMILY_MAX);
+    expect(await store.addFamilyMember({ id: crypto.randomUUID(), familyId: crypto.randomUUID(), userId: racers[results.indexOf('added')], name: 'x', joinedAt: new Date().toISOString() }, FAMILY_MAX)).toBe('already_in_family');
   });
 });

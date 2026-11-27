@@ -1,16 +1,21 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { FamilyMember, Store } from './store.js';
+import type { SavedPlace } from './types.js';
 
 /**
- * Family sharing, part 1a (PRD 6.1 #8, 3.3 #4): family groups with invite codes. Protecting
- * places, never tracking people: a family only knows who is in it (a name each person picks).
- * Shared places follow in part 1b; nobody's location is ever shared.
+ * Family sharing (PRD 6.1 #8, 3.3 #4): family groups with invite codes, and shared places.
+ * Protecting places, never tracking people: a family only knows who is in it (a name each person
+ * picks) and the labels of the places its members chose to share. Everyone gets alerts for those
+ * places like for their own. Nobody's current location is ever shared, and no coordinates leave
+ * the server for anyone but the place's owner.
  *
  * - One family per person, up to FAMILY_MAX people.
  * - The admin is whoever has been in the family longest (no stored role, so a family is never left
  *   without one when someone leaves or deletes their data). Only the admin invites or removes.
  * - One invite code per family at a time, single use, FAMILY_INVITE_DAYS valid, stored as a hash.
  * - A family ends when its last person leaves.
+ * - Sharing starts fresh with every family: starting, joining or leaving one (or being taken out)
+ *   stops sharing all of that person's places, so nothing is shared with people they didn't pick.
  */
 export const FAMILY_MAX = 6;
 export const FAMILY_INVITE_DAYS = 7;
@@ -40,6 +45,8 @@ export class FamilyError extends Error {
 
 export interface FamilyView {
   members: Array<{ id: string; name: string; you: boolean; admin: boolean; joinedAt: string }>;
+  /** Places the members share: label and whose (a member id above). Never coordinates. */
+  places: Array<{ id: string; label: string; memberId: string }>;
   /** True when this person is the admin (may invite and remove). */
   admin: boolean;
   max: number;
@@ -50,25 +57,45 @@ export function sortMembers(members: FamilyMember[]): FamilyMember[] {
   return [...members].sort((a, b) => a.joinedAt.localeCompare(b.joinedAt) || a.id.localeCompare(b.id));
 }
 
-export function familyView(members: FamilyMember[], userId: string): FamilyView {
+export function familyView(members: FamilyMember[], userId: string, shared: SavedPlace[] = []): FamilyView {
   const sorted = sortMembers(members);
   const adminId = sorted[0]?.id;
+  const memberOf = new Map(sorted.map((m) => [m.userId, m.id]));
   return {
     members: sorted.map((m) => ({ id: m.id, name: m.name, you: m.userId === userId, admin: m.id === adminId, joinedAt: m.joinedAt })),
+    places: shared.filter((p) => p.shared && memberOf.has(p.userId))
+      .map((p) => ({ id: p.id, label: p.label, memberId: memberOf.get(p.userId)! }))
+      .sort((a, b) => a.label.localeCompare(b.label) || a.id.localeCompare(b.id)),
     admin: sorted.find((m) => m.userId === userId)?.id === adminId,
     max: FAMILY_MAX,
   };
 }
 
+/** Everyone's shared places in a family (for the view). */
+async function sharedPlaces(store: Store, members: FamilyMember[]): Promise<SavedPlace[]> {
+  return (await Promise.all(members.map((m) => store.places(m.userId)))).flat().filter((p) => p.shared);
+}
+
+async function viewOf(store: Store, members: FamilyMember[], userId: string): Promise<FamilyView> {
+  return familyView(members, userId, await sharedPlaces(store, members));
+}
+
 /** The person's family as they may see it, or null. */
 export async function myFamily(store: Store, userId: string): Promise<FamilyView | null> {
   const me = await store.familyMemberByUser(userId);
-  return me ? familyView(await store.familyMembers(me.familyId), userId) : null;
+  return me ? viewOf(store, await store.familyMembers(me.familyId), userId) : null;
+}
+
+async function add(store: Store, m: FamilyMember): Promise<void> {
+  const r = await store.addFamilyMember(m, FAMILY_MAX);
+  if (r === 'already_in_family') throw new FamilyError('already_in_family', 409);
+  if (r === 'family_full') throw new FamilyError('family_full', 409);
+  await store.unshareAllPlaces(m.userId);
 }
 
 export async function createFamily(store: Store, userId: string, name: string, now = new Date()): Promise<FamilyView> {
   const m: FamilyMember = { id: randomUUID(), familyId: randomUUID(), userId, name, joinedAt: now.toISOString() };
-  if (!(await store.addFamilyMember(m))) throw new FamilyError('already_in_family', 409);
+  await add(store, m);
   return familyView([m], userId);
 }
 
@@ -100,14 +127,15 @@ export async function joinFamily(store: Store, userId: string, codeInput: string
   if (members.length === 0) throw new FamilyError('invalid_code', 400); // everyone left meanwhile
   if (members.length >= FAMILY_MAX) throw new FamilyError('family_full', 409);
   const m: FamilyMember = { id: randomUUID(), familyId, userId, name, joinedAt: now.toISOString() };
-  if (!(await store.addFamilyMember(m))) throw new FamilyError('already_in_family', 409);
-  return familyView([...members, m], userId);
+  await add(store, m);
+  return viewOf(store, [...members, m], userId);
 }
 
 export async function leaveFamily(store: Store, userId: string): Promise<void> {
   const me = await store.familyMemberByUser(userId);
   if (!me) throw new FamilyError('not_in_family', 404);
   await store.removeFamilyMember(me.familyId, me.id);
+  await store.unshareAllPlaces(userId);
   if ((await store.familyMembers(me.familyId)).length === 0) await store.deleteFamilyInvites(me.familyId);
 }
 
@@ -115,7 +143,27 @@ export async function leaveFamily(store: Store, userId: string): Promise<void> {
 export async function removeMember(store: Store, userId: string, memberId: string): Promise<FamilyView> {
   const { me, members } = await adminOf(store, userId);
   if (memberId === me.id) throw new FamilyError('cannot_remove_self', 400);
-  if (!members.some((m) => m.id === memberId)) throw new FamilyError('not_found', 404);
+  const out = members.find((m) => m.id === memberId);
+  if (!out) throw new FamilyError('not_found', 404);
   await store.removeFamilyMember(me.familyId, memberId);
-  return familyView(members.filter((m) => m.id !== memberId), userId);
+  await store.unshareAllPlaces(out.userId);
+  return viewOf(store, members.filter((m) => m.id !== memberId), userId);
+}
+
+/**
+ * Shares one of the person's own places with their family, or stops. Returns the place and the
+ * user ids of the other members (so the caller can bring them up to date).
+ */
+export async function sharePlace(store: Store, userId: string, placeId: string, shared: boolean): Promise<{ place: SavedPlace; others: string[] }> {
+  const me = await store.familyMemberByUser(userId);
+  if (!me && shared) throw new FamilyError('not_in_family', 404);
+  const place = await store.setPlaceShared(userId, placeId, shared);
+  if (!place) throw new FamilyError('not_found', 404);
+  const others = me ? (await store.familyMembers(me.familyId)).filter((m) => m.userId !== userId).map((m) => m.userId) : [];
+  return { place, others };
+}
+
+/** How an alert names a place: a family member's shows whose it is, "Zuhause (Mama)". */
+export function placeLabel(p: Pick<SavedPlace, 'label' | 'sharedBy'>): string {
+  return p.sharedBy ? `${p.label} (${p.sharedBy})` : p.label;
 }

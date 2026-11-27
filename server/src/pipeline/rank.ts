@@ -1,5 +1,6 @@
 import type { Delivery, RiskEvent, SavedPlace, User } from '../types.js';
 import { distanceM, distanceToAreasM, LOCATION_MAX_AGE_MS } from '../geo.js';
+import { placeLabel } from '../family.js';
 
 export interface Match {
   /** null = the user's current location; otherwise the saved place's label. */
@@ -17,7 +18,7 @@ export function match(user: User, places: SavedPlace[], event: RiskEvent, buffer
   }
   for (const p of places) {
     const d = distanceM(p.lat, p.lon, event.lat, event.lon);
-    if (inZone(event, p.lat, p.lon, d, p.radiusM)) hits.push({ place: p.label, distanceM: d });
+    if (inZone(event, p.lat, p.lon, d, p.radiusM)) hits.push({ place: placeLabel(p), distanceM: d });
   }
   return hits.sort((a, b) => (a.place === null ? -1 : 0) - (b.place === null ? -1 : 0) || a.distanceM - b.distanceM)[0] ?? null;
 }

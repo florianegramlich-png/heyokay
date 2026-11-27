@@ -110,7 +110,7 @@ export class SqliteStore implements Store {
       PRAGMA foreign_keys = ON;
     `);
     // Columns added after launch (SQLite has no migrations here): add if missing.
-    for (const sql of [`ALTER TABLE users ADD COLUMN last_seen_at TEXT`, `ALTER TABLE alerts ADD COLUMN opened_at TEXT`]) {
+    for (const sql of [`ALTER TABLE users ADD COLUMN last_seen_at TEXT`, `ALTER TABLE alerts ADD COLUMN opened_at TEXT`, `ALTER TABLE saved_places ADD COLUMN shared INTEGER NOT NULL DEFAULT 0`]) {
       try { this.db.exec(sql); } catch (e) { if (!/duplicate column/i.test((e as Error).message)) throw e; }
     }
   }
@@ -170,19 +170,34 @@ export class SqliteStore implements Store {
 
   // ── saved places ─────────────────────────────────────────────────────────
   async addPlace(userId: string, label: string, lat: number, lon: number, radiusM: number): Promise<SavedPlace> {
-    const place: SavedPlace = { id: randomUUID(), userId, label, lat, lon, radiusM };
-    this.db.prepare(`INSERT INTO saved_places VALUES (?,?,?,?,?,?)`).run(place.id, userId, label, lat, lon, radiusM);
+    const place: SavedPlace = { id: randomUUID(), userId, label, lat, lon, radiusM, shared: false };
+    this.db.prepare(`INSERT INTO saved_places (id, user_id, label, lat, lon, radius_m) VALUES (?,?,?,?,?,?)`).run(place.id, userId, label, lat, lon, radiusM);
     return place;
   }
 
   async places(userId: string): Promise<SavedPlace[]> {
-    return this.db.prepare(`SELECT * FROM saved_places WHERE user_id = ?`).all(userId).map((r: any) => ({
-      id: r.id, userId: r.user_id, label: r.label, lat: r.lat, lon: r.lon, radiusM: r.radius_m,
-    }));
+    return this.db.prepare(`SELECT * FROM saved_places WHERE user_id = ?`).all(userId).map(rowToPlace);
   }
 
   async deletePlace(userId: string, placeId: string): Promise<void> {
     this.db.prepare(`DELETE FROM saved_places WHERE id = ? AND user_id = ?`).run(placeId, userId);
+  }
+
+  async setPlaceShared(userId: string, placeId: string, shared: boolean): Promise<SavedPlace | null> {
+    const r: any = this.db.prepare(`UPDATE saved_places SET shared = ? WHERE id = ? AND user_id = ? RETURNING *`).get(shared ? 1 : 0, placeId, userId);
+    return r ? rowToPlace(r) : null;
+  }
+
+  async unshareAllPlaces(userId: string): Promise<void> {
+    this.db.prepare(`UPDATE saved_places SET shared = 0 WHERE user_id = ?`).run(userId);
+  }
+
+  async familyPlaces(userId: string): Promise<SavedPlace[]> {
+    return (this.db.prepare(`
+      SELECT p.*, owner.name AS shared_by FROM family_members me
+      JOIN family_members owner ON owner.family_id = me.family_id AND owner.user_id <> me.user_id
+      JOIN saved_places p ON p.user_id = owner.user_id AND p.shared = 1
+      WHERE me.user_id = ? ORDER BY p.label, p.id`).all(userId) as any[]).map(rowToPlace);
   }
 
   /**
@@ -192,10 +207,14 @@ export class SqliteStore implements Store {
    */
   async usersNear(area: Area, bufferM: number, now: Date): Promise<UserWithPlaces[]> {
     const placesByUser = new Map<string, SavedPlace[]>();
-    for (const r of this.db.prepare(`SELECT * FROM saved_places ORDER BY label, id`).all() as any[]) {
-      const p: SavedPlace = { id: r.id, userId: r.user_id, label: r.label, lat: r.lat, lon: r.lon, radiusM: r.radius_m };
-      placesByUser.set(p.userId, [...(placesByUser.get(p.userId) ?? []), p]);
-    }
+    const add = (userId: string, p: SavedPlace) => placesByUser.set(userId, [...(placesByUser.get(userId) ?? []), p]);
+    for (const r of this.db.prepare(`SELECT * FROM saved_places ORDER BY label, id`).all() as any[]) add(r.user_id, rowToPlace(r));
+    // Shared places reach the other members of the owner's family, labelled with the owner's family name.
+    for (const r of this.db.prepare(`
+      SELECT p.*, owner.name AS shared_by, me.user_id AS recipient FROM saved_places p
+      JOIN family_members owner ON owner.user_id = p.user_id
+      JOIN family_members me ON me.family_id = owner.family_id AND me.user_id <> owner.user_id
+      WHERE p.shared = 1 ORDER BY p.label, p.id`).all() as any[]) add(r.recipient, rowToPlace(r));
     const out: UserWithPlaces[] = [];
     for (const user of this.db.prepare(`SELECT * FROM users`).all().map(rowToUser)) {
       const places = placesByUser.get(user.id) ?? [];
@@ -506,10 +525,14 @@ export class SqliteStore implements Store {
     return (this.db.prepare(`SELECT * FROM family_members WHERE family_id = ? ORDER BY joined_at, id`).all(familyId) as any[]).map(rowToFamilyMember);
   }
 
-  async addFamilyMember(m: FamilyMember): Promise<boolean> {
-    const r = this.db.prepare(`INSERT OR IGNORE INTO family_members (id, family_id, user_id, name, joined_at) VALUES (?,?,?,?,?)`)
+  async addFamilyMember(m: FamilyMember, max: number): Promise<'added' | 'already_in_family' | 'family_full'> {
+    // node:sqlite is synchronous, so the check and the insert can't interleave with another join.
+    if (this.db.prepare(`SELECT 1 FROM family_members WHERE user_id = ?`).get(m.userId)) return 'already_in_family';
+    const n = Number((this.db.prepare(`SELECT COUNT(*) AS n FROM family_members WHERE family_id = ?`).get(m.familyId) as any).n);
+    if (n >= max) return 'family_full';
+    this.db.prepare(`INSERT INTO family_members (id, family_id, user_id, name, joined_at) VALUES (?,?,?,?,?)`)
       .run(m.id, m.familyId, m.userId, m.name, m.joinedAt);
-    return Number(r.changes) === 1;
+    return 'added';
   }
 
   async removeFamilyMember(familyId: string, memberId: string): Promise<boolean> {
@@ -731,4 +754,11 @@ function rowToUser(r: any): User {
 
 function rowToFamilyMember(r: any): FamilyMember {
   return { id: r.id, familyId: r.family_id, userId: r.user_id, name: r.name, joinedAt: r.joined_at };
+}
+
+function rowToPlace(r: any): SavedPlace {
+  return {
+    id: r.id, userId: r.user_id, label: r.label, lat: r.lat, lon: r.lon, radiusM: r.radius_m, shared: !!r.shared,
+    ...(r.shared_by != null ? { sharedBy: r.shared_by } : {}),
+  };
 }

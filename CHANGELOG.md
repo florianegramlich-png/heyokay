@@ -16,6 +16,17 @@
 
 - **BVG/VBB disruptions: which data access?** (2026-11-18) There's no open, documented source I can build on. Options: (1) apply for VBB's official API (HAFAS, includes disruption messages; it's on the "Needs a human" list as "VBB API access"); (2) ask BVG for permission to use the disruptions JSON their website loads (`bvg.de/disruption-reports-service/…`), which has no published terms; (3) use S-Bahn Berlin / VBB disruption RSS if they offer one. I'd go with (1) for the long run and (2) as a quick start if BVG agrees. Until then the item stays open and the other sources run.
 
+## 2026-11-27
+
+- **Family sharing, part 1b: shared places** (roadmap "Family sharing, part 1b") [PRD 6.1 #8, 3.3 #4].
+  - What changes: someone in a family can share one of their saved places with it (`PATCH /v1/me/places/:id {shared: true}`). Everyone else in the family then gets alerts for that place just like for their own. The alert names the place with whose it is, "Zuhause (Mama)", in every language. What is already going on there when the place is shared arrives in the others' feed, never as a sudden push. Stopping sharing (`{shared: false}`) takes effect with the next alert. People still don't see any of it: the screens are part 2 (next item), so app and web are unchanged in this item.
+  - Privacy: a family sees only the label of a shared place and whose it is (`GET /v1/me/family` → `places: [{id, label, memberId}]`), never its coordinates; the server uses those only for matching. Nobody's current location is shared, ever. Sharing starts fresh with every family: starting, joining or leaving one, or being taken out by the admin, switches off sharing for all of that person's places, so a place is never shared with people the person didn't choose it for. Only the owner can switch a place; sharing needs a family, stopping always works.
+  - Matching: `usersNear` on SQLite and Postgres also finds the other members of a family whose shared place is near an event, and hands them that place next to their own (Postgres: one more index lookup, on a new partial index of shared places only). `Store.familyPlaces` does the same when one person is refreshed. Storage: `saved_places.shared` (SQLite column added on start; Postgres migration 18). The SQLite → Postgres copy tool carries it, and copies a file from before today as "not shared".
+  - Hard limit of 6: adding a member now checks the count in the same step (`addFamilyMember(m, max)`; on Postgres under a per-family lock), so two people joining at the very same moment can't make a family of 7.
+  - My interpretations: "label shows whose place it is" → the family name the owner picked, in brackets after the label. A family member's place counts as a saved place for the ranking rules (e.g. road closures may push near it), the same as one's own.
+  - Tests: `server/test/family.test.ts` (5 new: the label; a shared place reaches the family with whose it is, the catch-up goes to the feed, only the owner can switch it, no coordinates in the family view, matching via the family, stop sharing; sharing stops when leaving, being taken out or joining a new family; junk refused; four people joining a family of five at once → exactly one gets in), `server/test/sqlite-to-pg.test.ts` (1 new: the switch is copied, an older file copies as not shared). Server 458/458 on SQLite + Postgres, app 27/27, web 27/27, typechecks clean.
+  - For Flori: nothing to set up.
+
 ## 2026-11-26
 
 - **Sign in with Google on the phone** (roadmap "Sign-in: Apple + Google, part 2b") [PRD 5.3].

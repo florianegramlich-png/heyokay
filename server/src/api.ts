@@ -19,7 +19,7 @@ import { sourceReport } from './sources/registry.js';
 import { MAX_PLACE_RADIUS_M, distanceM } from './geo.js';
 import { AuthError, checkEmailCode, signIn, signInWithIdentity, signOut, startEmailSignIn, type Mailer } from './auth.js';
 import { IdentityError, nonceMatches, type IdentityVerifier } from './identity.js';
-import { FamilyError, createFamily, createInvite, joinFamily, leaveFamily, myFamily, removeMember } from './family.js';
+import { FamilyError, createFamily, createInvite, joinFamily, leaveFamily, myFamily, removeMember, sharePlace } from './family.js';
 import type { IdentityProvider } from './store.js';
 import { logError, defaultSink, type ErrorSink } from './errors.js';
 import { HISTORY_SCAN, searchHistory } from './history.js';
@@ -85,7 +85,7 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
     M.httpSeconds.observe({ route }, reply.elapsedTime / 1000);
   });
   // Any origin may call the API: it uses bearer tokens, never cookies. The web app needs PUT and DELETE too.
-  app.register(cors, { origin: true, methods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE'] });
+  app.register(cors, { origin: true, methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'] });
 
   app.setErrorHandler((err, req, reply) => {
     if (err instanceof z.ZodError) return reply.code(400).send({ error: 'invalid_request', details: err.issues });
@@ -211,6 +211,25 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
     const u = await authed(req, reply); if (!u) return;
     await store.deletePlace(u.id, (req.params as any).id);
     return { ok: true };
+  });
+
+  /**
+   * Shares the place with the person's family (or stops). The others get alerts for it like for
+   * their own places; what's already going on there reaches them in the feed, never as a burst
+   * of pushes.
+   */
+  app.patch('/v1/me/places/:id', async (req, reply) => {
+    const u = await authed(req, reply); if (!u) return;
+    const { shared } = z.object({ shared: z.boolean() }).strict().parse(req.body);
+    const id = z.string().max(64).parse((req.params as any).id);
+    return family(reply, async () => {
+      const { place, others } = await sharePlace(store, u.id, id, shared);
+      if (shared) for (const userId of others) {
+        const other = await store.getUser(userId);
+        if (other) await pipeline.refreshUser(other, true);
+      }
+      return { place };
+    });
   });
 
   // ── family sharing (PRD 6.1 #8; rules in family.ts) ────────────────────

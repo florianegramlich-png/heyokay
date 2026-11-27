@@ -311,7 +311,7 @@ export class Pipeline {
     const tally = new Map<string, number>();
     // Only users the store finds near the event (PostGIS index in production); `match` decides.
     const candidates = onlyUsers
-      ? await Promise.all(onlyUsers.map(async (user) => ({ user, places: await this.d.store.places(user.id) })))
+      ? await Promise.all(onlyUsers.map(async (user) => ({ user, places: [...await this.d.store.places(user.id), ...await this.d.store.familyPlaces(user.id)] })))
       : await this.d.store.usersNear(event, this.d.config.matchBufferM, this.now());
     for (const { user, places } of candidates) {
       const m = match(user, places, event, this.d.config.matchBufferM, this.now());

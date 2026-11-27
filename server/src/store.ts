@@ -78,10 +78,18 @@ export interface Store {
   addPlace(userId: string, label: string, lat: number, lon: number, radiusM: number): Promise<SavedPlace>;
   places(userId: string): Promise<SavedPlace[]>;
   deletePlace(userId: string, placeId: string): Promise<void>;
+  /** Shares one of this person's places with their family, or stops. Null when it isn't theirs. */
+  setPlaceShared(userId: string, placeId: string, shared: boolean): Promise<SavedPlace | null>;
+  /** Stops sharing all of this person's places (when they join, start or leave a family). */
+  unshareAllPlaces(userId: string): Promise<void>;
+  /** The places the other members of this person's family share, each with `sharedBy` (their family name). */
+  familyPlaces(userId: string): Promise<SavedPlace[]>;
   /**
    * Users who may be inside an area: their current location (if updated within
    * LOCATION_MAX_AGE_MS of `now`) is within radius + bufferM, or one of their saved places
-   * overlaps it (radius + place radius). Each comes with all of their saved places.
+   * overlaps it (radius + place radius), or a place another member of their family shared
+   * overlaps it. Each comes with all of their saved places plus their family's shared places
+   * (those with `sharedBy`, as in `familyPlaces`).
    * A superset is allowed (the pipeline's `match` makes the final call); missing a user is not.
    */
   usersNear(area: Area, bufferM: number, now: Date): Promise<UserWithPlaces[]>;
@@ -217,8 +225,11 @@ export interface Store {
   // ── family sharing (PRD 6.1 #8; rules in family.ts) ──
   familyMemberByUser(userId: string): Promise<FamilyMember | null>;
   familyMembers(familyId: string): Promise<FamilyMember[]>;
-  /** False when this person is already in a family. */
-  addFamilyMember(m: FamilyMember): Promise<boolean>;
+  /**
+   * Adds the person unless they are already in a family or the family already has `max` people.
+   * Atomic: two people joining at the same moment can't take a family over `max`.
+   */
+  addFamilyMember(m: FamilyMember, max: number): Promise<'added' | 'already_in_family' | 'family_full'>;
   removeFamilyMember(familyId: string, memberId: string): Promise<boolean>;
   /** Replaces the family's invite (one at a time). */
   setFamilyInvite(invite: FamilyInvite): Promise<void>;
