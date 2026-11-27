@@ -18,6 +18,14 @@
 
 ## 2026-11-27
 
+- **Android: push notifications without Crashlytics** (Flori asked how to get Hey-Okay working on Android).
+  - Why: Android delivers push notifications through Firebase Cloud Messaging, which needs `google-services.json` in the build. Until now the app only used that file together with the iOS file for Crashlytics, so an Android build could never get pushes.
+  - Now: with just `app/firebase/google-services.json` present, Android gets it for push; Crashlytics still waits for both files (`app.config.ts`, `withFirebase`). `app/firebase/README.md` says how to get the file and upload the FCM V1 key to EAS; the steps are also under "Needs a human".
+  - The web app on Android: checked in Chrome's Android emulation against a local server, onboarding and the "Now" screen work. As in Safari it can't send push notifications or follow your location in the background; that's what the phone app is for.
+  - Tests: `app/test/android-push.test.ts` (3 new: no files, Android file only, both files). App 36/36, typecheck clean; `npx expo config` shows the file for Android when present.
+
+## 2026-11-27
+
 - **Family sharing, part 1b: shared places** (roadmap "Family sharing, part 1b") [PRD 6.1 #8, 3.3 #4].
   - What changes: someone in a family can share one of their saved places with it (`PATCH /v1/me/places/:id {shared: true}`). Everyone else in the family then gets alerts for that place just like for their own. The alert names the place with whose it is, "Zuhause (Mama)", in every language. What is already going on there when the place is shared arrives in the others' feed, never as a sudden push. Stopping sharing (`{shared: false}`) takes effect with the next alert. People still don't see any of it: the screens are part 2 (next item), so app and web are unchanged in this item.
   - Privacy: a family sees only the label of a shared place and whose it is (`GET /v1/me/family` → `places: [{id, label, memberId}]`), never its coordinates; the server uses those only for matching. Nobody's current location is shared, ever. Sharing starts fresh with every family: starting, joining or leaving one, or being taken out by the admin, switches off sharing for all of that person's places, so a place is never shared with people the person didn't choose it for. Only the owner can switch a place; sharing needs a family, stopping always works.

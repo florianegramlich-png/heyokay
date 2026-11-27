@@ -109,6 +109,7 @@ Real devices and stores
 - App Store / Play listings, privacy labels, privacy policy URL; App Store specialist (Month 3).
 
 Accounts and keys
+- Android phone app: Firebase project with an Android app `de.heyokay.app` → `google-services.json` into `app/firebase/` (enough for Android push, see its README), upload the FCM V1 service-account key with `npx eas-cli credentials`, then `cd app && npx eas-cli build --profile preview --platform android` and open the link on the Android phone to install the APK. Then the background-location and push test on Android.
 - Firebase project (Crashlytics, FCM): put `GoogleService-Info.plist` and `google-services.json` in `app/firebase/` (see its README), then make a new development build and confirm a test crash shows up in the console.
 - RevenueCat plus App Store / Play subscription products (€2.50; €4.99 family test).
 - Sign in with Apple capability and a Services ID (for the web), Google OAuth client IDs (iOS, Android, web); then `fly secrets set APPLE_CLIENT_IDS=<bundle id>,<services id> GOOGLE_CLIENT_IDS=<ids> -a heyokay`; for the web on Vercel `NEXT_PUBLIC_APPLE_SERVICE_ID`, `NEXT_PUBLIC_GOOGLE_CLIENT_ID` (the Services ID needs the site's domain and `<site>/settings` as return URL; the Google web client needs the site as an authorised JavaScript origin); a new iPhone development build for the Apple button; a mail provider for sign-in codes (built for Resend: `RESEND_API_KEY`, `MAIL_FROM` with a verified sender domain).
