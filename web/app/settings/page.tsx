@@ -15,6 +15,8 @@ import { geocodeAddress } from '@/lib/location';
 import { setLanguage, useI18n, type Lang } from '@/lib/i18n';
 import { LanguageSelect } from '@/components/language-select';
 import { AccountSection } from '@/components/account-section';
+import { FamilySection } from '@/components/family-section';
+import type { Family } from '@/lib/family';
 import { useDevice } from '@/lib/use-device';
 import { CATEGORIES, type Category, type SavedPlace, type TechService, type UserPrefs } from '@/lib/types';
 import { followsService, toggleService } from '@/lib/services';
@@ -45,12 +47,34 @@ export default function Settings() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [account, setAccount] = useState<string | null>(null);
   const [services, setServices] = useState<TechService[]>([]);
+  const [family, setFamily] = useState<Family | null>(null);
 
   useEffect(() => {
     if (!ready) return;
     api.me().then((m) => { setPrefs(m.prefs); setPlaces(m.places); setAccount(m.account?.email ?? null); }).catch(() => {});
     api.services().then((r) => setServices(r.services)).catch(() => {});
   }, [ready]);
+
+  // The family belongs to the person, so it follows sign-in and sign-out.
+  useEffect(() => {
+    if (!ready) return;
+    api.family().then((r) => setFamily(r.family)).catch(() => {});
+  }, [ready, account]);
+
+  const sharePlace = async (id: string, shared: boolean) => {
+    setPlaces((ps) => ps.map((p) => (p.id === id ? { ...p, shared } : p))); // optimistic
+    try {
+      await api.sharePlace(id, shared);
+      setFamily((await api.family()).family);
+    } catch {
+      setPlaces((ps) => ps.map((p) => (p.id === id ? { ...p, shared: !shared } : p)));
+    }
+  };
+
+  const familyChanged = (next: Family | null, placesChanged?: boolean) => {
+    setFamily(next);
+    if (placesChanged) api.me().then((m) => setPlaces(m.places)).catch(() => {});
+  };
 
   const save = async (patch: Partial<UserPrefs>) => {
     if (!prefs) return;
@@ -193,10 +217,18 @@ export default function Settings() {
       <Section title={t('set.places')}>
         <ul className="space-y-2">
           {places.map((p) => (
-            <li key={p.id} className="flex items-center gap-2 text-sm">
-              <MapPin className="h-4 w-4 text-cyan-400" aria-hidden />
-              <span className="flex-1">{p.label} <span className="text-xs text-muted-foreground">· {t('web.places.radius', { m: p.radiusM })}</span></span>
-              <Button variant="ghost" size="sm" onClick={() => removePlace(p.id)}>{t('set.places.remove')}</Button>
+            <li key={p.id} className="space-y-1 text-sm">
+              <div className="flex items-center gap-2">
+                <MapPin className="h-4 w-4 text-cyan-400" aria-hidden />
+                <span className="flex-1">{p.label} <span className="text-xs text-muted-foreground">· {t('web.places.radius', { m: p.radiusM })}</span></span>
+                <Button variant="ghost" size="sm" onClick={() => removePlace(p.id)}>{t('set.places.remove')}</Button>
+              </div>
+              {family && (
+                <label className="flex cursor-pointer items-center gap-3 pl-6">
+                  <span className="flex-1 text-xs text-muted-foreground">{t('set.places.share')}</span>
+                  <Switch checked={!!p.shared} onCheckedChange={(on) => void sharePlace(p.id, on)} aria-label={`${t('set.places.share')}: ${p.label}`} />
+                </label>
+              )}
             </li>
           ))}
         </ul>
@@ -208,6 +240,8 @@ export default function Settings() {
           <p className="text-[11px] text-muted-foreground">{t('web.places.attribution')}</p>
         </form>
       </Section>
+
+      <FamilySection family={family} onChanged={familyChanged} />
 
       <Section title={t('set.privacy')}>
         <p className="text-sm text-muted-foreground">{t('set.privacy.text')}</p>
