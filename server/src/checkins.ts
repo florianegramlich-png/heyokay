@@ -4,6 +4,7 @@ import type { Alert, Category, Language, RiskEvent, User } from './types.js';
 import { contentLanguage } from './types.js';
 import { sortMembers } from './family.js';
 import { inQuietHours } from './pipeline/rank.js';
+import { packFor } from './countries.js';
 
 /**
  * "Hey, okay?" check-ins (PRD 6.1 #8, 3.3 #4). After a severe event (severity 4+) where a family
@@ -126,6 +127,17 @@ export interface CheckinView {
   askedAt: string;
   answer: CheckinAnswer | null;
   answeredAt: string | null;
+  /** The emergency number where the event is (112, 911), for a calm "in an emergency" line in the app. */
+  emergency: string;
+}
+
+async function viewOf(store: Store, userId: string, c: Checkin): Promise<CheckinView> {
+  const event = await store.getEvent(c.eventId);
+  return {
+    id: c.id, alertId: c.alertId, title: (await store.getAlert(userId, c.alertId))?.title ?? null,
+    askedAt: c.askedAt, answer: c.answer, answeredAt: c.answeredAt,
+    emergency: packFor({ country: event?.country, language: event?.language }).numbers.emergency,
+  };
 }
 
 /** This person's check-ins of the last CHECKIN_OPEN_H, newest first; none when they are not in a family. */
@@ -133,10 +145,7 @@ export async function myCheckins(store: Store, userId: string, now: Date): Promi
   if (!(await store.familyMemberByUser(userId))) return [];
   const since = new Date(now.getTime() - CHECKIN_OPEN_H * 3600_000).toISOString();
   const list = await store.checkinsForUser(userId, since);
-  return Promise.all(list.map(async (c) => ({
-    id: c.id, alertId: c.alertId, title: (await store.getAlert(userId, c.alertId))?.title ?? null,
-    askedAt: c.askedAt, answer: c.answer, answeredAt: c.answeredAt,
-  })));
+  return Promise.all(list.map((c) => viewOf(store, userId, c)));
 }
 
 /**
@@ -152,7 +161,7 @@ export async function answerCheckin(
   if (!before) throw new CheckinError('not_found', 404);
   const c = await store.answerCheckin(userId, id, answer, now.toISOString(), new Date(now.getTime() - CHECKIN_OPEN_H * 3600_000).toISOString());
   if (!c) throw new CheckinError('not_found', 404);
-  const view: CheckinView = { id: c.id, alertId: c.alertId, title: (await store.getAlert(userId, c.alertId))?.title ?? null, askedAt: c.askedAt, answer: c.answer, answeredAt: c.answeredAt };
+  const view = await viewOf(store, userId, c);
 
   const me = await store.familyMemberByUser(userId);
   if (!me) return { checkin: view, told: 0 };

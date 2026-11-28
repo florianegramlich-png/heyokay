@@ -108,7 +108,7 @@ describe.each(storeBackends())('"Hey, okay?" check-ins ($name)', (backend) => {
     expect(pushesTo('mama-phone')).toEqual([]); // Mama is in München: nothing for her yet
 
     const list = (await call('GET', '/v1/me/checkins', kid)).json().checkins;
-    expect(list).toEqual([{ id: ask.alert.checkin!.id, alertId: ask.alert.id, title: ask.alert.title, askedAt: clock.toISOString(), answer: null, answeredAt: null }]);
+    expect(list).toEqual([{ id: ask.alert.checkin!.id, alertId: ask.alert.id, title: ask.alert.title, askedAt: clock.toISOString(), answer: null, answeredAt: null, emergency: '112' }]);
     expect((await call('GET', '/v1/me/checkins', mama)).json().checkins).toEqual([]);
     // Before she answers, the family knows nothing: not the event, not that she was asked.
     expect((await call('GET', '/v1/me/family', mama)).json().family.checkins).toEqual([]);

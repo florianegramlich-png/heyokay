@@ -3,9 +3,9 @@ import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
 import { Platform } from 'react-native';
-import { rateFromNotification } from './feedback-queue';
+import { answerFromNotification, rateFromNotification } from './feedback-queue';
 import { translate, type Lang } from './i18n';
-import type { Feedback } from './types';
+import { ALERT_CATEGORY, CHECKIN_CATEGORY, pushTarget } from './push-target';
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -60,37 +60,44 @@ export function alertIdFrom(response: Notifications.NotificationResponse): strin
   return typeof id === 'string' ? id : null;
 }
 
-// ── "Relevant" / "Nicht relevant" buttons on every alert (PRD 5.3) ─────────
-/** Must match `categoryId` in server/src/push.ts. No ":" or "-" allowed in the id. */
-export const ALERT_CATEGORY = 'alert';
-const ACTIONS: Record<string, Feedback> = { relevant: 'relevant', not_relevant: 'not_relevant' };
+// ── Notification buttons (PRD 5.3, 6.1 #8) ──────────────────────────────────
+// "Relevant" / "Nicht relevant" on every alert; "Mir geht’s gut" / "Bitte meldet euch" on a
+// "Hey, okay?" check-in. What a tap means is in push-target.ts.
+export { ALERT_CATEGORY, CHECKIN_CATEGORY };
 
-/** Registers the buttons (titles in the current language). Rating doesn't open the app. */
+/** Registers the buttons (titles in the current language). Rating and "I'm fine" don't open the app. */
 export async function setupCategories(lang: Lang) {
   await Notifications.setNotificationCategoryAsync(ALERT_CATEGORY, [
     { identifier: 'relevant', buttonTitle: translate(lang, 'notif.relevant'), options: { opensAppToForeground: false } },
     { identifier: 'not_relevant', buttonTitle: translate(lang, 'notif.notRelevant'), options: { opensAppToForeground: false } },
   ]).catch(() => null); // Expo Go / web: no categories
+  await Notifications.setNotificationCategoryAsync(CHECKIN_CATEGORY, [
+    { identifier: 'ok', buttonTitle: translate(lang, 'fam.ci.ok'), options: { opensAppToForeground: false } },
+    // Opens the app: the card there shows the emergency number, calmly, for the person themself.
+    { identifier: 'call_me', buttonTitle: translate(lang, 'fam.ci.callMe'), options: { opensAppToForeground: true } },
+  ]).catch(() => null);
 }
 
-/** The rating behind a button tap, or null for a normal tap (open the alert). */
-export function ratingFrom(response: Pick<Notifications.NotificationResponse, 'actionIdentifier'>): Feedback | null {
-  return ACTIONS[response.actionIdentifier] ?? null;
-}
+/** Where a tap should lead after it is handled: an alert, the family section, or nowhere. */
+export type OpenTarget = { alertId: string } | 'family' | null;
 
 /**
- * Handles a tap. A button tap records the rating (and doesn't navigate); a normal tap returns the
- * alert id to open.
+ * Handles a tap. A rating button records the rating; a check-in button sends the answer (and
+ * "Bitte meldet euch" opens the alert, whose card shows the emergency number); a normal tap opens
+ * the alert, or the family for a family member's answer.
  */
-export async function handleResponse(response: Notifications.NotificationResponse): Promise<string | null> {
-  const id = alertIdFrom(response);
-  const rating = ratingFrom(response);
-  if (id && rating) {
-    await rateFromNotification(id, rating);
-    await Notifications.dismissNotificationAsync(response.notification.request.identifier).catch(() => null);
-    return null;
+export async function handleResponse(response: Notifications.NotificationResponse): Promise<OpenTarget> {
+  const target = pushTarget(response.notification.request.content.data, response.actionIdentifier);
+  const dismiss = () => Notifications.dismissNotificationAsync(response.notification.request.identifier).catch(() => null);
+  if (!target) return null;
+  if (target.kind === 'rate') { await rateFromNotification(target.alertId, target.value); await dismiss(); return null; }
+  if (target.kind === 'checkin') {
+    await answerFromNotification(target.checkinId, target.answer);
+    await dismiss();
+    return target.answer === 'call_me' && target.alertId ? { alertId: target.alertId } : null;
   }
-  return id;
+  if (target.kind === 'family') return 'family';
+  return { alertId: target.alertId };
 }
 
 /**

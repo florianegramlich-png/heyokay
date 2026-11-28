@@ -4,7 +4,7 @@ import { api, ApiError } from '../lib/api';
 import { useI18n, type Key } from '../lib/i18n';
 import { colors } from '../lib/theme';
 import {
-  canInvite, canRemove, FAMILY_NAME_MAX, familyErrorKey, formatCode, inviteDate, normalizeCode, othersPlaces, validName,
+  answerKey, answerTime, canInvite, canRemove, familyAnswers, FAMILY_NAME_MAX, familyErrorKey, formatCode, inviteDate, normalizeCode, othersPlaces, validName,
   type Family, type FamilyInvite, type FamilyMember,
 } from '../lib/family';
 import { Button, s, Section } from './ui';
@@ -91,6 +91,7 @@ export function FamilySection({ family, onChanged }: {
   }
 
   const shared = othersPlaces(family);
+  const answers = familyAnswers(family);
   return (
     <Section title={t('fam.title')}>
       <Text style={[s.muted, { marginBottom: 4 }]}>{t('fam.members', { n: family.members.length, max: family.max })}</Text>
@@ -103,6 +104,18 @@ export function FamilySection({ family, onChanged }: {
           {canRemove(family, m) ? <Text style={{ color: colors.danger }} onPress={() => remove(m)} accessibilityRole="button">{t('fam.remove')}</Text> : null}
         </View>
       ))}
+
+      {answers.length ? (
+        <View style={{ marginTop: 14 }}>
+          <Text style={[s.rowLabel, { fontWeight: '600' }]}>{t('fam.ci.family')}</Text>
+          {answers.map((a) => (
+            <View key={a.memberId} style={[s.row, s.rowLine]}>
+              <Text style={[s.rowLabel, { flex: 1, color: a.answer === 'call_me' ? colors.cyan : colors.text }]}>{`${a.name}: ${t(answerKey(a.answer))}`}</Text>
+              <Text style={s.muted}>{answerTime(a.answeredAt, locale)}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
 
       {family.admin ? (
         canInvite(family) ? (

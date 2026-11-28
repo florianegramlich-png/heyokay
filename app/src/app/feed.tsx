@@ -2,11 +2,13 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { Linking, Pressable, RefreshControl, ScrollView, Text, View } from 'react-native';
 import { AlertCard } from '../components/AlertCard';
+import { CheckinCard } from '../components/CheckinCard';
 import { Dashboard } from '../components/Dashboard';
 import { SkyScreen } from '../components/Starfield';
 import { Card, s } from '../components/ui';
 import { api, ApiError } from '../lib/api';
 import { buildDashboard } from '../lib/dashboard';
+import { checkinToShow, type Checkin } from '../lib/family';
 import { aheadAlerts, byCategory, earlierAlerts } from '../lib/feed';
 import { useI18n } from '../lib/i18n';
 import { locationAccess, syncNow } from '../lib/location';
@@ -29,6 +31,8 @@ export default function Feed() {
   const [offlineSince, setOfflineSince] = useState<string | null>(null);
   /** Topics the person follows (dashboard tiles); all of them until /v1/me answers. */
   const [followed, setFollowed] = useState<readonly Category[]>(CATEGORIES);
+  /** "Hey, okay?" (only for people in a family, after a severe event where they are). */
+  const [checkin, setCheckin] = useState<Checkin | null>(null);
   const { t, categoryLabel, locale } = useI18n();
 
   const load = useCallback(async (withLocation: boolean) => {
@@ -36,8 +40,9 @@ export default function Feed() {
     try {
       setNoLocation((await locationAccess()) === 'denied');
       if (withLocation) await syncNow().catch(() => null);
-      const [{ alerts }, me] = await Promise.all([api.alerts(), api.me().catch(() => null)]);
+      const [{ alerts }, me, cis] = await Promise.all([api.alerts(), api.me().catch(() => null), api.checkins().catch(() => null)]);
       if (me) setFollowed(me.prefs.categories);
+      if (cis) setCheckin(checkinToShow(cis.checkins));
       const visible = alerts.filter((a) => a.delivery !== 'suppressed');
       setAlerts(visible);
       setOfflineSince(null);
@@ -87,6 +92,8 @@ export default function Feed() {
             </Text>
           </Card>
         ) : null}
+
+        {checkin && !offlineSince ? <CheckinCard key={checkin.id} checkin={checkin} /> : null}
 
         {!loading && !error ? <Dashboard data={dashboard} onOpen={open} /> : null}
 

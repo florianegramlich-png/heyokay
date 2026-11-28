@@ -8,9 +8,15 @@ import { useI18n } from '@/lib/i18n';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from './ui/dialog';
 import { CategoryIcon } from './category-icon';
+import { CheckinCard } from './checkin-card';
+import type { Checkin } from '@/lib/family';
 
 /** Alert detail: what to do, summary, sources, AI note and the relevance question (feeds ranking). */
-export function AlertDialog({ alert, onClose, onFeedback }: { alert: Alert | null; onClose: () => void; onFeedback: (id: string, f: Feedback) => void }) {
+export function AlertDialog({ alert, onClose, onFeedback, checkin, onCheckin }: {
+  alert: Alert | null; onClose: () => void; onFeedback: (id: string, f: Feedback) => void;
+  /** The "Hey, okay?" check-in about this alert, if any: the same card as on the Now page. */
+  checkin?: Checkin | null; onCheckin?: (next: Checkin) => void;
+}) {
   const { t, locale, categoryLabel } = useI18n();
   const [detail, setDetail] = useState<AlertDetail | null>(null);
   const [gone, setGone] = useState(false);
@@ -44,6 +50,7 @@ export function AlertDialog({ alert, onClose, onFeedback }: { alert: Alert | nul
           </div>
           <DialogTitle className="text-lg font-semibold leading-snug">{alert.title}</DialogTitle>
           <DialogDescription className="text-sm text-foreground/90">{alert.body}</DialogDescription>
+          {checkin && <CheckinCard key={`${checkin.id}:${checkin.answer}`} checkin={checkin} onAnswered={onCheckin} />}
           {alert.matchedPlace && <p className="text-xs text-muted-foreground">{t('alert.affects', { place: alert.matchedPlace })}</p>}
           {(alert.ended || alert.kind === 'all_clear') && <p className="text-sm text-emerald-300">{t('alert.endedNote')}</p>}
           {gone && <p className="text-sm text-muted-foreground">{t('alert.gone')}</p>}
