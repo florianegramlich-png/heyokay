@@ -107,6 +107,8 @@ const tasks: SourceTask[] = [
   { key: 'push:queue', run: () => pipeline.drainPushQueue() },
   // Evening summaries that are due (each person's own time, default 18:00).
   { key: 'push:digest', run: () => ingestLock.run(() => pipeline.sendDigests()) },
+  // "Hey, okay?" reminders: a gentle follow-up when someone hasn't answered a check-in (checkins.ts).
+  { key: 'push:checkins', run: () => ingestLock.run(() => pipeline.sendCheckinReminders()) },
   // Data retention (PRD 11, retention.ts): delete what is past its time, once an hour.
   { key: 'retention', run: async () => {
     if (Date.now() - retentionLast < RETENTION_EVERY_MS) return { skipped: 'ran less than an hour ago' };

@@ -33,6 +33,19 @@ export interface Account { id: string; email: string; userId: string; createdAt:
 
 /** One person in a family (family.ts). `id` is what other members see; the user id never leaves the server. */
 export interface FamilyMember { id: string; familyId: string; userId: string; name: string; joinedAt: string }
+/** "Hey, okay?" check-in (checkins.ts): one per person and event. */
+export type CheckinAnswer = 'ok' | 'call_me';
+export interface Checkin {
+  id: string;
+  userId: string;
+  eventId: string;
+  /** The person's own alert for the event (its title is what the check-in is about). */
+  alertId: string;
+  askedAt: string;
+  remindedAt: string | null;
+  answer: CheckinAnswer | null;
+  answeredAt: string | null;
+}
 /** A family's current invite code, stored as a hash. */
 export interface FamilyInvite { codeHash: string; familyId: string; expiresAt: string }
 
@@ -236,6 +249,20 @@ export interface Store {
   /** Uses up an invite that hasn't expired: deletes it and returns its family, else null. Atomic. */
   takeFamilyInvite(codeHash: string, nowIso: string): Promise<string | null>;
   deleteFamilyInvites(familyId: string): Promise<void>;
+
+  // ── "Hey, okay?" check-ins (PRD 6.1 #8; rules in checkins.ts) ──
+  /** False when this person already has a check-in for this event. */
+  createCheckin(c: Checkin): Promise<boolean>;
+  /** This person's check-ins asked since `sinceIso`, newest first. */
+  checkinsForUser(userId: string, sinceIso: string): Promise<Checkin[]>;
+  /** Sets the answer of one of this person's check-ins asked since `openSinceIso`; null when there is none. */
+  answerCheckin(userId: string, id: string, answer: CheckinAnswer, atIso: string, openSinceIso: string): Promise<Checkin | null>;
+  /** Unanswered check-ins without a reminder, asked in [askedAfterIso, askedBeforeIso], oldest first. */
+  dueCheckinReminders(askedAfterIso: string, askedBeforeIso: string, limit: number): Promise<Checkin[]>;
+  /** Marks the reminder as sent. True only for the first caller, so two workers never both send it. */
+  markCheckinReminded(id: string, atIso: string): Promise<boolean>;
+  /** Answered check-ins of these people, answered since `sinceIso`, newest answer first. */
+  checkinAnswers(userIds: string[], sinceIso: string): Promise<Checkin[]>;
 
   // ── data retention (PRD 11) ──
   /** Deletes what is past its retention period (retention.ts); returns how many rows of each. */

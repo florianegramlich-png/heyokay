@@ -92,7 +92,8 @@ test('every family string in German, English and Tamil, calm, and the same on th
   const webTa = readFileSync(new URL('../../web/lib/strings-ta.ts', import.meta.url), 'utf8');
   const family = readFileSync(new URL('../src/components/FamilySection.tsx', import.meta.url), 'utf8')
     + readFileSync(new URL('../src/app/settings.tsx', import.meta.url), 'utf8')
-    + readFileSync(new URL('../src/lib/family.ts', import.meta.url), 'utf8');
+    + readFileSync(new URL('../src/lib/family.ts', import.meta.url), 'utf8')
+    + readFileSync(new URL('../src/components/CheckinCard.tsx', import.meta.url), 'utf8');
   const keys = [...new Set([...family.matchAll(/'((?:fam|set\.places)\.[a-zA-Z.]+)'/g)].map((m) => m[1]))];
   assert.ok(keys.length >= 25, `${keys.length} keys`);
   const lines = (src: string) => [...src.matchAll(/^ {2}'((?:fam|set\.places)\.[^']+)': (.+),$/gm)].map((m) => `${m[1]}=${m[2]}`);

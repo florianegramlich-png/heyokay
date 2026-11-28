@@ -1,7 +1,7 @@
 import { session } from './session';
 import type { Alert, AlertDetail, Category, Feedback, SavedPlace, TechService, UserPrefs } from './types';
 import type { Provider, Providers } from './signin';
-import type { Family, FamilyInvite } from './family';
+import type { Checkin, CheckinAnswer, Family, FamilyInvite } from './family';
 
 /** The Hey-Okay server. NEXT_PUBLIC_API_URL for a local server (e.g. http://localhost:8787). */
 export const API_URL = (process.env.NEXT_PUBLIC_API_URL || 'https://heyokay.fly.dev').replace(/\/$/, '');
@@ -57,6 +57,10 @@ export function createApi(fetchImpl: Fetch = (...a) => fetch(...a), getToken = (
     joinFamily: (code: string, name: string) => request<{ family: Family }>('POST', '/v1/me/family/join', { code, name }),
     leaveFamily: () => request<{ ok: true }>('DELETE', '/v1/me/family'),
     removeFamilyMember: (memberId: string) => request<{ family: Family }>('DELETE', `/v1/me/family/members/${encodeURIComponent(memberId)}`),
+    // "Hey, okay?" check-ins (server: checkins.ts): yours of the last day, and one tap to answer.
+    checkins: () => request<{ checkins: Checkin[] }>('GET', '/v1/me/checkins'),
+    answerCheckin: (id: string, answer: CheckinAnswer) =>
+      request<{ checkin: Checkin; told: number }>('POST', `/v1/me/checkins/${encodeURIComponent(id)}`, { answer }),
     deleteAccount: () => request<{ ok: true }>('DELETE', '/v1/me'),
     alerts: () => request<{ alerts: Alert[] }>('GET', '/v1/me/alerts'),
     /** Services whose outages can be followed one by one ("only the services I use"). */

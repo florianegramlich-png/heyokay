@@ -6,11 +6,13 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { AlertCard } from '@/components/alert-card';
 import { AlertDialog } from '@/components/alert-dialog';
+import { CheckinCard } from '@/components/checkin-card';
 import { CategoryIcon } from '@/components/category-icon';
 import { Dashboard } from '@/components/dashboard';
 import { api } from '@/lib/api';
 import { aheadAlerts, byCategory } from '@/lib/feed';
 import { buildDashboard } from '@/lib/dashboard';
+import { checkinForAlert, checkinToShow, type Checkin } from '@/lib/family';
 import { currentPosition } from '@/lib/location';
 import { useDevice } from '@/lib/use-device';
 import { useI18n } from '@/lib/i18n';
@@ -31,11 +33,14 @@ export default function Now() {
   const [location, setLocation] = useState<'unknown' | 'on' | 'off' | 'denied'>('unknown');
   /** Topics the person follows (dashboard tiles); all of them until /v1/me answers. */
   const [followed, setFollowed] = useState<readonly Category[]>(CATEGORIES);
+  /** "Hey, okay?" check-ins of the last day (only for people in a family). */
+  const [checkins, setCheckins] = useState<Checkin[]>([]);
 
   const load = useCallback(async () => {
     try {
-      const [{ alerts }, me] = await Promise.all([api.alerts(), api.me().catch(() => null)]);
+      const [{ alerts }, me, cis] = await Promise.all([api.alerts(), api.me().catch(() => null), api.checkins().catch(() => null)]);
       if (me) setFollowed(me.prefs.categories);
+      if (cis) setCheckins(cis.checkins);
       setAlerts(alerts);
       setError(false);
     } catch {
@@ -73,6 +78,8 @@ export default function Now() {
   const groups = alerts ? byCategory(alerts) : [];
   const ahead = alerts ? aheadAlerts(alerts) : [];
   const dashboard = alerts ? buildDashboard(alerts, followed) : null;
+  const checkin = checkinToShow(checkins);
+  const answered = (next: Checkin) => setCheckins((cs) => cs.map((c) => (c.id === next.id ? next : c)));
 
   return (
     <div className="space-y-4">
@@ -98,6 +105,8 @@ export default function Now() {
           <p className="text-sm text-muted-foreground">{t('feed.error.text')}</p>
         </CardContent></Card>
       )}
+
+      {checkin && <CheckinCard key={`${checkin.id}:${checkin.answer}`} checkin={checkin} onAnswered={answered} />}
 
       {dashboard && <Dashboard data={dashboard} onOpen={setOpen} />}
 
@@ -126,7 +135,7 @@ export default function Now() {
       )}
 
       <p className="pt-2 text-center text-xs text-muted-foreground">{t('web.now.webNote')}</p>
-      <AlertDialog alert={open} onClose={() => setOpen(null)} onFeedback={markFeedback} />
+      <AlertDialog alert={open} onClose={() => setOpen(null)} onFeedback={markFeedback} checkin={open ? checkinForAlert(checkins, open.id) : null} onCheckin={answered} />
     </div>
   );
 }

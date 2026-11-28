@@ -276,6 +276,12 @@ export interface Alert {
   startsAt?: string;
   feedback: Feedback | null;
   createdAt: string;
+  /**
+   * Push only, never stored with the alert: this push carries a "Hey, okay?" check-in (checkins.ts).
+   * ask = the alert itself with the answer buttons; reminder = the gentle follow-up; answer = a
+   * family member answered. `alertId` = the alert to open (the push's own id is the check-in's).
+   */
+  checkin?: { id: string; kind: 'ask' | 'reminder' | 'answer'; alertId?: string };
 }
 
 /**

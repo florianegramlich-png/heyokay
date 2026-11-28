@@ -19,6 +19,7 @@ import { sourceReport } from './sources/registry.js';
 import { MAX_PLACE_RADIUS_M, distanceM } from './geo.js';
 import { AuthError, checkEmailCode, signIn, signInWithIdentity, signOut, startEmailSignIn, type Mailer } from './auth.js';
 import { IdentityError, nonceMatches, type IdentityVerifier } from './identity.js';
+import { CHECKIN_ANSWERS, CheckinError, answerCheckin, myCheckins } from './checkins.js';
 import { FamilyError, createFamily, createInvite, joinFamily, leaveFamily, myFamily, removeMember, sharePlace } from './family.js';
 import type { IdentityProvider } from './store.js';
 import { logError, defaultSink, type ErrorSink } from './errors.js';
@@ -274,6 +275,26 @@ export function buildApi({ store, pipeline, adminToken, runIngest, ingestStatus,
     const u = await authed(req, reply); if (!u) return;
     const id = z.string().max(64).parse((req.params as { id: string }).id);
     return family(reply, async () => ({ family: await removeMember(store, u.id, id) }));
+  });
+
+  // ── "Hey, okay?" check-ins (PRD 6.1 #8; rules in checkins.ts) ──────────
+  /** The person's own check-ins of the last day (the app's "Alles okay?" card). */
+  app.get('/v1/me/checkins', async (req, reply) => {
+    const u = await authed(req, reply); if (!u) return;
+    return { checkins: await myCheckins(store, u.id, new Date()) };
+  });
+
+  /** One tap: "ok" or "call_me". Tells the rest of the family; never anyone else. */
+  app.post('/v1/me/checkins/:id', async (req, reply) => {
+    const u = await authed(req, reply); if (!u) return;
+    const id = z.string().max(64).parse((req.params as { id: string }).id);
+    const { answer } = z.object({ answer: z.enum(CHECKIN_ANSWERS) }).strict().parse(req.body);
+    try {
+      return await answerCheckin(store, (outbox) => pipeline.sendMessages(outbox), u.id, id, answer, new Date());
+    } catch (e) {
+      if (e instanceof CheckinError) return reply.code(e.status).send({ error: e.code });
+      throw e;
+    }
   });
 
   /** GDPR Art. 17 — delete account and all data. */

@@ -47,11 +47,30 @@ export function toExpoMessage({ token, alert }: PushMessage) {
     // Severity 5 official warnings use iOS time-sensitive interruption; Critical Alerts need Apple's entitlement (Decision 16).
     interruptionLevel: alert.severity >= 4 ? 'time-sensitive' : 'active',
     // Buttons defined in app/src/lib/notifications.ts (setNotificationCategoryAsync). All-clears need no rating.
-    ...(alert.kind === 'all_clear' ? {} : { categoryId: 'alert' }),
+    // A check-in ask or reminder has the "Mir geht's gut / Bitte meldet euch" buttons instead; a family
+    // member's answer has none.
+    ...categoryOf(alert),
     // One stack per incident: the warning, its updates and the all-clear group together.
     threadId: alert.eventId,
-    data: { alertId: alert.id, eventId: alert.eventId, url: `heyokay://alert/${alert.id}` },
+    data: pushData(alert),
   };
+}
+
+/** Must match the categories in app/src/lib/notifications.ts. */
+export const CHECKIN_CATEGORY = 'checkin';
+
+function categoryOf(alert: Alert): { categoryId?: string } {
+  if (alert.checkin) return alert.checkin.kind === 'answer' ? {} : { categoryId: CHECKIN_CATEGORY };
+  return alert.kind === 'all_clear' ? {} : { categoryId: 'alert' };
+}
+
+function pushData(alert: Alert): Record<string, string> {
+  const c = alert.checkin;
+  if (!c) return { alertId: alert.id, eventId: alert.eventId, url: `heyokay://alert/${alert.id}` };
+  // A family member's answer opens the family; the rest open the alert the check-in is about.
+  if (c.kind === 'answer') return { checkinId: c.id, url: 'heyokay://family' };
+  const alertId = c.alertId ?? alert.id;
+  return { alertId, eventId: alert.eventId, checkinId: c.id, url: `heyokay://alert/${alertId}` };
 }
 
 type Sleep = (ms: number) => Promise<void>;

@@ -2,9 +2,11 @@ import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Linking, ScrollView, Text, View } from 'react-native';
 import MapView, { Circle, Marker } from 'react-native-maps';
+import { CheckinCard } from '../../components/CheckinCard';
 import { SkyScreen } from '../../components/Starfield';
 import { Button, Card, Pill, s } from '../../components/ui';
 import { api } from '../../lib/api';
+import { checkinForAlert, type Checkin } from '../../lib/family';
 import { loadDetail, saveDetail } from '../../lib/offline';
 import { useI18n } from '../../lib/i18n';
 import { categoryColor, colors, severityColor } from '../../lib/theme';
@@ -15,6 +17,7 @@ export default function AlertScreen() {
   const [detail, setDetail] = useState<AlertDetail | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [error, setError] = useState(false);
+  const [checkin, setCheckin] = useState<Checkin | null>(null);
   const { t, categoryLabel, severityLabel, timeAgo, locale } = useI18n();
 
   useEffect(() => {
@@ -22,6 +25,7 @@ export default function AlertScreen() {
       .then((d) => { setDetail(d); setFeedback(d.alert.feedback); void saveDetail(d); })
       // Offline: the saved copy, if this alert was opened before.
       .catch(async () => { const d = await loadDetail(id); if (d) { setDetail(d); setFeedback(d.alert.feedback); } else setError(true); });
+    api.checkins().then((r) => setCheckin(checkinForAlert(r.checkins, id))).catch(() => null);
   }, [id]);
 
   if (error) return <SkyScreen><Text style={[s.muted, { padding: 24 }]}>{t('alert.gone')}</Text></SkyScreen>;
@@ -53,6 +57,8 @@ export default function AlertScreen() {
         {endsAt ? ` · ${t('alert.until', { time: new Date(endsAt).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) })}` : ''}
         {alert.matchedPlace ? ` · ${t('alert.affects', { place: alert.matchedPlace })}` : ''}
       </Text>
+
+      {checkin ? <View style={{ marginTop: 16 }}><CheckinCard key={checkin.id} checkin={checkin} /></View> : null}
 
       {endsAt && Date.parse(endsAt) <= Date.now() ? (
         <Text style={[s.muted, { marginTop: 10 }]}>{t('alert.endedNote')}</Text>

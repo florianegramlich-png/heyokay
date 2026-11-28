@@ -1,6 +1,6 @@
 import type { Alert, AlertDetail, Category, Feedback, SavedPlace, TechService, UserPrefs } from './types';
 import type { Provider, Providers } from './signin';
-import type { Family, FamilyInvite } from './family';
+import type { Checkin, CheckinAnswer, Family, FamilyInvite } from './family';
 
 /**
  * The Hey-Okay server API as a pure function of fetch, the device token and the base URL, so it can
@@ -66,6 +66,10 @@ export function createApi(fetchImpl: Fetch, getToken: () => Promise<string | nul
     joinFamily: (code: string, name: string) => request<{ family: Family }>('POST', '/v1/me/family/join', { code, name }),
     leaveFamily: () => request<{ ok: true }>('DELETE', '/v1/me/family'),
     removeFamilyMember: (memberId: string) => request<{ family: Family }>('DELETE', `/v1/me/family/members/${enc(memberId)}`),
+    // "Hey, okay?" check-ins (server: checkins.ts): yours of the last day, and one tap to answer.
+    checkins: () => request<{ checkins: Checkin[] }>('GET', '/v1/me/checkins'),
+    answerCheckin: (id: string, answer: CheckinAnswer) =>
+      request<{ checkin: Checkin; told: number }>('POST', `/v1/me/checkins/${enc(id)}`, { answer }),
     deleteAccount: () => request<{ ok: true }>('DELETE', '/v1/me'),
     alerts: () => request<{ alerts: Alert[] }>('GET', '/v1/me/alerts'),
     /** Past alerts, one per incident; `q` matches words, `category` narrows by topic. */

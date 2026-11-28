@@ -6,6 +6,11 @@ export interface Match {
   /** null = the user's current location; otherwise the saved place's label. */
   place: string | null;
   distanceM: number;
+  /**
+   * The person themself is in the zone (current location or one of their own places), not only a
+   * place a family member shared. Only then may a "Hey, okay?" check-in ask them (checkins.ts).
+   */
+  self: boolean;
 }
 
 /** Is this user (where they are now, or one of their saved places) inside the event's impact zone? */
@@ -14,13 +19,14 @@ export function match(user: User, places: SavedPlace[], event: RiskEvent, buffer
   if (user.lat != null && user.lon != null && user.locationUpdatedAt &&
       now.getTime() - Date.parse(user.locationUpdatedAt) < LOCATION_MAX_AGE_MS) {
     const d = distanceM(user.lat, user.lon, event.lat, event.lon);
-    if (inZone(event, user.lat, user.lon, d, bufferM)) hits.push({ place: null, distanceM: d });
+    if (inZone(event, user.lat, user.lon, d, bufferM)) hits.push({ place: null, distanceM: d, self: true });
   }
   for (const p of places) {
     const d = distanceM(p.lat, p.lon, event.lat, event.lon);
-    if (inZone(event, p.lat, p.lon, d, p.radiusM)) hits.push({ place: placeLabel(p), distanceM: d });
+    if (inZone(event, p.lat, p.lon, d, p.radiusM)) hits.push({ place: placeLabel(p), distanceM: d, self: !p.sharedBy });
   }
-  return hits.sort((a, b) => (a.place === null ? -1 : 0) - (b.place === null ? -1 : 0) || a.distanceM - b.distanceM)[0] ?? null;
+  const best = hits.sort((a, b) => (a.place === null ? -1 : 0) - (b.place === null ? -1 : 0) || a.distanceM - b.distanceM)[0];
+  return best ? { ...best, self: hits.some((h) => h.self) } : null;
 }
 
 /** Exact outlines when the source gave them (NWS zones); otherwise the event circle. */

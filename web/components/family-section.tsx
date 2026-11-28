@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { api, ApiError } from '@/lib/api';
 import { useI18n, type Key } from '@/lib/i18n';
 import {
-  canInvite, canRemove, FAMILY_NAME_MAX, familyErrorKey, formatCode, inviteDate, normalizeCode, othersPlaces, validName,
+  answerKey, answerTime, canInvite, canRemove, familyAnswers, FAMILY_NAME_MAX, familyErrorKey, formatCode, inviteDate, normalizeCode, othersPlaces, validName,
   type Family, type FamilyInvite, type FamilyMember,
 } from '@/lib/family';
 
@@ -76,6 +76,7 @@ export function FamilySection({ family, onChanged }: {
   };
 
   const shared = family ? othersPlaces(family) : [];
+  const answers = family ? familyAnswers(family) : [];
   return (
     <Card><CardContent className="space-y-3">
       <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
@@ -106,6 +107,20 @@ export function FamilySection({ family, onChanged }: {
               </li>
             ))}
           </ul>
+
+          {answers.length > 0 && (
+            <div>
+              <h3 className="mb-1 text-sm font-medium">{t('fam.ci.family')}</h3>
+              <ul className="space-y-1">
+                {answers.map((a) => (
+                  <li key={a.memberId} className="flex items-center gap-2 text-sm">
+                    <span className={`flex-1 ${a.answer === 'call_me' ? 'font-medium text-cyan-400' : ''}`}>{a.name}: {t(answerKey(a.answer))}</span>
+                    <span className="text-xs text-muted-foreground">{answerTime(a.answeredAt, locale)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {family.admin && (canInvite(family) ? (
             invite ? (

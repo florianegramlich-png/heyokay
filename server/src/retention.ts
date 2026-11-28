@@ -10,6 +10,7 @@
  *   review still has the last quarter, plus a month to look at it;
  * - expired desk sessions and family invite codes, sign-in codes a day after they expired, stuck delivery jobs after a day,
  *   daily-summary markers after 30 days;
+ * - "Hey, okay?" check-ins (who was asked and what they answered): 30 days, like alerts;
  * - the decision log: kept until Flori decides (CHANGELOG → Open questions);
  * - daily totals (AI spend, app event counts): kept, they name nobody.
  */
@@ -22,6 +23,7 @@ export const RETENTION = {
   digestsDays: 30,
   pushJobsDays: 1,
   emailCodesDays: 1,
+  checkinsDays: 30,
 } as const;
 
 export interface RetentionReport {
@@ -35,6 +37,7 @@ export interface RetentionReport {
   emailCodes: number;
   reviewerSessions: number;
   familyInvites: number;
+  checkins: number;
 }
 
 export const daysBefore = (nowIso: string, days: number) => new Date(Date.parse(nowIso) - days * 86_400_000).toISOString();

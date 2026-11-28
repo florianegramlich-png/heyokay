@@ -27,12 +27,22 @@ export function withGoogle(base: ExpoConfig, env: Record<string, string | undefi
   };
 }
 
-export default ({ config }: ConfigContext): ExpoConfig => withGoogle(withFirebase(config as ExpoConfig), process.env);
+export default ({ config }: ConfigContext): ExpoConfig => withGoogle(withFirebase(config as ExpoConfig, process.cwd()), process.env);
 
-function withFirebase(base: ExpoConfig): ExpoConfig {
-  const firebaseEnabled = firebaseFilesPresent(process.cwd());
+/**
+ * Push notifications on Android go through Firebase Cloud Messaging, so an Android build needs
+ * google-services.json even when Crashlytics isn't set up. With only that file, Android gets it
+ * for push; Crashlytics (and its native code) still waits for both files.
+ */
+export function withFirebase(base: ExpoConfig, root: string): ExpoConfig {
+  const firebaseEnabled = firebaseFilesPresent(root);
   if (!firebaseEnabled) {
-    return { ...base, extra: { ...base.extra, firebaseEnabled: false } };
+    const androidPush = existsSync(join(root, ANDROID_FILE));
+    return {
+      ...base,
+      ...(androidPush ? { android: { ...base.android, googleServicesFile: ANDROID_FILE } } : {}),
+      extra: { ...base.extra, firebaseEnabled: false },
+    };
   }
   return {
     ...base,

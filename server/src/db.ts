@@ -5,7 +5,7 @@ import type {
   Alert, Category, EventStatus, Feedback, RiskEvent, SavedPlace, SourceItem, User, UserPrefs,
 } from './types.js';
 import { DEFAULT_PREFS, normalizePrefs, savedPrefs } from './types.js';
-import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type AccountIdentity, type IdentityProvider, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob, type LlmUsageDay, type DecisionQuery, type KpiInputs, type FamilyMember, type FamilyInvite, decisionLimit } from './store.js';
+import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type AccountIdentity, type IdentityProvider, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob, type LlmUsageDay, type DecisionQuery, type KpiInputs, type FamilyMember, type FamilyInvite, type Checkin, type CheckinAnswer, decisionLimit } from './store.js';
 import type { PushTicket } from './push.js';
 import type { AppEvent, AppEventCount, Platform } from './app-events.js';
 import type { SourceStatus } from './ingest.js';
@@ -105,6 +105,11 @@ export class SqliteStore implements Store {
       );
       CREATE INDEX IF NOT EXISTS family_members_family ON family_members(family_id);
       CREATE TABLE IF NOT EXISTS family_invites (code_hash TEXT PRIMARY KEY, family_id TEXT NOT NULL, expires_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS checkins (
+        id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, event_id TEXT NOT NULL, alert_id TEXT NOT NULL,
+        asked_at TEXT NOT NULL, reminded_at TEXT, answer TEXT, answered_at TEXT, UNIQUE (user_id, event_id)
+      );
+      CREATE INDEX IF NOT EXISTS checkins_due ON checkins(asked_at) WHERE answer IS NULL AND reminded_at IS NULL;
       -- Users from before devices existed sign in with their original token.
       INSERT OR IGNORE INTO devices (token_hash, user_id, created_at) SELECT token_hash, id, created_at FROM users;
       PRAGMA foreign_keys = ON;
@@ -165,6 +170,7 @@ export class SqliteStore implements Store {
     this.db.prepare(`DELETE FROM alerts WHERE user_id = ?`).run(userId);
     this.db.prepare(`DELETE FROM saved_places WHERE user_id = ?`).run(userId);
     this.db.prepare(`DELETE FROM family_members WHERE user_id = ?`).run(userId);
+    this.db.prepare(`DELETE FROM checkins WHERE user_id = ?`).run(userId);
     this.db.prepare(`DELETE FROM users WHERE id = ?`).run(userId);
   }
 
@@ -557,6 +563,37 @@ export class SqliteStore implements Store {
     this.db.prepare(`DELETE FROM family_invites WHERE family_id = ?`).run(familyId);
   }
 
+  // ── "Hey, okay?" check-ins ───────────────────────────────────────────────
+  async createCheckin(c: Checkin): Promise<boolean> {
+    return Number(this.db.prepare(`INSERT OR IGNORE INTO checkins (id, user_id, event_id, alert_id, asked_at, reminded_at, answer, answered_at) VALUES (?,?,?,?,?,?,?,?)`)
+      .run(c.id, c.userId, c.eventId, c.alertId, c.askedAt, c.remindedAt, c.answer, c.answeredAt).changes) === 1;
+  }
+
+  async checkinsForUser(userId: string, sinceIso: string): Promise<Checkin[]> {
+    return (this.db.prepare(`SELECT * FROM checkins WHERE user_id = ? AND asked_at >= ? ORDER BY asked_at DESC, id`).all(userId, sinceIso) as any[]).map(rowToCheckin);
+  }
+
+  async answerCheckin(userId: string, id: string, answer: CheckinAnswer, atIso: string, openSinceIso: string): Promise<Checkin | null> {
+    const r: any = this.db.prepare(`UPDATE checkins SET answer = ?, answered_at = ? WHERE id = ? AND user_id = ? AND asked_at >= ? RETURNING *`)
+      .get(answer, atIso, id, userId, openSinceIso);
+    return r ? rowToCheckin(r) : null;
+  }
+
+  async dueCheckinReminders(askedAfterIso: string, askedBeforeIso: string, limit: number): Promise<Checkin[]> {
+    return (this.db.prepare(`SELECT * FROM checkins WHERE answer IS NULL AND reminded_at IS NULL AND asked_at >= ? AND asked_at <= ? ORDER BY asked_at, id LIMIT ?`)
+      .all(askedAfterIso, askedBeforeIso, limit) as any[]).map(rowToCheckin);
+  }
+
+  async markCheckinReminded(id: string, atIso: string): Promise<boolean> {
+    return Number(this.db.prepare(`UPDATE checkins SET reminded_at = ? WHERE id = ? AND reminded_at IS NULL`).run(atIso, id).changes) === 1;
+  }
+
+  async checkinAnswers(userIds: string[], sinceIso: string): Promise<Checkin[]> {
+    if (!userIds.length) return [];
+    return (this.db.prepare(`SELECT * FROM checkins WHERE answer IS NOT NULL AND answered_at >= ? AND user_id IN (${userIds.map(() => '?').join(',')}) ORDER BY answered_at DESC, id`)
+      .all(sinceIso, ...userIds) as any[]).map(rowToCheckin);
+  }
+
   // ── data retention ───────────────────────────────────────────────────────
   async purgeExpired(nowIso: string): Promise<RetentionReport> {
     const R = RETENTION;
@@ -577,6 +614,7 @@ export class SqliteStore implements Store {
         emailCodes: run(`DELETE FROM email_codes WHERE expires_at < ?`, before(R.emailCodesDays)),
         reviewerSessions: run(`DELETE FROM reviewer_sessions WHERE expires_at <= ?`, nowIso),
         familyInvites: run(`DELETE FROM family_invites WHERE expires_at <= ?`, nowIso),
+        checkins: run(`DELETE FROM checkins WHERE asked_at < ?`, before(R.checkinsDays)),
       };
       // Source items of deleted events go too (their event is gone).
       out.sourceItems += run(`DELETE FROM source_items WHERE event_id IS NOT NULL AND first_seen_at < ? AND NOT EXISTS (SELECT 1 FROM events e WHERE e.id = source_items.event_id)`, before(R.sourceItemsDays));
@@ -749,6 +787,13 @@ function rowToUser(r: any): User {
     id: r.id, tokenHash: r.token_hash, pushToken: r.push_token ?? null,
     prefs: normalizePrefs(JSON.parse(r.prefs)), lat: r.lat ?? null, lon: r.lon ?? null,
     locationUpdatedAt: r.location_updated_at ?? null, createdAt: r.created_at,
+  };
+}
+
+function rowToCheckin(r: any): Checkin {
+  return {
+    id: r.id, userId: r.user_id, eventId: r.event_id, alertId: r.alert_id, askedAt: r.asked_at,
+    remindedAt: r.reminded_at ?? null, answer: r.answer ?? null, answeredAt: r.answered_at ?? null,
   };
 }
 

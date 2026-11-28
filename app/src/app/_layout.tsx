@@ -32,8 +32,10 @@ export default function RootLayout() {
     void registerNotificationTask();
     void flushPendingFeedback(); // ratings tapped while offline or in the background
     const open = async (r: Notifications.NotificationResponse | null) => {
-      const id = r && (await handleResponse(r)); // a rating button records it; a tap opens the alert
-      if (id) router.push({ pathname: '/alert/[id]', params: { id } });
+      // A rating or check-in button records it; a tap opens the alert (or the family, for a family member's answer).
+      const target = r && (await handleResponse(r));
+      if (target === 'family') router.push('/settings');
+      else if (target) router.push({ pathname: '/alert/[id]', params: { id: target.alertId } });
     };
     // Cold start from a notification tap, then taps while running.
     Notifications.getLastNotificationResponseAsync().then(open);
