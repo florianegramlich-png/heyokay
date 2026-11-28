@@ -15,6 +15,7 @@ import { packFor } from '../countries.js';
 import { digestDue, digestItems, digestPush } from './digest.js';
 import { contentLanguage } from '../types.js';
 import { M } from '../metrics.js';
+import { CHECKIN_REMIND_MIN, CHECKIN_REMIND_UNTIL_H, askCheckin, checkinEligible, reminderPush } from '../checkins.js';
 
 export interface PipelineDeps {
   store: Store;
@@ -307,7 +308,7 @@ export class Pipeline {
     await this.ensureCopy(event);
 
     const outbox: Array<{ token: string; alert: Alert }> = [];
-    let alerts = 0;
+    let alerts = 0, checkins = 0;
     const tally = new Map<string, number>();
     // Only users the store finds near the event (PostGIS index in production); `match` decides.
     const candidates = onlyUsers
@@ -334,14 +335,18 @@ export class Pipeline {
       if (!alert) continue; // already alerted for this revision
       alerts++;
       tally.set(`${delivery}\u0000${reason}`, (tally.get(`${delivery}\u0000${reason}`) ?? 0) + 1);
-      if (delivery === 'push' && user.pushToken) outbox.push({ token: user.pushToken, alert });
+      // "Hey, okay?" (checkins.ts): a severe event in the person's own zone asks them, through this push.
+      const checkinId = checkinEligible(event, { kind: 'new', delivery, self: m.self, backfill, ahead: isAhead(event, this.now()) })
+        ? await askCheckin(this.d.store, user, alert, this.now()) : null;
+      if (checkinId) checkins++;
+      if (delivery === 'push' && user.pushToken) outbox.push({ token: user.pushToken, alert: checkinId ? { ...alert, checkin: { id: checkinId, kind: 'ask' } } : alert });
     }
     const res = { sent: await this.sendPush(outbox) };
     // Ranking per event as counts (never who): only when someone got something.
     if (alerts) {
       const byDelivery: Record<string, number> = {};
       const reasons = [...tally].map(([k, count]) => { const [delivery, reason] = k.split('\u0000'); byDelivery[delivery] = (byDelivery[delivery] ?? 0) + count; return { delivery, reason, count }; });
-      await this.log.record({ kind: 'rank', eventId: event.id, outcome: 'delivered', detail: { alerts, pushes: res.sent, byDelivery, reasons, revision: event.revision, ...(onlyUsers ? { scope: backfill ? 'first sync' : 'one person moved or added a place' } : {}) } });
+      await this.log.record({ kind: 'rank', eventId: event.id, outcome: 'delivered', detail: { alerts, pushes: res.sent, byDelivery, reasons, revision: event.revision, ...(checkins ? { checkins } : {}), ...(onlyUsers ? { scope: backfill ? 'first sync' : 'one person moved or added a place' } : {}) } });
     }
     return { alerts, pushes: res.sent };
   }
@@ -431,6 +436,38 @@ export class Pipeline {
     }
     out.pushes = await this.sendPush(outbox);
     return out;
+  }
+
+  /**
+   * "Hey, okay?" reminders that are due (checkins.ts): one gentle push per unanswered check-in,
+   * CHECKIN_REMIND_MIN after the ask. Not during the person's quiet hours (tried again on the next
+   * tick, until CHECKIN_REMIND_UNTIL_H), not once the event is over, not after leaving the family.
+   */
+  async sendCheckinReminders(): Promise<{ due: number; sent: number }> {
+    const now = this.now();
+    const due = await this.d.store.dueCheckinReminders(
+      new Date(now.getTime() - CHECKIN_REMIND_UNTIL_H * 3600_000).toISOString(),
+      new Date(now.getTime() - CHECKIN_REMIND_MIN * 60_000).toISOString(), 500);
+    const outbox: PushMessage[] = [];
+    for (const c of due) {
+      const user = await this.d.store.getUser(c.userId);
+      if (!user?.pushToken) continue;
+      const q = user.prefs.quietHours;
+      if (q && inQuietHours(now, q.start, q.end, user.prefs.timezone)) continue;
+      const e = await this.d.store.getEvent(c.eventId);
+      if (!e || e.status === 'rejected' || (e.endsAt && Date.parse(e.endsAt) <= now.getTime())) continue;
+      if (!(await this.d.store.familyMemberByUser(user.id))) continue;
+      const alert = await this.d.store.getAlert(user.id, c.alertId);
+      if (!alert) continue;
+      if (!(await this.d.store.markCheckinReminded(c.id, now.toISOString()))) continue; // another worker has it
+      outbox.push({ token: user.pushToken, alert: reminderPush(alert, c.id, contentLanguage(user.prefs.language)) });
+    }
+    return { due: due.length, sent: await this.sendPush(outbox) };
+  }
+
+  /** Sends pushes that aren't alerts of their own (check-in answers), through the same queue. */
+  async sendMessages(outbox: PushMessage[]): Promise<number> {
+    return this.sendPush(outbox);
   }
 
   async checkPushReceipts(opts: { waitMin?: number; maxResends?: number } = {}) {

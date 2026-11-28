@@ -1,6 +1,8 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { FamilyMember, Store } from './store.js';
 import type { SavedPlace } from './types.js';
+import type { CheckinAnswer } from './store.js';
+import { familyCheckins } from './checkins.js';
 
 /**
  * Family sharing (PRD 6.1 #8, 3.3 #4): family groups with invite codes, and shared places.
@@ -50,6 +52,11 @@ export interface FamilyView {
   /** True when this person is the admin (may invite and remove). */
   admin: boolean;
   max: number;
+  /**
+   * "Hey, okay?" answers of the last day, the latest per member (checkins.ts). Only what they chose
+   * to send: never the event, the place, or that someone was asked and hasn't answered.
+   */
+  checkins: Array<{ memberId: string; answer: CheckinAnswer; answeredAt: string }>;
 }
 
 /** Members oldest first; the first one is the admin. */
@@ -57,7 +64,7 @@ export function sortMembers(members: FamilyMember[]): FamilyMember[] {
   return [...members].sort((a, b) => a.joinedAt.localeCompare(b.joinedAt) || a.id.localeCompare(b.id));
 }
 
-export function familyView(members: FamilyMember[], userId: string, shared: SavedPlace[] = []): FamilyView {
+export function familyView(members: FamilyMember[], userId: string, shared: SavedPlace[] = [], checkins: FamilyView['checkins'] = []): FamilyView {
   const sorted = sortMembers(members);
   const adminId = sorted[0]?.id;
   const memberOf = new Map(sorted.map((m) => [m.userId, m.id]));
@@ -68,6 +75,7 @@ export function familyView(members: FamilyMember[], userId: string, shared: Save
       .sort((a, b) => a.label.localeCompare(b.label) || a.id.localeCompare(b.id)),
     admin: sorted.find((m) => m.userId === userId)?.id === adminId,
     max: FAMILY_MAX,
+    checkins,
   };
 }
 
@@ -76,14 +84,14 @@ async function sharedPlaces(store: Store, members: FamilyMember[]): Promise<Save
   return (await Promise.all(members.map((m) => store.places(m.userId)))).flat().filter((p) => p.shared);
 }
 
-async function viewOf(store: Store, members: FamilyMember[], userId: string): Promise<FamilyView> {
-  return familyView(members, userId, await sharedPlaces(store, members));
+async function viewOf(store: Store, members: FamilyMember[], userId: string, now = new Date()): Promise<FamilyView> {
+  return familyView(members, userId, await sharedPlaces(store, members), await familyCheckins(store, members, now));
 }
 
 /** The person's family as they may see it, or null. */
-export async function myFamily(store: Store, userId: string): Promise<FamilyView | null> {
+export async function myFamily(store: Store, userId: string, now = new Date()): Promise<FamilyView | null> {
   const me = await store.familyMemberByUser(userId);
-  return me ? viewOf(store, await store.familyMembers(me.familyId), userId) : null;
+  return me ? viewOf(store, await store.familyMembers(me.familyId), userId, now) : null;
 }
 
 async function add(store: Store, m: FamilyMember): Promise<void> {

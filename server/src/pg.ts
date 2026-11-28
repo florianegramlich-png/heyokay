@@ -8,7 +8,7 @@ import { DEFAULT_PREFS, normalizePrefs, savedPrefs } from './types.js';
 import { hashToken } from './db.js';
 import { LOCATION_MAX_AGE_MS, MAX_PLACE_RADIUS_M } from './geo.js';
 import { RETENTION, daysBefore, type RetentionReport } from './retention.js';
-import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type AccountIdentity, type IdentityProvider, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob, type LlmUsageDay, type DecisionQuery, type KpiInputs, type FamilyMember, type FamilyInvite, decisionLimit } from './store.js';
+import { SCHEDULED_LOOKBACK_H, cellOf, computeMetrics, type Area, type Metrics, type Account, type AccountIdentity, type IdentityProvider, type EmailCode, type PushStatus, type Store, type StoredPushTicket, type UserWithPlaces, type PushJob, type LlmUsageDay, type DecisionQuery, type KpiInputs, type FamilyMember, type FamilyInvite, type Checkin, type CheckinAnswer, decisionLimit } from './store.js';
 import type { PushTicket } from './push.js';
 import type { AppEvent, AppEventCount, Platform } from './app-events.js';
 import type { SourceStatus } from './ingest.js';
@@ -218,6 +218,18 @@ export const MIGRATIONS: { version: number; sql: string }[] = [
       CREATE INDEX saved_places_shared_geog ON saved_places USING GIST (geog) WHERE shared;
     `,
   },
+  {
+    // "Hey, okay?" check-ins (PRD 6.1 #8): one per person and event; the reminder scan reads the partial index.
+    version: 19,
+    sql: `
+      CREATE TABLE checkins (
+        id uuid PRIMARY KEY, user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE, event_id text NOT NULL, alert_id uuid NOT NULL,
+        asked_at timestamptz NOT NULL, reminded_at timestamptz, answer text, answered_at timestamptz, UNIQUE (user_id, event_id)
+      );
+      CREATE INDEX checkins_due ON checkins(asked_at) WHERE answer IS NULL AND reminded_at IS NULL;
+      CREATE INDEX checkins_answered ON checkins(user_id, answered_at) WHERE answer IS NOT NULL;
+    `,
+  },
 ];
 
 /**
@@ -348,6 +360,7 @@ export class PgStore implements Store {
       await c.query(`DELETE FROM alerts WHERE user_id = $1`, [userId]);
       await c.query(`DELETE FROM saved_places WHERE user_id = $1`, [userId]);
       await c.query(`DELETE FROM family_members WHERE user_id = $1`, [userId]);
+      await c.query(`DELETE FROM checkins WHERE user_id = $1`, [userId]);
       await c.query(`DELETE FROM users WHERE id = $1`, [userId]);
     });
   }
@@ -783,6 +796,45 @@ export class PgStore implements Store {
     await this.q(`DELETE FROM family_invites WHERE family_id = $1`, [familyId]);
   }
 
+  // ── "Hey, okay?" check-ins ───────────────────────────────────────────────
+  async createCheckin(c: Checkin): Promise<boolean> {
+    if (!isUuid(c.userId) || !isUuid(c.alertId)) return false;
+    const r = await this.q(`INSERT INTO checkins (id, user_id, event_id, alert_id, asked_at, reminded_at, answer, answered_at)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING`, [c.id, c.userId, c.eventId, c.alertId, c.askedAt, c.remindedAt, c.answer, c.answeredAt]);
+    return r.rowCount === 1;
+  }
+
+  async checkinsForUser(userId: string, sinceIso: string): Promise<Checkin[]> {
+    if (!isUuid(userId)) return [];
+    const { rows } = await this.q(`SELECT * FROM checkins WHERE user_id = $1 AND asked_at >= $2 ORDER BY asked_at DESC, id`, [userId, sinceIso]);
+    return rows.map(rowToCheckin);
+  }
+
+  async answerCheckin(userId: string, id: string, answer: CheckinAnswer, atIso: string, openSinceIso: string): Promise<Checkin | null> {
+    if (!isUuid(userId) || !isUuid(id)) return null;
+    const { rows } = await this.q(`UPDATE checkins SET answer = $1, answered_at = $2 WHERE id = $3 AND user_id = $4 AND asked_at >= $5 RETURNING *`,
+      [answer, atIso, id, userId, openSinceIso]);
+    return rows[0] ? rowToCheckin(rows[0]) : null;
+  }
+
+  async dueCheckinReminders(askedAfterIso: string, askedBeforeIso: string, limit: number): Promise<Checkin[]> {
+    const { rows } = await this.q(`SELECT * FROM checkins WHERE answer IS NULL AND reminded_at IS NULL AND asked_at >= $1 AND asked_at <= $2 ORDER BY asked_at, id LIMIT $3`,
+      [askedAfterIso, askedBeforeIso, limit]);
+    return rows.map(rowToCheckin);
+  }
+
+  async markCheckinReminded(id: string, atIso: string): Promise<boolean> {
+    if (!isUuid(id)) return false;
+    return (await this.q(`UPDATE checkins SET reminded_at = $1 WHERE id = $2 AND reminded_at IS NULL`, [atIso, id])).rowCount === 1;
+  }
+
+  async checkinAnswers(userIds: string[], sinceIso: string): Promise<Checkin[]> {
+    const ids = userIds.filter(isUuid);
+    if (!ids.length) return [];
+    const { rows } = await this.q(`SELECT * FROM checkins WHERE answer IS NOT NULL AND answered_at >= $1 AND user_id = ANY($2::uuid[]) ORDER BY answered_at DESC, id`, [sinceIso, ids]);
+    return rows.map(rowToCheckin);
+  }
+
   // ── AI spend ─────────────────────────────────────────────────────────────
   async purgeExpired(nowIso: string): Promise<RetentionReport> {
     const R = RETENTION;
@@ -803,6 +855,7 @@ export class PgStore implements Store {
         emailCodes: await run(`DELETE FROM email_codes WHERE expires_at < $1`, [before(R.emailCodesDays)]),
         reviewerSessions: await run(`DELETE FROM reviewer_sessions WHERE expires_at <= $1`, [nowIso]),
         familyInvites: await run(`DELETE FROM family_invites WHERE expires_at <= $1`, [nowIso]),
+        checkins: await run(`DELETE FROM checkins WHERE asked_at < $1`, [before(R.checkinsDays)]),
       };
       out.sourceItems += await run(`DELETE FROM source_items s WHERE event_id IS NOT NULL AND first_seen_at < $1 AND NOT EXISTS (SELECT 1 FROM events e WHERE e.id = s.event_id)`, [before(R.sourceItemsDays)]);
       await client.query('COMMIT');
@@ -1003,6 +1056,13 @@ function isUuid(s: string) { return UUID.test(s); }
 
 function iso(v: Date | string | null): string | null {
   return v == null ? null : v instanceof Date ? v.toISOString() : new Date(v).toISOString();
+}
+
+function rowToCheckin(r: any): Checkin {
+  return {
+    id: r.id, userId: r.user_id, eventId: r.event_id, alertId: r.alert_id, askedAt: iso(r.asked_at)!,
+    remindedAt: iso(r.reminded_at), answer: r.answer ?? null, answeredAt: iso(r.answered_at),
+  };
 }
 
 function rowToFamilyMember(r: any): FamilyMember {

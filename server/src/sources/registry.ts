@@ -79,7 +79,7 @@ export function describeSource(key: string): SourceInfo {
     case 'rss':
       return { key, name: rest || 'RSS', country: 'DE', official: false, category: 'news' };
     case 'push':
-      return { key, name: rest === 'receipts' ? 'Push receipts' : rest === 'digest' ? 'Evening summaries' : 'Delivery queue', country: '*', official: false, category: 'system' };
+      return { key, name: rest === 'receipts' ? 'Push receipts' : rest === 'digest' ? 'Evening summaries' : rest === 'checkins' ? '"Hey, okay?" reminders' : 'Delivery queue', country: '*', official: false, category: 'system' };
     default:
       return { key, name: key, country: '*', official: false, category: 'news' };
   }
